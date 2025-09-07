@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 import 'dart:async';
 
@@ -32,7 +33,7 @@ class SudokuApp extends StatelessWidget {
 enum GridSize { small, medium, large, standard, big, mega }
 enum SudokuDifficulty { easy, medium, hard, expert }
 enum GridShape { classic, jigsaw }
-enum GameMode { classic, cube3d }
+enum GameMode { classic }
 
 class EnvironmentalTheme {
   final String name;
@@ -267,7 +268,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       children: [
                         Text(
-                          'SUDOKU\nMASTER PRO',
+                          'SUDOKU\nMASTER',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 36,
@@ -329,8 +330,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(height: 20),
                   
                   _buildModeButton('🎯 CLASSIC MODE', 'Traditional Sudoku', Colors.indigo.shade800, () => _showClassicOptions()),
-                  SizedBox(height: 15),
-                  _buildModeButton('🧊 3D CUBE MODE', 'Multiple connected grids', Colors.cyan.shade800, () => _showCube3DOptions()),
                   
                   SizedBox(height: 30),
                   
@@ -466,58 +465,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  void _showCube3DOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '🧊 3D Cube Mode',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Solve multiple connected grids! Numbers in the same position affect all faces.',
-              style: TextStyle(color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(child: _buildCube3DOption('4×4 Cube', GridSize.small)),
-                SizedBox(width: 10),
-                Expanded(child: _buildCube3DOption('6×6 Cube', GridSize.medium)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCube3DOption(String label, GridSize gridSize) {
-    return ElevatedButton(
-      onPressed: () {
-        Navigator.pop(context);
-        _startGame(SudokuDifficulty.medium, gridSize, GridShape.classic, GameMode.cube3d);
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.cyan.shade700,
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(vertical: 15),
-      ),
-      child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
     );
   }
 
@@ -966,11 +913,9 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  List<SudokuGame> games = []; // For 3D cube mode
   SudokuGame? game; // Primary game - nullable until initialized
   int? selectedRow;
   int? selectedCol;
-  int currentCubeFace = 0;
   late AnimationController _pulseController;
   late AnimationController _shakeController;
   late AnimationController _scoreController;
@@ -1013,39 +958,43 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _initializeGame() {
+  void _initializeGame() async {
     try {
-      DebugLogger.log('Creating sudoku game: ${widget.gridSize.name} ${widget.difficulty.name}');
+      DebugLogger.log(
+          'Creating sudoku game: ${widget.gridSize.name} ${widget.difficulty.name}');
       
-      if (widget.gameMode == GameMode.cube3d) {
-        // Create 3 interconnected grids for cube mode
-        games = List.generate(3, (index) => 
-          SudokuGame(widget.difficulty, widget.gridSize, widget.gridShape)
-        );
-        game = games[0];
-      } else {
-        game = SudokuGame(widget.difficulty, widget.gridSize, widget.gridShape);
-        games = [game!];
-      }
+      // 1. Await the creation of the raw game data from the isolate.
+      game = await SudokuGame.create(widget.difficulty, widget.gridSize, widget.gridShape);
+      
+      // 2. NOW that it's back on the main thread, start the timer.
+      game!.startTimer();
       
       score = _calculateInitialScore();
-      
-      setState(() {}); // Refresh UI after successful initialization
-      DebugLogger.log('Game initialized successfully with score: $score');
+
+      if (mounted) {
+        setState(() {});
+        DebugLogger.log('Game initialized successfully with score: $score');
+      }
     } catch (e, stackTrace) {
-      DebugLogger.error('Failed to initialize game', e, stackTrace);
-      // Fallback to easier settings
+      DebugLogger.error('Failed to initialize game (likely timed out)', e, stackTrace);
+      
       try {
         DebugLogger.log('Attempting fallback initialization');
-        game = SudokuGame(SudokuDifficulty.easy, GridSize.standard, GridShape.classic);
-        games = [game!];
+        // Do the same for the fallback logic
+        game = await SudokuGame.create(SudokuDifficulty.easy, GridSize.standard, GridShape.classic);
+        game!.startTimer(); // Start the timer here too
         score = 500;
-        setState(() {});
-        DebugLogger.log('Fallback initialization successful');
+        if (mounted) {
+          setState(() {});
+          DebugLogger.log('Fallback initialization successful');
+        }
       } catch (e2, stackTrace2) {
         DebugLogger.error('Fallback initialization failed', e2, stackTrace2);
-        _errorMessage = 'Failed to create puzzle. Please restart the app.';
-        setState(() {});
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Failed to create puzzle. Please restart the app.';
+          });
+        }
       }
     }
   }
@@ -1157,7 +1106,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     
     // Mode bonuses
     if (widget.gridShape == GridShape.jigsaw) base += 200;
-    if (widget.gameMode == GameMode.cube3d) base += 400;
     
     return base;
   }
@@ -1197,33 +1145,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _placeNumber(int row, int col, int number) {
     if (game == null) return;
-    
-    bool isValid = true;
-    
-    // For 3D cube mode, check validity across connected grids
-    if (widget.gameMode == GameMode.cube3d) {
-      for (var g in games) {
-        if (!g.isValidMove(row, col, number)) {
-          isValid = false;
-          break;
-        }
-      }
-    } else {
-      isValid = game!.isValidMove(row, col, number);
-    }
-    
-    if (isValid) {
+
+    if (game!.isValidMove(row, col, number)) {
       setState(() {
-        if (widget.gameMode == GameMode.cube3d) {
-          // Place number in all connected grids
-          for (var g in games) {
-            g.setCell(row, col, number);
-          }
-        } else {
-          game!.setCell(row, col, number);
-        }
+        game!.setCell(row, col, number);
       });
-      
+
       if (_isGameCompleted()) {
         _completeGame();
       }
@@ -1236,23 +1163,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   bool _isGameCompleted() {
-    if (widget.gameMode == GameMode.cube3d) {
-      return games.every((g) => g.isCompleted());
-    } else {
-      return game?.isCompleted() ?? false;
-    }
+    return game?.isCompleted() ?? false;
   }
 
   void _clearCell() {
     if (selectedRow != null && selectedCol != null) {
       setState(() {
-        if (widget.gameMode == GameMode.cube3d) {
-          for (var g in games) {
-            g.clearCell(selectedRow!, selectedCol!);
-          }
-        } else {
-          game?.clearCell(selectedRow!, selectedCol!);
-        }
+        game?.clearCell(selectedRow!, selectedCol!);
       });
     }
   }
@@ -1417,27 +1334,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.gridSize.name.toUpperCase()} ${widget.gameMode.name.toUpperCase()}'),
+        // title: Text('${widget.gridSize.name.toUpperCase()} ${widget.gameMode.name.toUpperCase()}'),
+        title: Text('${widget.gridSize.name.toUpperCase()} ${widget.gridShape.name.toUpperCase()}'),
+
         backgroundColor: currentScheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          if (widget.gameMode == GameMode.cube3d)
-            PopupMenuButton<int>(
-              icon: Icon(Icons.view_in_ar),
-              onSelected: (faceIndex) {
-                setState(() {
-                  currentCubeFace = faceIndex;
-                  game = games[faceIndex];
-                });
-              },
-              itemBuilder: (context) => List.generate(games.length, (i) => 
-                PopupMenuItem(
-                  value: i,
-                  child: Text('Face ${i + 1}'),
-                ),
-              ),
-            ),
+          
           IconButton(
             onPressed: _goToMainMenu,
             icon: Icon(Icons.home),
@@ -1496,30 +1400,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 padding: EdgeInsets.all(isTablet ? 24 : 16),
                 child: Column(
                   children: [
-                    if (widget.gameMode == GameMode.cube3d)
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        margin: EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.view_in_ar, color: Colors.white),
-                            SizedBox(width: 8),
-                            Text(
-                              'Cube Face: ${currentCubeFace + 1}/${games.length}',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                            Spacer(),
-                            Text(
-                              'Numbers affect all faces!',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
                     
                     Expanded(
                       flex: isTablet ? 3 : 2,
@@ -1614,11 +1494,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 'Time: ${game!.getFormattedTime()}',
                                 style: TextStyle(fontSize: 16),
                               ),
-                              if (widget.gameMode == GameMode.cube3d)
-                                Text(
-                                  '3D Cube Mode!',
-                                  style: TextStyle(color: Colors.cyan, fontWeight: FontWeight.bold),
-                                ),
+                              
                               SizedBox(height: 10),
                               Text(
                                 'Next puzzle in 3s...',
@@ -1999,6 +1875,16 @@ class SmartHint {
   });
 }
 
+Future<SudokuGame> _generateSudokuInBackground(Map<String, dynamic> params) async {
+  final difficulty = params['difficulty'] as SudokuDifficulty;
+  final gridSize = params['gridSize'] as GridSize;
+  final gridShape = params['gridShape'] as GridShape;
+
+  // This will run in a separate thread and can't hang the UI
+  // The fix is to call the private constructor `SudokuGame._` here
+  return SudokuGame._(difficulty, gridSize, gridShape);
+}
+
 class SudokuGame {
   late List<List<int>> grid;
   late List<List<bool>> isOriginal;
@@ -2007,8 +1893,15 @@ class SudokuGame {
   late int gridDim;
   late DateTime startTime;
   late Stream<String> timeStream;
+
+  void startTimer() {
+    startTime = DateTime.now();
+    timeStream = Stream.periodic(const Duration(seconds: 1), (_) => getFormattedTime());
+  }
   
-  SudokuGame(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) {
+  // SudokuGame(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) {
+  // we make that async
+  SudokuGame._(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) {
     try {
       DebugLogger.log('Initializing sudoku game with ${gridSize.name} ${difficulty.name} ${gridShape.name}');
       _initializeGrid(gridSize);
@@ -2019,13 +1912,30 @@ class SudokuGame {
         _generatePuzzle(difficulty);
       }
       
-      startTime = DateTime.now();
-      timeStream = Stream.periodic(Duration(seconds: 1), (_) => getFormattedTime());
+      // REMOVE these two lines from here:
+      // startTime = DateTime.now();
+      // timeStream = Stream.periodic(Duration(seconds: 1), (_) => getFormattedTime());
+      
       DebugLogger.log('Sudoku game initialized successfully');
     } catch (e, stackTrace) {
       DebugLogger.error('Failed to initialize sudoku game', e, stackTrace);
       rethrow;
     }
+  }
+
+  static Future<SudokuGame> create(
+      SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) async {
+    
+    final params = {
+      'difficulty': difficulty,
+      'gridSize': gridSize,
+      'gridShape': gridShape,
+    };
+
+    // Run the generation in an isolate with a 2-second timeout.
+    // If it hangs, it will throw an error instead of freezing the app.
+    return await compute(_generateSudokuInBackground, params)
+        .timeout(const Duration(seconds: 2));
   }
 
   void _initializeGrid(GridSize gridSize) {
@@ -2115,63 +2025,74 @@ class SudokuGame {
 
   void _generateJigsawPuzzle(SudokuDifficulty difficulty) {
     try {
-      DebugLogger.log('Generating jigsaw puzzle');
-      _generateJigsawRegions();
+      DebugLogger.log('--- STARTING JIGSAW PUZZLE GENERATION ($gridDim x $gridDim) ---');
       
-      int attempts = 0;
       bool success = false;
-      int maxGenerationAttempts = gridDim <= 9 ? 15 : 5; // Fewer attempts for large grids
-      
-      while (attempts < maxGenerationAttempts && !success) {
-        attempts++;
-        DebugLogger.log('Jigsaw sudoku generation attempt $attempts');
+      int maxTotalAttempts = 5; // We will try to generate a jigsaw up to 5 times.
+
+      for (int attempt = 1; attempt <= maxTotalAttempts; attempt++) {
+        DebugLogger.log('--- Overall Jigsaw Generation Attempt: $attempt/$maxTotalAttempts ---');
         
-        // Clear grid for new attempt
+        // Step 1: Generate a new set of random region shapes for this attempt.
+        if (gridDim >= 10) {
+          DebugLogger.log('[Attempt $attempt] Generating SIMPLIFIED jigsaw regions for large grid...');
+          _generateSimplifiedJigsawRegions();
+        } else {
+          DebugLogger.log('[Attempt $attempt] Generating jigsaw regions...');
+          _generateJigsawRegions();
+        }
+
+        // Step 2: Try to fill the grid with numbers using the solver.
+        // Clear the grid before trying to solve.
         for (int i = 0; i < gridDim; i++) {
           for (int j = 0; j < gridDim; j++) {
             grid[i][j] = 0;
           }
         }
         
+        DebugLogger.log('[Attempt $attempt] Starting solver...');
         success = _generateCompleteJigsawSudoku();
-        
-        if (!success && gridDim >= 10) {
-          DebugLogger.log('Large grid generation failed, trying simpler jigsaw regions');
-          // For large grids, fall back to less complex jigsaw shapes
-          _generateSimplifiedJigsawRegions();
-          success = _generateCompleteJigsawSudoku();
+
+        if (success) {
+          DebugLogger.log('--- Jigsaw Generation SUCCEEDED on attempt $attempt! ---');
+          break; // Exit the loop on success.
+        } else {
+          DebugLogger.log('--- Solver FAILED for this shape on attempt $attempt. Trying a new shape... ---');
         }
       }
-      
+
+      // Step 3: If all attempts failed, we must fall back to a standard puzzle.
       if (!success) {
-        DebugLogger.log('Jigsaw generation failed, falling back to standard regions');
-        _initializeStandardRegions();
-        success = _generateCompleteSudoku();
+        DebugLogger.log('--- All jigsaw attempts failed. FALLING BACK to a standard puzzle to prevent a crash. ---');
+        _initializeStandardRegions(); // Use standard square/rectangle regions.
+        if (!_generateCompleteSudoku()) {
+          // This should almost never fail, but it's a final safeguard.
+          throw Exception('FATAL: Could not generate any puzzle, even the fallback standard one.');
+        }
       }
-      
-      if (!success) {
-        throw Exception('Failed to generate any valid sudoku after all attempts');
-      }
-      
-      // Save solution and remove cells...
+
+      // Step 4: A valid, complete grid now exists. Save it as the solution.
+      DebugLogger.log('Saving final grid as solution...');
       for (int i = 0; i < gridDim; i++) {
         for (int j = 0; j < gridDim; j++) {
           solution[i][j] = grid[i][j];
         }
       }
-      
+
+      // Step 5: Remove cells to create the final puzzle for the player.
+      DebugLogger.log('Removing cells to create puzzle...');
       int cellsToRemove = _getCellsToRemove(difficulty);
       _removeRandomCells(cellsToRemove);
-      
+
       for (int i = 0; i < gridDim; i++) {
         for (int j = 0; j < gridDim; j++) {
           isOriginal[i][j] = grid[i][j] != 0;
         }
       }
-      
-      DebugLogger.log('Jigsaw puzzle generated successfully');
+
+      DebugLogger.log('--- PUZZLE GENERATION COMPLETE ---');
     } catch (e, stackTrace) {
-      DebugLogger.error('Failed to generate jigsaw puzzle', e, stackTrace);
+      DebugLogger.error('A critical error occurred during jigsaw puzzle generation', e, stackTrace);
       rethrow;
     }
   }
@@ -2757,37 +2678,66 @@ class SudokuGame {
   bool _generateCompleteJigsawSudoku() {
     try {
       // Add timeout for large grids
-      int maxAttempts = gridDim <= 9 ? 10000 : 5000; // Shorter timeout for large grids
-      int attempts = 0;
+      int maxAttempts = gridDim <= 9 ? 10000 : 5000;
       
-      return _fillJigsawGridWithTimeout(0, 0, maxAttempts, attempts);
+      return _fillJigsawGridWithTimeout(maxAttempts, 0);
     } catch (e, stackTrace) {
       DebugLogger.error('Failed to generate complete jigsaw sudoku', e, stackTrace);
       return false;
     }
   }
 
-  bool _fillJigsawGridWithTimeout(int row, int col, int maxAttempts, int attempts) {
-    if (attempts >= maxAttempts) {
-      DebugLogger.log('Sudoku generation timeout after $attempts attempts');
-      return false;
+  List<int>? _findMostConstrainedCell() {
+    int minPossibilities = gridDim + 1;
+    List<int>? bestCell;
+
+    for (int r = 0; r < gridDim; r++) {
+      for (int c = 0; c < gridDim; c++) {
+        if (grid[r][c] == 0) {
+          int possibilities = 0;
+          for (int num = 1; num <= gridDim; num++) {
+            if (_isJigsawSafe(r, c, num)) {
+              possibilities++;
+            }
+          }
+          if (possibilities < minPossibilities) {
+            minPossibilities = possibilities;
+            bestCell = [r, c];
+          }
+        }
+      }
+    }
+    return bestCell;
+  }
+
+  // To be replaced in the SudokuGame class
+  bool _fillJigsawGridWithTimeout(int maxAttempts, int attempts) {
+    // VERBOSE LOGGING: Show that the solver is still alive during deep recursion.
+    if (attempts > 0 && attempts % 1000 == 0) {
+      DebugLogger.log('... Solver deep in recursion: $attempts steps...');
     }
     
-    if (row == gridDim) return true;
+    if (attempts >= maxAttempts) {
+      DebugLogger.log('Solver timeout after $attempts attempts. This puzzle shape is likely too complex.');
+      return false;
+    }
+
+    final cell = _findMostConstrainedCell();
     
-    int nextRow = col == gridDim - 1 ? row + 1 : row;
-    int nextCol = col == gridDim - 1 ? 0 : col + 1;
-    
-    List<int> numbers = List.generate(gridDim, (i) => i + 1);
-    numbers.shuffle(math.Random());
-    
+    if (cell == null) return true; // Success, grid is full.
+
+    int row = cell[0];
+    int col = cell[1];
+
+    List<int> numbers = List.generate(gridDim, (i) => i + 1)..shuffle();
+
     for (int num in numbers) {
       if (_isJigsawSafe(row, col, num)) {
         grid[row][col] = num;
-        if (_fillJigsawGridWithTimeout(nextRow, nextCol, maxAttempts, attempts + 1)) {
+        if (_fillJigsawGridWithTimeout(maxAttempts, attempts + 1)) {
           return true;
         }
-        grid[row][col] = 0;
+        grid[row][col] = 0; // Backtrack
       }
     }
     return false;
