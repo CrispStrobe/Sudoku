@@ -7,6 +7,20 @@ void main() {
   runApp(SudokuApp());
 }
 
+class PuzzleBlueprint {
+  final List<List<int>> solutionGrid;
+  final List<List<int>> regions;
+  final GridSize gridSize;
+  final GridShape gridShape;
+
+  PuzzleBlueprint({
+    required this.solutionGrid,
+    required this.regions,
+    required this.gridSize,
+    required this.gridShape,
+  });
+}
+
 class SudokuApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -34,6 +48,7 @@ enum GridSize { small, medium, large, standard, big, mega }
 enum SudokuDifficulty { easy, medium, hard, expert }
 enum GridShape { classic, jigsaw }
 enum GameMode { classic }
+enum HintType { showPossible, giveAnswer, nakedSingle, hiddenSingle, conflict }
 
 class EnvironmentalTheme {
   final String name;
@@ -361,6 +376,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+
+                  SizedBox(height: 30),
+
+                  if (GameStats.debugMode)
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.admin_panel_settings),
+                      label: Text('Admin Panel'),
+                      onPressed: _navigateToAdmin,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade700,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                      ),
+                    ),
+
+
                 ],
               ),
             ),
@@ -423,6 +454,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _navigateToAdmin() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AdminScreen()),
     );
   }
 
@@ -958,17 +996,130 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
+  void _applyHint(SmartHint hint) {
+    setState(() {
+      score = math.max(0, score - hint.penalty);
+      hintsUsed++;
+      GameStats.totalHintsUsed++;
+
+      switch (hint.type) {
+        case HintType.showPossible:
+          final numbers = (hint.data as List<int>).join(', ');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Possible Numbers: $numbers')),
+          );
+          break;
+        case HintType.giveAnswer:
+        case HintType.nakedSingle:
+        case HintType.hiddenSingle:
+          // THE FIX IS HERE: We now correctly call the method on the 'game' object.
+          game!.setCell(selectedRow!, selectedCol!, hint.data as int);
+          break;
+        default:
+          break;
+      }
+    });
+
+    if (game!.isCompleted()) {
+      _completeGame();
+    }
+  }
+
+  void _showHintConfirmation(SmartHint hint) {
+    if (hint.penalty == 0) return; // Don't show confirmation for informational hints
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(hint.title),
+        content: Text('Are you sure you want to use this hint for a -${hint.penalty} score penalty?'),
+        actions: [
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          ElevatedButton(
+            child: const Text('Confirm'),
+            onPressed: () {
+              Navigator.pop(context); // Close the confirmation dialog
+              _applyHint(hint); // Apply the hint
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<SudokuGame> _generatePuzzleWithRetries({
+    required SudokuDifficulty difficulty,
+    required GridSize gridSize,
+    required GridShape gridShape,
+  }) async {
+    final totalTimeBudget = const Duration(seconds: 10);
+    final singleAttemptTimeout = const Duration(seconds: 3);
+    final stopwatch = Stopwatch()..start();
+    int attempt = 0;
+
+    DebugLogger.log('--- STARTING ROBUST GENERATION with a ${totalTimeBudget.inSeconds}s total budget ---');
+
+    while (stopwatch.elapsed < totalTimeBudget) {
+      attempt++;
+      final timeRemaining = (totalTimeBudget - stopwatch.elapsed).inSeconds;
+      DebugLogger.log('--- Generation attempt $attempt. Time remaining: $timeRemaining seconds. ---');
+      
+      try {
+        // Try to create a puzzle within the individual attempt timeout.
+        final game = await SudokuGame.create(difficulty, gridSize, gridShape)
+            .timeout(singleAttemptTimeout);
+        
+        stopwatch.stop();
+        DebugLogger.log('--- SUCCESS! Puzzle generated after ${stopwatch.elapsed.inSeconds}s on attempt $attempt. ---');
+        return game; // Success! Return the generated game.
+      } catch (e) {
+        // This attempt failed (likely timed out). Log it and the loop will try again.
+        DebugLogger.log('Attempt $attempt failed. Trying again...');
+      }
+    }
+
+    // If the while loop finishes, it means the total time budget was exceeded.
+    stopwatch.stop();
+    throw TimeoutException('Failed to generate a puzzle within the total ${totalTimeBudget.inSeconds}s budget.');
+  }
+
   void _initializeGame() async {
     try {
-      DebugLogger.log(
-          'Creating sudoku game: ${widget.gridSize.name} ${widget.difficulty.name}');
+      // Immediately show a loading state to the user.
+      setState(() {
+        game = null; // Ensure the loading indicator is shown
+      });
+
+      // Step 1: Try to load from the cache first.
+      final blueprint = PuzzleCache().get(widget.gridSize, widget.gridShape);
+
+      if (blueprint != null) {
+        game = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
+      } else {
+        // Step 2: If cache misses, use our new robust generator.
+        DebugLogger.log('No blueprint found. Generating puzzle on the fly...');
+        game = await _generatePuzzleWithRetries(
+          difficulty: widget.difficulty,
+          gridSize: widget.gridSize,
+          gridShape: widget.gridShape,
+        );
+        
+        // Step 3: If generation was successful, create and save its blueprint.
+        final newBlueprint = PuzzleBlueprint(
+          solutionGrid: game!.solution,
+          regions: game!.regions,
+          gridSize: widget.gridSize,
+          gridShape: widget.gridShape,
+        );
+        PuzzleCache().set(newBlueprint);
+      }
       
-      // 1. Await the creation of the raw game data from the isolate.
-      game = await SudokuGame.create(widget.difficulty, widget.gridSize, widget.gridShape);
-      
-      // 2. NOW that it's back on the main thread, start the timer.
+      // Step 4: Start the timer and update the UI.
       game!.startTimer();
-      
       score = _calculateInitialScore();
 
       if (mounted) {
@@ -976,20 +1127,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         DebugLogger.log('Game initialized successfully with score: $score');
       }
     } catch (e, stackTrace) {
-      DebugLogger.error('Failed to initialize game (likely timed out)', e, stackTrace);
+      // This block now only runs if the entire 10-second process fails.
+      DebugLogger.error('All generation attempts failed within the time budget.', e, stackTrace);
       
       try {
-        DebugLogger.log('Attempting fallback initialization');
-        // Do the same for the fallback logic
-        game = await SudokuGame.create(SudokuDifficulty.easy, GridSize.standard, GridShape.classic);
-        game!.startTimer(); // Start the timer here too
-        score = 500;
+        DebugLogger.log('Attempting fallback initialization to a standard puzzle.');
+        game = await SudokuGame.create(widget.difficulty, widget.gridSize, GridShape.classic);
+        game!.startTimer();
+        score = _calculateInitialScore();
         if (mounted) {
           setState(() {});
           DebugLogger.log('Fallback initialization successful');
         }
       } catch (e2, stackTrace2) {
-        DebugLogger.error('Fallback initialization failed', e2, stackTrace2);
+        DebugLogger.error('FATAL: Fallback initialization also failed.', e2, stackTrace2);
         if (mounted) {
           setState(() {
             _errorMessage = 'Failed to create puzzle. Please restart the app.';
@@ -1191,7 +1342,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
+        title: const Row(
           children: [
             Icon(Icons.lightbulb, color: Colors.orange),
             SizedBox(width: 10),
@@ -1203,16 +1354,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           children: hints.map((hint) => Card(
             child: ListTile(
               title: Text(hint.title),
-              subtitle: Text('${hint.description}\nScore penalty: -${hint.penalty}'),
-              trailing: Text('-${hint.penalty}', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              subtitle: Text(hint.description),
+              trailing: Text(
+                hint.penalty > 0 ? '-${hint.penalty}' : '',
+                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+              ),
               onTap: () {
-                setState(() {
-                  score = math.max(0, score - hint.penalty);
-                  hintsUsed++;
-                  if (hint.action != null) hint.action!();
-                });
-                Navigator.pop(context);
-                GameStats.totalHintsUsed++;
+                Navigator.pop(context); // Close this dialog
+                _showHintConfirmation(hint); // Open the confirmation dialog
               },
             ),
           )).toList(),
@@ -1747,6 +1896,33 @@ class BoundaryCell {
   });
 }
 
+class PuzzleCache {
+  static final PuzzleCache _instance = PuzzleCache._internal();
+  factory PuzzleCache() => _instance;
+  PuzzleCache._internal();
+
+  final Map<String, PuzzleBlueprint> _cache = {};
+
+  String _getKey(GridSize size, GridShape shape) {
+    return '${size.name}-${shape.name}';
+  }
+
+  PuzzleBlueprint? get(GridSize size, GridShape shape) {
+    final key = _getKey(size, shape);
+    if (_cache.containsKey(key)) {
+      DebugLogger.log('--- Blueprint found in CACHE! ---');
+      return _cache[key];
+    }
+    return null;
+  }
+
+  void set(PuzzleBlueprint blueprint) {
+    final key = _getKey(blueprint.gridSize, blueprint.gridShape);
+    DebugLogger.log('--- Saving blueprint to CACHE for $key. ---');
+    _cache[key] = blueprint;
+  }
+}
+
 class SudokuGridPainter extends CustomPainter {
   final int gridDim;
   final List<List<int>>? regions;
@@ -1862,16 +2038,18 @@ class SudokuGridPainter extends CustomPainter {
 }
 
 class SmartHint {
+  final HintType type;
   final String title;
   final String description;
   final int penalty;
-  final VoidCallback? action;
-  
+  final dynamic data; // To hold the solution data (e.g., list of numbers, single number)
+
   SmartHint({
+    required this.type,
     required this.title,
     required this.description,
     required this.penalty,
-    this.action,
+    this.data,
   });
 }
 
@@ -1893,6 +2071,53 @@ class SudokuGame {
   late int gridDim;
   late DateTime startTime;
   late Stream<String> timeStream;
+  final SudokuDifficulty difficulty;
+
+  SudokuGame.fromExisting(SudokuGame other) : difficulty = other.difficulty { // <-- Added initializer
+    gridDim = other.gridDim;
+    // This constructor is used when loading from the cache.
+    // We copy the SOLUTION, not the unsolved grid.
+    grid = other.solution.map((row) => List<int>.from(row)).toList();
+    isOriginal = List.generate(gridDim, (_) => List.filled(gridDim, false));
+    solution = other.solution.map((row) => List<int>.from(row)).toList();
+    regions = other.regions.map((row) => List<int>.from(row)).toList();
+
+    // IMPORTANT: We re-puzzlify the loaded solution. This makes the cached puzzle
+    // feel new each time by removing a different set of numbers.
+    _puzzlify();
+  }
+
+  SudokuGame.fromBlueprint(PuzzleBlueprint blueprint, this.difficulty) {
+    gridDim = blueprint.gridSize.index == 0 ? 4 : blueprint.gridSize.index == 1 ? 6 : blueprint.gridSize.index == 2 ? 8 : blueprint.gridSize.index == 3 ? 9 : blueprint.gridSize.index == 4 ? 10 : 12;
+    grid = blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
+    solution = blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
+    regions = blueprint.regions.map((row) => List<int>.from(row)).toList();
+    isOriginal = List.generate(gridDim, (_) => List.filled(gridDim, false));
+
+    _puzzlify(); // Turn the solved grid into a playable puzzle
+  }
+
+  void _puzzlify() {
+  DebugLogger.log('Puzzlifying grid: Saving solution and removing cells...');
+  
+  // Step 1: Save the complete grid as the solution.
+  for (int i = 0; i < gridDim; i++) {
+    for (int j = 0; j < gridDim; j++) {
+      solution[i][j] = grid[i][j];
+    }
+  }
+
+  // Step 2: Remove a number of cells based on the difficulty.
+    int cellsToRemove = _getCellsToRemove(difficulty);
+    _removeRandomCells(cellsToRemove);
+
+    // Step 3: Mark the remaining numbers as original (not editable by the player).
+    for (int i = 0; i < gridDim; i++) {
+      for (int j = 0; j < gridDim; j++) {
+        isOriginal[i][j] = grid[i][j] != 0;
+      }
+    }
+  }
 
   void startTimer() {
     startTime = DateTime.now();
@@ -1901,20 +2126,19 @@ class SudokuGame {
   
   // SudokuGame(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) {
   // we make that async
-  SudokuGame._(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) {
+  SudokuGame._(this.difficulty, GridSize gridSize, GridShape gridShape) { // <-- Added `this.difficulty`
     try {
       DebugLogger.log('Initializing sudoku game with ${gridSize.name} ${difficulty.name} ${gridShape.name}');
       _initializeGrid(gridSize);
       
       if (gridShape == GridShape.jigsaw) {
-        _generateJigsawPuzzle(difficulty);
+        _generateJigsawPuzzle();
       } else {
-        _generatePuzzle(difficulty);
+        _generatePuzzle();
       }
       
-      // REMOVE these two lines from here:
-      // startTime = DateTime.now();
-      // timeStream = Stream.periodic(Duration(seconds: 1), (_) => getFormattedTime());
+      // we call the puzzlify method AFTER a solution is generated
+      _puzzlify();
       
       DebugLogger.log('Sudoku game initialized successfully');
     } catch (e, stackTrace) {
@@ -1932,10 +2156,10 @@ class SudokuGame {
       'gridShape': gridShape,
     };
 
-    // Run the generation in an isolate with a 2-second timeout.
+    // Run the generation in an isolate with a 3-second timeout.
     // If it hangs, it will throw an error instead of freezing the app.
     return await compute(_generateSudokuInBackground, params)
-        .timeout(const Duration(seconds: 2));
+        .timeout(const Duration(seconds: 3));
   }
 
   void _initializeGrid(GridSize gridSize) {
@@ -1967,21 +2191,17 @@ class SudokuGame {
     regions = List.generate(gridDim, (_) => List.filled(gridDim, 0));
   }
 
-  void _generatePuzzle(SudokuDifficulty difficulty) {
+  void _generatePuzzle() { // <-- Removed `difficulty` parameter
     try {
       DebugLogger.log('Generating ${difficulty.name} puzzle');
-      
-      // Initialize regions first
       _initializeStandardRegions();
       
-      // Generate a complete valid Sudoku with retry logic
       int attempts = 0;
       bool success = false;
       while (attempts < 10 && !success) {
         attempts++;
         DebugLogger.log('Generation attempt $attempts');
         
-        // Clear grid for new attempt
         for (int i = 0; i < gridDim; i++) {
           for (int j = 0; j < gridDim; j++) {
             grid[i][j] = 0;
@@ -1998,103 +2218,34 @@ class SudokuGame {
         throw Exception('Failed to generate complete sudoku after $attempts attempts');
       }
       
-      // Save solution
-      for (int i = 0; i < gridDim; i++) {
-        for (int j = 0; j < gridDim; j++) {
-          solution[i][j] = grid[i][j];
-        }
-      }
-      
-      // Remove numbers based on difficulty
-      int cellsToRemove = _getCellsToRemove(difficulty);
-      _removeRandomCells(cellsToRemove);
-      
-      // Mark original cells
-      for (int i = 0; i < gridDim; i++) {
-        for (int j = 0; j < gridDim; j++) {
-          isOriginal[i][j] = grid[i][j] != 0;
-        }
-      }
-      
-      DebugLogger.log('Puzzle generated successfully');
+      DebugLogger.log('Puzzle grid generated successfully');
     } catch (e, stackTrace) {
       DebugLogger.error('Failed to generate puzzle', e, stackTrace);
       rethrow;
     }
   }
 
-  void _generateJigsawPuzzle(SudokuDifficulty difficulty) {
-    try {
-      DebugLogger.log('--- STARTING JIGSAW PUZZLE GENERATION ($gridDim x $gridDim) ---');
-      
-      bool success = false;
-      int maxTotalAttempts = 5; // We will try to generate a jigsaw up to 5 times.
+  void _generateJigsawPuzzle() { // <-- Removed `difficulty` parameter
+    DebugLogger.log('--- STARTING JIGSAW PUZZLE GENERATION ($gridDim x $gridDim) ---');
 
-      for (int attempt = 1; attempt <= maxTotalAttempts; attempt++) {
-        DebugLogger.log('--- Overall Jigsaw Generation Attempt: $attempt/$maxTotalAttempts ---');
-        
-        // Step 1: Generate a new set of random region shapes for this attempt.
-        if (gridDim >= 10) {
-          DebugLogger.log('[Attempt $attempt] Generating SIMPLIFIED jigsaw regions for large grid...');
-          _generateSimplifiedJigsawRegions();
-        } else {
-          DebugLogger.log('[Attempt $attempt] Generating jigsaw regions...');
-          _generateJigsawRegions();
-        }
-
-        // Step 2: Try to fill the grid with numbers using the solver.
-        // Clear the grid before trying to solve.
-        for (int i = 0; i < gridDim; i++) {
-          for (int j = 0; j < gridDim; j++) {
-            grid[i][j] = 0;
-          }
-        }
-        
-        DebugLogger.log('[Attempt $attempt] Starting solver...');
-        success = _generateCompleteJigsawSudoku();
-
-        if (success) {
-          DebugLogger.log('--- Jigsaw Generation SUCCEEDED on attempt $attempt! ---');
-          break; // Exit the loop on success.
-        } else {
-          DebugLogger.log('--- Solver FAILED for this shape on attempt $attempt. Trying a new shape... ---');
-        }
-      }
-
-      // Step 3: If all attempts failed, we must fall back to a standard puzzle.
-      if (!success) {
-        DebugLogger.log('--- All jigsaw attempts failed. FALLING BACK to a standard puzzle to prevent a crash. ---');
-        _initializeStandardRegions(); // Use standard square/rectangle regions.
-        if (!_generateCompleteSudoku()) {
-          // This should almost never fail, but it's a final safeguard.
-          throw Exception('FATAL: Could not generate any puzzle, even the fallback standard one.');
-        }
-      }
-
-      // Step 4: A valid, complete grid now exists. Save it as the solution.
-      DebugLogger.log('Saving final grid as solution...');
-      for (int i = 0; i < gridDim; i++) {
-        for (int j = 0; j < gridDim; j++) {
-          solution[i][j] = grid[i][j];
-        }
-      }
-
-      // Step 5: Remove cells to create the final puzzle for the player.
-      DebugLogger.log('Removing cells to create puzzle...');
-      int cellsToRemove = _getCellsToRemove(difficulty);
-      _removeRandomCells(cellsToRemove);
-
-      for (int i = 0; i < gridDim; i++) {
-        for (int j = 0; j < gridDim; j++) {
-          isOriginal[i][j] = grid[i][j] != 0;
-        }
-      }
-
-      DebugLogger.log('--- PUZZLE GENERATION COMPLETE ---');
-    } catch (e, stackTrace) {
-      DebugLogger.error('A critical error occurred during jigsaw puzzle generation', e, stackTrace);
-      rethrow;
+    if (gridDim >= 10) {
+      _generateSimplifiedJigsawRegions();
+    } else {
+      _generateJigsawRegions();
     }
+
+    for (int i = 0; i < gridDim; i++) {
+      for (int j = 0; j < gridDim; j++) {
+        grid[i][j] = 0;
+      }
+    }
+    
+    DebugLogger.log('Starting solver...');
+    if (!_generateCompleteJigsawSudoku()) {
+      throw Exception('Solver failed to generate a puzzle for the given shape.');
+    }
+    
+    DebugLogger.log('--- Jigsaw Generation SUCCEEDED on this attempt! ---');
   }
 
   void _initializeStandardRegions() {
@@ -2281,16 +2432,19 @@ class SudokuGame {
   void _generateSimplifiedJigsawRegions() {
     DebugLogger.log('Generating simplified jigsaw regions for large grid');
     
-    // Start with standard regions but do fewer, simpler swaps
     _initializeStandardRegions();
     
     math.Random random = math.Random();
-    int limitedSwaps = gridDim; // Much fewer swaps for large grids
+    
+    // For the EXTREMELY complex 12x12 grid, we only do a few swaps
+    // to keep the regions simple and ensure the solver can finish in time.
+    int limitedSwaps = (gridDim == 12) ? 4 : gridDim; 
+    
     int successfulSwaps = 0;
     
     for (int regionA = 0; regionA < gridDim && successfulSwaps < limitedSwaps; regionA++) {
       for (int regionB = regionA + 1; regionB < gridDim && successfulSwaps < limitedSwaps; regionB++) {
-        int swaps = _performLimitedSwaps(regionA, regionB, random, 1); // Only 1 swap per pair
+        int swaps = _performLimitedSwaps(regionA, regionB, random, 1);
         successfulSwaps += swaps;
       }
     }
@@ -2710,7 +2864,6 @@ class SudokuGame {
     return bestCell;
   }
 
-  // To be replaced in the SudokuGame class
   bool _fillJigsawGridWithTimeout(int maxAttempts, int attempts) {
     // VERBOSE LOGGING: Show that the solver is still alive during deep recursion.
     if (attempts > 0 && attempts % 1000 == 0) {
@@ -2830,12 +2983,12 @@ class SudokuGame {
   List<SmartHint> getSmartHints(int row, int col) {
     List<SmartHint> hints = [];
     
-    if (grid[row][col] != 0) {
+    if (isOriginal[row][col] || grid[row][col] != 0) {
       hints.add(SmartHint(
-        title: 'Clear Cell',
-        description: 'This cell already has a number. Clear it first.',
-        penalty: 5,
-        action: () => clearCell(row, col),
+        type: HintType.conflict,
+        title: 'Cell Occupied',
+        description: 'This cell is already filled or is part of the original puzzle.',
+        penalty: 0,
       ));
       return hints;
     }
@@ -2844,43 +2997,49 @@ class SudokuGame {
     
     if (possibleNumbers.isEmpty) {
       hints.add(SmartHint(
+        type: HintType.conflict,
         title: 'Conflict Detected',
-        description: 'This cell has no valid numbers. Check for conflicts in this row, column, or region.',
-        penalty: 10,
+        description: 'No numbers can legally be placed in this cell. Check the row, column, or region for an error.',
+        penalty: 0,
       ));
     } else if (possibleNumbers.length == 1) {
       hints.add(SmartHint(
+        type: HintType.nakedSingle,
         title: 'Only Choice (Naked Single)',
-        description: 'Only ${possibleNumbers[0]} can go in this cell.',
+        description: 'There is only one possible number that can fit in this cell.',
         penalty: 25,
-        action: () => setCell(row, col, possibleNumbers[0]),
+        data: possibleNumbers[0],
       ));
     } else {
-      hints.add(SmartHint(
-        title: 'Show Possible Numbers',
-        description: 'Possible numbers: ${possibleNumbers.join(", ")}',
-        penalty: 15,
-      ));
-      
-      hints.add(SmartHint(
-        title: 'Give Answer',
-        description: 'The correct answer is ${solution[row][col]}',
-        penalty: 50,
-        action: () => setCell(row, col, solution[row][col]),
-      ));
-      
-      // Advanced technique hints
+      // Check for a hidden single before offering other hints
       for (int num in possibleNumbers) {
         if (_isHiddenSingle(row, col, num)) {
-          hints.insert(0, SmartHint(
-            title: 'Hidden Single Technique',
-            description: '$num is the only place this number can go in this region/row/column.',
+          hints.add(SmartHint(
+            type: HintType.hiddenSingle,
+            title: 'Hidden Single',
+            description: 'This is the only cell in its row, column, or region where a specific number can go.',
             penalty: 30,
-            action: () => setCell(row, col, num),
+            data: num,
           ));
-          break;
+          break; // A hidden single is a great hint, so we can stop here
         }
       }
+
+      hints.add(SmartHint(
+        type: HintType.showPossible,
+        title: 'Show Possible Numbers',
+        description: 'Reveals all numbers that can legally be placed in this cell.',
+        penalty: 15,
+        data: possibleNumbers, // Pack the answer into the data field
+      ));
+      
+      hints.add(SmartHint(
+        type: HintType.giveAnswer,
+        title: 'Give Answer',
+        description: 'Fills the correct number into the cell.',
+        penalty: 50,
+        data: solution[row][col], // Pack the answer into the data field
+      ));
     }
     
     return hints;
@@ -2938,5 +3097,134 @@ class SudokuGame {
     final minutes = elapsed.inMinutes;
     final seconds = elapsed.inSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+class AdminScreen extends StatefulWidget {
+  const AdminScreen({super.key});
+
+  @override
+  State<AdminScreen> createState() => _AdminScreenState();
+}
+
+class _AdminScreenState extends State<AdminScreen> {
+  bool _isGenerating = false;
+  int _generatedCount = 0;
+  String _currentStatus = "Idle. Ready to generate puzzles for the cache.";
+
+  Future<void> _startGeneration() async {
+    setState(() {
+      _isGenerating = true;
+      _generatedCount = 0;
+    });
+
+    // Loop through every combination of size and shape
+    for (final size in GridSize.values) {
+      for (final shape in GridShape.values) {
+        if (!_isGenerating) break; // Allow user to stop
+
+        final key = PuzzleCache()._getKey(size, shape);
+        
+        // Skip if this blueprint is already in the cache
+        if (PuzzleCache().get(size, shape) != null) {
+          DebugLogger.log('Blueprint for $key already exists. Skipping.');
+          continue;
+        }
+
+        setState(() {
+          _currentStatus = "Generating blueprint for: $key";
+        });
+
+        try {
+          // We generate with a single difficulty; it doesn't matter which one.
+          SudokuGame? solvedGame = await SudokuGame.create(SudokuDifficulty.easy, size, shape)
+              .timeout(const Duration(seconds: 5)); // More time for complex blueprints
+          
+          // Create and save the blueprint from the solved game.
+          final blueprint = PuzzleBlueprint(
+            solutionGrid: solvedGame.solution,
+            regions: solvedGame.regions,
+            gridSize: size,
+            gridShape: shape,
+          );
+          PuzzleCache().set(blueprint);
+          
+          setState(() {
+            _generatedCount++;
+          });
+
+        } catch (e) {
+          DebugLogger.error("Admin generator timed out or failed for $key. It will be skipped.");
+        }
+        
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    }
+
+    setState(() {
+      _isGenerating = false;
+      _currentStatus = "Finished. Generated $_generatedCount new blueprints.";
+    });
+  }
+
+  void _stopGeneration() {
+    setState(() {
+      _isGenerating = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Puzzle Generator'),
+        backgroundColor: Colors.grey.shade800,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Puzzle Cache Pre-Generator',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 30),
+              const Text(
+                'Puzzles Generated in this Session:',
+                style: TextStyle(fontSize: 16),
+              ),
+              Text(
+                '$_generatedCount',
+                style: const TextStyle(fontSize: 52, fontWeight: FontWeight.bold, color: Colors.indigo),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Status:',
+                style: TextStyle(fontSize: 16),
+              ),
+              Text(
+                _currentStatus,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
+              ElevatedButton(
+                onPressed: _isGenerating ? _stopGeneration : _startGeneration,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isGenerating ? Colors.red : Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                child: Text(_isGenerating ? 'Stop Generation' : 'Start Generation'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
