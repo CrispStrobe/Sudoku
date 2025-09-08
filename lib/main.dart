@@ -2,11 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 import 'dart:async';
+import 'package:json_annotation/json_annotation.dart';
 
-void main() {
+// for saving and loading puzzles...
+import 'dart:io';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
+
+// to load puzzles...
+part 'main.g.dart';
+
+void main() async { // Make main async
+  WidgetsFlutterBinding.ensureInitialized(); // Add this line
+  await PuzzleCache().initialize(); // Initialize the cache
   runApp(SudokuApp());
 }
 
+@JsonSerializable()
 class PuzzleBlueprint {
   final List<List<int>> solutionGrid;
   final List<List<int>> regions;
@@ -19,6 +31,8 @@ class PuzzleBlueprint {
     required this.gridSize,
     required this.gridShape,
   });
+  factory PuzzleBlueprint.fromJson(Map<String, dynamic> json) => _$PuzzleBlueprintFromJson(json);
+  Map<String, dynamic> toJson() => _$PuzzleBlueprintToJson(this);
 }
 
 class SudokuApp extends StatelessWidget {
@@ -78,6 +92,8 @@ class GameStats {
   static Set<String> unlockedAchievements = {};
   
   static bool debugMode = true; // Set to false for production
+
+  static bool useSavedPuzzles = true;
   
   // Modify the themes initialization
   static Set<String> unlockedThemes = debugMode 
@@ -965,7 +981,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int hintsUsed = 0;
   int score = 1000;
   bool _showingScore = false;
+
   Timer? _nextGameTimer;
+  Timer? _gameTimer;
+  Duration _elapsedTime = Duration.zero;
+  Duration _finalTime = Duration.zero;
+
+  DateTime? _startTime;
+
   String? _errorMessage; // For delayed error display
   
   @override
@@ -978,6 +1001,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeGame();
     });
+  }
+
+  void _startGameTimer() {
+    _gameTimer?.cancel(); // Ensure any old timer is stopped
+    _startTime = DateTime.now();
+    _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _elapsedTime = DateTime.now().difference(_startTime!);
+        });
+      }
+    });
+  }
+
+  void _stopGameTimer() {
+    _gameTimer?.cancel();
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -1089,51 +1134,58 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _initializeGame() async {
     try {
-      // Immediately show a loading state to the user.
+      // Immediately show the loading indicator to the user for a responsive feel.
       setState(() {
-        game = null; // Ensure the loading indicator is shown
+        game = null;
       });
 
-      // Step 1: Try to load from the cache first.
-      final blueprint = PuzzleCache().get(widget.gridSize, widget.gridShape);
+      // Step 1: Check the admin switch first. If it's on, try to load a puzzle.
+      if (GameStats.useSavedPuzzles) {
+        final blueprint = PuzzleCache().getRandom(widget.gridSize, widget.gridShape);
+        if (blueprint != null) {
+          // If a blueprint was found in storage, create the game from it.
+          game = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
+        }
+      }
 
-      if (blueprint != null) {
-        game = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
-      } else {
-        // Step 2: If cache misses, use our new robust generator.
-        DebugLogger.log('No blueprint found. Generating puzzle on the fly...');
+      // Step 2: If we still don't have a game, generate one on the fly.
+      // This happens if the switch was off OR if the switch was on but no saved puzzle was found.
+      if (game == null) {
+        DebugLogger.log('No saved blueprint found or using on-the-fly mode. Generating new puzzle...');
         game = await _generatePuzzleWithRetries(
           difficulty: widget.difficulty,
           gridSize: widget.gridSize,
           gridShape: widget.gridShape,
         );
         
-        // Step 3: If generation was successful, create and save its blueprint.
+        // Step 3: Automatically save the newly generated blueprint to permanent storage.
+        // This makes the app "self-healing"—the more you play, the bigger the cache gets.
         final newBlueprint = PuzzleBlueprint(
           solutionGrid: game!.solution,
           regions: game!.regions,
           gridSize: widget.gridSize,
           gridShape: widget.gridShape,
         );
-        PuzzleCache().set(newBlueprint);
+        await PuzzleCache().set(newBlueprint);
       }
-      
-      // Step 4: Start the timer and update the UI.
-      game!.startTimer();
+
+      // Step 4: Now that we are guaranteed to have a game, start the timer and update the UI.
+      _startGameTimer(); // Start our state-managed timer
       score = _calculateInitialScore();
 
       if (mounted) {
-        setState(() {});
+        setState(() {}); // This removes the loading indicator and shows the game board.
         DebugLogger.log('Game initialized successfully with score: $score');
       }
     } catch (e, stackTrace) {
-      // This block now only runs if the entire 10-second process fails.
+      // This entire block is our final safety net. It only runs if on-the-fly generation fails completely.
       DebugLogger.error('All generation attempts failed within the time budget.', e, stackTrace);
       
       try {
         DebugLogger.log('Attempting fallback initialization to a standard puzzle.');
         game = await SudokuGame.create(widget.difficulty, widget.gridSize, GridShape.classic);
-        game!.startTimer();
+        _startGameTimer(); // Also start the timer in the fallback case
+      
         score = _calculateInitialScore();
         if (mounted) {
           setState(() {});
@@ -1263,6 +1315,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _stopGameTimer(); // Stop the timer when the screen is destroyed
     _nextGameTimer?.cancel();
     _pulseController.dispose();
     _shakeController.dispose();
@@ -1372,13 +1425,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _completeGame() {
     if (game == null) return;
+
+    _stopGameTimer(); // Stop the timer
+    // _soundService.playSound(SoundType.complete);
     
-    final completionTime = DateTime.now().difference(game!.startTime);
+    final completionTime = _elapsedTime; // Rather use our state variable
+    // final completionTime = DateTime.now().difference(game!.startTime);
     final timeBonus = math.max(0, 300 - completionTime.inSeconds ~/ 2);
     final finalScore = score + timeBonus;
     
-    DebugLogger.log('Game completed! Score: $finalScore, Time: ${game!.getFormattedTime()}');
-    
+    DebugLogger.log('Game completed! Score: $finalScore, Time: ${_formatDuration(completionTime)}');
+     
     // Update statistics
     GameStats.totalPuzzlesSolved++;
     if (completionTime < GameStats.bestTime) {
@@ -1410,10 +1467,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _showFloatingScore(int finalScore, Duration completionTime, int timeBonus) {
     setState(() {
       _showingScore = true;
+      _finalTime = completionTime; // Save the final time to our state variable
     });
     
     _scoreController.forward().then((_) {
-      Timer(Duration(seconds: 1), () {
+      Timer(const Duration(seconds: 2), () {
         if (mounted) {
           setState(() {
             _showingScore = false;
@@ -1508,7 +1566,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           Center(
             child: Padding(
               padding: EdgeInsets.only(right: 16),
-              child: StreamBuilder<String>(
+              child: Text(
+                _formatDuration(_elapsedTime),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              /* child: StreamBuilder<String>(
                 stream: game!.timeStream,
                 builder: (context, snapshot) {
                   return Text(
@@ -1516,7 +1578,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   );
                 },
-              ),
+              ), */
             ),
           ),
         ],
@@ -1611,7 +1673,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       ),
                       child: Center(
                         child: Container(
-                          padding: EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20),
@@ -1619,7 +1681,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.3),
                                 blurRadius: 20,
-                                offset: Offset(0, 10),
+                                offset: const Offset(0, 10),
                               ),
                             ],
                           ),
@@ -1634,17 +1696,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                   color: currentScheme.primary,
                                 ),
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
                               Text(
-                                'Score: $score',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                'Score: $score', // This is the score *before* the time bonus
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                               ),
+                              // THE FIX IS HERE:
                               Text(
-                                'Time: ${game!.getFormattedTime()}',
-                                style: TextStyle(fontSize: 16),
+                                'Time: ${_formatDuration(_finalTime)}',
+                                style: const TextStyle(fontSize: 16),
                               ),
                               
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
                               Text(
                                 'Next puzzle in 3s...',
                                 style: TextStyle(color: Colors.grey.shade600),
@@ -1901,25 +1964,48 @@ class PuzzleCache {
   factory PuzzleCache() => _instance;
   PuzzleCache._internal();
 
-  final Map<String, PuzzleBlueprint> _cache = {};
+  // The cache now groups blueprints by their key (e.g., "small-jigsaw")
+  final Map<String, List<PuzzleBlueprint>> _cache = {};
+  final StorageService _storage = StorageService();
+
+  // Load all saved blueprints from the file into memory when the app starts.
+  Future<void> initialize() async {
+    final blueprints = await _storage.loadBlueprints();
+    for (final bp in blueprints) {
+      final key = _getKey(bp.gridSize, bp.gridShape);
+      if (!_cache.containsKey(key)) {
+        _cache[key] = [];
+      }
+      _cache[key]!.add(bp);
+    }
+    DebugLogger.log("Puzzle cache initialized with ${_cache.length} blueprint types.");
+  }
 
   String _getKey(GridSize size, GridShape shape) {
     return '${size.name}-${shape.name}';
   }
 
-  PuzzleBlueprint? get(GridSize size, GridShape shape) {
+  PuzzleBlueprint? getRandom(GridSize size, GridShape shape) {
     final key = _getKey(size, shape);
-    if (_cache.containsKey(key)) {
-      DebugLogger.log('--- Blueprint found in CACHE! ---');
-      return _cache[key];
+    if (_cache.containsKey(key) && _cache[key]!.isNotEmpty) {
+      DebugLogger.log('--- Blueprint for $key found in CACHE! Picking one at random. ---');
+      final list = _cache[key]!;
+      return list[math.Random().nextInt(list.length)];
     }
     return null;
   }
 
-  void set(PuzzleBlueprint blueprint) {
+  Future<void> set(PuzzleBlueprint blueprint) async {
     final key = _getKey(blueprint.gridSize, blueprint.gridShape);
-    DebugLogger.log('--- Saving blueprint to CACHE for $key. ---');
-    _cache[key] = blueprint;
+    if (!_cache.containsKey(key)) {
+      _cache[key] = [];
+    }
+    _cache[key]!.add(blueprint);
+    DebugLogger.log('--- Saving blueprint to memory and disk for $key. ---');
+    
+    // Save the entire collection of all blueprints to the file.
+    final allBlueprints = _cache.values.expand((list) => list).toList();
+    await _storage.saveBlueprints(allBlueprints);
   }
 }
 
@@ -2059,7 +2145,6 @@ Future<SudokuGame> _generateSudokuInBackground(Map<String, dynamic> params) asyn
   final gridShape = params['gridShape'] as GridShape;
 
   // This will run in a separate thread and can't hang the UI
-  // The fix is to call the private constructor `SudokuGame._` here
   return SudokuGame._(difficulty, gridSize, gridShape);
 }
 
@@ -2069,8 +2154,6 @@ class SudokuGame {
   late List<List<int>> solution;
   late List<List<int>> regions; // For jigsaw puzzles
   late int gridDim;
-  late DateTime startTime;
-  late Stream<String> timeStream;
   final SudokuDifficulty difficulty;
 
   SudokuGame.fromExisting(SudokuGame other) : difficulty = other.difficulty { // <-- Added initializer
@@ -2119,14 +2202,9 @@ class SudokuGame {
     }
   }
 
-  void startTimer() {
-    startTime = DateTime.now();
-    timeStream = Stream.periodic(const Duration(seconds: 1), (_) => getFormattedTime());
-  }
-  
   // SudokuGame(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) {
   // we make that async
-  SudokuGame._(this.difficulty, GridSize gridSize, GridShape gridShape) { // <-- Added `this.difficulty`
+  SudokuGame._(this.difficulty, GridSize gridSize, GridShape gridShape) {
     try {
       DebugLogger.log('Initializing sudoku game with ${gridSize.name} ${difficulty.name} ${gridShape.name}');
       _initializeGrid(gridSize);
@@ -2137,7 +2215,6 @@ class SudokuGame {
         _generatePuzzle();
       }
       
-      // we call the puzzlify method AFTER a solution is generated
       _puzzlify();
       
       DebugLogger.log('Sudoku game initialized successfully');
@@ -3092,12 +3169,6 @@ class SudokuGame {
     return true;
   }
 
-  String getFormattedTime() {
-    final elapsed = DateTime.now().difference(startTime);
-    final minutes = elapsed.inMinutes;
-    final seconds = elapsed.inSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
 }
 
 class AdminScreen extends StatefulWidget {
@@ -3118,52 +3189,50 @@ class _AdminScreenState extends State<AdminScreen> {
       _generatedCount = 0;
     });
 
-    // Loop through every combination of size and shape
-    for (final size in GridSize.values) {
-      for (final shape in GridShape.values) {
-        if (!_isGenerating) break; // Allow user to stop
+    final random = math.Random();
 
-        final key = PuzzleCache()._getKey(size, shape);
+    // This is a continuous loop that runs until you press "Stop".
+    while (_isGenerating) {
+      // We randomly pick a size and shape to generate in each iteration.
+      final size = GridSize.values[random.nextInt(GridSize.values.length)];
+      final shape = GridShape.values[random.nextInt(GridShape.values.length)];
+      
+      final key = PuzzleCache()._getKey(size, shape);
+
+      // We will always attempt to generate a new puzzle.
+      setState(() {
+        _currentStatus = "Generating new blueprint for: $key";
+      });
+
+      try {
+        SudokuGame? solvedGame = await SudokuGame.create(SudokuDifficulty.easy, size, shape)
+            .timeout(const Duration(seconds: 5));
         
-        // Skip if this blueprint is already in the cache
-        if (PuzzleCache().get(size, shape) != null) {
-          DebugLogger.log('Blueprint for $key already exists. Skipping.');
-          continue;
-        }
+        final blueprint = PuzzleBlueprint(
+          solutionGrid: solvedGame.solution,
+          regions: solvedGame.regions,
+          gridSize: size,
+          gridShape: shape,
+        );
 
+        // The set() method adds the new blueprint to the existing list.
+        await PuzzleCache().set(blueprint);
+        
         setState(() {
-          _currentStatus = "Generating blueprint for: $key";
+          _generatedCount++;
         });
 
-        try {
-          // We generate with a single difficulty; it doesn't matter which one.
-          SudokuGame? solvedGame = await SudokuGame.create(SudokuDifficulty.easy, size, shape)
-              .timeout(const Duration(seconds: 5)); // More time for complex blueprints
-          
-          // Create and save the blueprint from the solved game.
-          final blueprint = PuzzleBlueprint(
-            solutionGrid: solvedGame.solution,
-            regions: solvedGame.regions,
-            gridSize: size,
-            gridShape: shape,
-          );
-          PuzzleCache().set(blueprint);
-          
-          setState(() {
-            _generatedCount++;
-          });
-
-        } catch (e) {
-          DebugLogger.error("Admin generator timed out or failed for $key. It will be skipped.");
-        }
-        
-        await Future.delayed(const Duration(milliseconds: 100));
+      } catch (e) {
+        DebugLogger.error("Admin generator timed out or failed for $key. It will be skipped for this round.");
       }
+      
+      // Yield to the UI to keep the app responsive.
+      await Future.delayed(const Duration(milliseconds: 100));
     }
 
     setState(() {
       _isGenerating = false;
-      _currentStatus = "Finished. Generated $_generatedCount new blueprints.";
+      _currentStatus = "Stopped. Generated $_generatedCount new blueprints.";
     });
   }
 
@@ -3221,10 +3290,65 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
                 child: Text(_isGenerating ? 'Stop Generation' : 'Start Generation'),
               ),
+              const SizedBox(height: 40),
+              SwitchListTile(
+                title: const Text('Load puzzles from storage'),
+                subtitle: const Text('If off, puzzles are always generated on-the-fly.'),
+                value: GameStats.useSavedPuzzles,
+                onChanged: (bool value) {
+                  setState(() {
+                    GameStats.useSavedPuzzles = value;
+                  });
+                },
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+class StorageService {
+  static final StorageService _instance = StorageService._internal();
+  factory StorageService() => _instance;
+  StorageService._internal();
+
+  Future<String> get _localPath async {
+    final directory = await getApplicationDocumentsDirectory();
+    return directory.path;
+  }
+
+  Future<File> get _localFile async {
+    final path = await _localPath;
+    return File('$path/puzzles.json');
+  }
+
+  Future<List<PuzzleBlueprint>> loadBlueprints() async {
+    try {
+      final file = await _localFile;
+      if (!await file.exists()) {
+        DebugLogger.log("Puzzle file doesn't exist. Starting fresh.");
+        return [];
+      }
+
+      final contents = await file.readAsString();
+      final List<dynamic> jsonList = jsonDecode(contents);
+      return jsonList.map((json) => PuzzleBlueprint.fromJson(json)).toList();
+    } catch (e) {
+      DebugLogger.error("Failed to load blueprints from file.", e);
+      return []; // Return empty list on error
+    }
+  }
+
+  Future<void> saveBlueprints(List<PuzzleBlueprint> blueprints) async {
+    try {
+      final file = await _localFile;
+      final jsonList = blueprints.map((bp) => bp.toJson()).toList();
+      await file.writeAsString(jsonEncode(jsonList));
+      DebugLogger.log("Successfully saved ${blueprints.length} blueprints to disk.");
+    } catch (e) {
+      DebugLogger.error("Failed to save blueprints to file.", e);
+    }
   }
 }
