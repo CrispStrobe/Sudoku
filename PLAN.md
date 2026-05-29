@@ -120,17 +120,55 @@ lands: `[ ]` todo, `[x]` done.
 
 ---
 
-## Results
+## Results (initial audit)
 
 - `flutter analyze` → **0 issues** (was 41).
-- `flutter test` → **30 passing** (22 engine unit tests + 4 widget/live tests +
-  4 stats-persistence tests; was 0 — the suite didn't compile).
+- `flutter test` → **green** (was 0 — the suite didn't compile).
 - `flutter build web` → **succeeds**.
 - A latent UI bug surfaced and fixed while testing: the difficulty bottom sheet was
   not `isScrollControlled` and overflowed on short screens.
 - The engine now retries jigsaw region generation internally, so a single
   `generate()` call reliably produces solvable 9×9/10×10 jigsaw boards (previously
   this only worked because the UI retried via fresh isolates).
-- C7 (persisting stats across launches) is now implemented and tested.
-</content>
-</invoke>
+- C7 (persisting stats across launches) implemented and tested.
+- Deployed to Vercel (static prebuilt `build/web`); see `deploy.sh`.
+
+---
+
+## Post-audit enhancements
+
+Follow-up work after the initial audit shipped and deployed.
+
+- [x] **E1 — Cross-platform persistence.** Replaced file/`path_provider` storage
+  (unsupported on web — stats + cache silently no-opped there) with
+  `shared_preferences` for both the puzzle cache and player stats. Caps cached
+  blueprints at 25 per size/shape key, which bounds the stored payload and
+  **supersedes P3** (the O(n) full-file-rewrite concern).
+- [x] **E2 — True isolate cancellation (completes C6).** Replaced `compute()` with
+  a dedicated `Isolate` that is killed on timeout/error, so generation can neither
+  freeze the UI nor leak a runaway isolate.
+- [x] **E3 — Gameplay depth.** Pencil-mark **notes**, **undo** (value + notes),
+  free placement of conflicting numbers with live red highlighting (`hasConflict`),
+  and a completion **dialog** (Next Puzzle / Main Menu) replacing the blind 3 s
+  auto-advance + floating score.
+- [x] **E4 — CI.** `.github/workflows/ci.yml` runs format-check + `flutter analyze`
+  + `flutter test` on push to `main` and PRs. First run: green.
+- [x] **E5 — `--wasm` deploy option.** `deploy.sh --wasm` builds with WebAssembly
+  and emits the COOP/COEP headers skwasm needs.
+- [x] **E6 — Pruned dead dependencies.** Removed `path_provider` (unused after E1)
+  and `audioplayers` (sound was never wired up).
+
+### Results (post-audit)
+
+- `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
+- `flutter test` → **40 passing** (engine, persistence, isolate, notes/undo/
+  conflict, and widget/live tests).
+- Live at https://sudoku-lac-five.vercel.app
+
+## Known limitations / not planned
+
+- Streak never resets (the game auto-advances; there is no "lose" path).
+- Notes-mode toggle and the completion dialog are covered at the engine level and
+  via the live undo test, but not asserted individually in widget tests.
+- `--wasm` is validated and available but the live deploy uses the JS/canvaskit
+  build for broadest compatibility.
