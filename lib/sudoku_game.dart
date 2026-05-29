@@ -164,7 +164,7 @@ class SudokuGame {
   static const Duration _digBudget = Duration(milliseconds: 2500);
 
   SudokuGame._(this.difficulty, {math.Random? rng})
-      : _rng = rng ?? math.Random();
+    : _rng = rng ?? math.Random();
 
   /// Synchronous generation. Pass [seed] for deterministic output (tests).
   factory SudokuGame.generate(
@@ -173,7 +173,10 @@ class SudokuGame {
     GridShape gridShape, {
     int? seed,
   }) {
-    final game = SudokuGame._(difficulty, rng: seed == null ? null : math.Random(seed));
+    final game = SudokuGame._(
+      difficulty,
+      rng: seed == null ? null : math.Random(seed),
+    );
     game._build(gridSize, gridShape);
     return game;
   }
@@ -226,8 +229,9 @@ class SudokuGame {
 
     timer = Timer(timeout, () {
       if (!completer.isCompleted) {
-        completer.completeError(TimeoutException(
-            'Puzzle generation exceeded ${timeout.inSeconds}s.'));
+        completer.completeError(
+          TimeoutException('Puzzle generation exceeded ${timeout.inSeconds}s.'),
+        );
         cleanup(); // kills the isolate — true cancellation
       }
     });
@@ -244,12 +248,17 @@ class SudokuGame {
   }) {
     final game = SudokuGame._(difficulty, rng: rng);
     game.gridDim = gridDimensionFor(blueprint.gridSize);
-    game.solution =
-        blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
-    game.grid = blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
+    game.solution = blueprint.solutionGrid
+        .map((row) => List<int>.from(row))
+        .toList();
+    game.grid = blueprint.solutionGrid
+        .map((row) => List<int>.from(row))
+        .toList();
     game.regions = blueprint.regions.map((row) => List<int>.from(row)).toList();
-    game.isOriginal =
-        List.generate(game.gridDim, (_) => List.filled(game.gridDim, false));
+    game.isOriginal = List.generate(
+      game.gridDim,
+      (_) => List.filled(game.gridDim, false),
+    );
     game._puzzlify();
     return game;
   }
@@ -291,7 +300,9 @@ class SudokuGame {
     if (shape == GridShape.jigsaw) {
       // Mutate the box layout into irregular-but-connected regions via
       // boundary swaps. Large grids get fewer swaps so the solver stays fast.
-      final swapBudget = gridDim >= 10 ? (gridDim == 12 ? 4 : gridDim) : 1 << 30;
+      final swapBudget = gridDim >= 10
+          ? (gridDim == 12 ? 4 : gridDim)
+          : 1 << 30;
       var swaps = 0;
       for (var a = 0; a < gridDim && swaps < swapBudget; a++) {
         for (var b = a + 1; b < gridDim && swaps < swapBudget; b++) {
@@ -309,7 +320,8 @@ class SudokuGame {
     final boxesPerRow = gridDim ~/ colsPerBox;
     for (var row = 0; row < gridDim; row++) {
       for (var col = 0; col < gridDim; col++) {
-        regions[row][col] = (row ~/ rowsPerBox) * boxesPerRow + (col ~/ colsPerBox);
+        regions[row][col] =
+            (row ~/ rowsPerBox) * boxesPerRow + (col ~/ colsPerBox);
       }
     }
   }
@@ -332,7 +344,10 @@ class SudokuGame {
 
     boundaryA.shuffle(_rng);
     boundaryB.shuffle(_rng);
-    final count = math.min(maxSwaps, math.min(boundaryA.length, boundaryB.length));
+    final count = math.min(
+      maxSwaps,
+      math.min(boundaryA.length, boundaryB.length),
+    );
     var done = 0;
     for (var i = 0; i < count; i++) {
       final ca = boundaryA[i];
@@ -347,10 +362,19 @@ class SudokuGame {
   }
 
   bool _isAdjacentToRegion(int row, int col, int region) {
-    for (final d in const [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    for (final d in const [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ]) {
       final r = row + d[0];
       final c = col + d[1];
-      if (r >= 0 && r < gridDim && c >= 0 && c < gridDim && regions[r][c] == region) {
+      if (r >= 0 &&
+          r < gridDim &&
+          c >= 0 &&
+          c < gridDim &&
+          regions[r][c] == region) {
         return true;
       }
     }
@@ -379,12 +403,21 @@ class SudokuGame {
     final queue = <List<int>>[cells[0]];
     while (queue.isNotEmpty) {
       final cur = queue.removeLast();
-      for (final d in const [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      for (final d in const [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ]) {
         final r = cur[0] + d[0];
         final c = cur[1] + d[1];
         final key = '$r,$c';
-        if (r >= 0 && r < gridDim && c >= 0 && c < gridDim &&
-            regions[r][c] == region && !visited.contains(key)) {
+        if (r >= 0 &&
+            r < gridDim &&
+            c >= 0 &&
+            c < gridDim &&
+            regions[r][c] == region &&
+            !visited.contains(key)) {
           visited.add(key);
           queue.add([r, c]);
         }
@@ -475,7 +508,10 @@ class SudokuGame {
       }
     }
 
-    notes = List.generate(gridDim, (_) => List.generate(gridDim, (_) => <int>{}));
+    notes = List.generate(
+      gridDim,
+      (_) => List.generate(gridDim, (_) => <int>{}),
+    );
   }
 
   int _cellsToRemove(SudokuDifficulty difficulty) {
@@ -519,7 +555,9 @@ class SudokuGame {
         grid[r][c] = backup; // keep this clue
       }
     }
-    DebugLogger.log('Dug $removed/$target holes in ${stopwatch.elapsedMilliseconds}ms.');
+    DebugLogger.log(
+      'Dug $removed/$target holes in ${stopwatch.elapsedMilliseconds}ms.',
+    );
   }
 
   /// True iff the current [grid] (with holes) has exactly one completion.
@@ -568,8 +606,9 @@ class SudokuGame {
   }
 
   void _record(int row, int col) {
-    _history.add(_UndoEntry(
-        row, col, grid[row][col], Set<int>.from(notes[row][col])));
+    _history.add(
+      _UndoEntry(row, col, grid[row][col], Set<int>.from(notes[row][col])),
+    );
   }
 
   /// Place [value] (or 0 to erase). Conflicting values are allowed — the move
@@ -615,7 +654,9 @@ class SudokuGame {
     final region = regions[row][col];
     for (var r = 0; r < gridDim; r++) {
       for (var c = 0; c < gridDim; c++) {
-        if ((r != row || c != col) && regions[r][c] == region && grid[r][c] == v) {
+        if ((r != row || c != col) &&
+            regions[r][c] == region &&
+            grid[r][c] == v) {
           return true;
         }
       }
@@ -691,45 +732,53 @@ class SudokuGame {
 
     final hints = <SmartHint>[];
     if (possible.length == 1) {
-      hints.add(SmartHint(
-        type: HintType.nakedSingle,
-        title: 'Only Choice (Naked Single)',
-        description: 'There is only one number that can fit in this cell.',
-        penalty: 25,
-        data: possible.first,
-      ));
+      hints.add(
+        SmartHint(
+          type: HintType.nakedSingle,
+          title: 'Only Choice (Naked Single)',
+          description: 'There is only one number that can fit in this cell.',
+          penalty: 25,
+          data: possible.first,
+        ),
+      );
       return hints;
     }
 
     for (final num in possible) {
       if (_isHiddenSingle(row, col, num)) {
-        hints.add(SmartHint(
-          type: HintType.hiddenSingle,
-          title: 'Hidden Single',
-          description:
-              'This is the only cell in its row, column, or region where this '
-              'number can go.',
-          penalty: 30,
-          data: num,
-        ));
+        hints.add(
+          SmartHint(
+            type: HintType.hiddenSingle,
+            title: 'Hidden Single',
+            description:
+                'This is the only cell in its row, column, or region where this '
+                'number can go.',
+            penalty: 30,
+            data: num,
+          ),
+        );
         break;
       }
     }
 
-    hints.add(SmartHint(
-      type: HintType.showPossible,
-      title: 'Show Possible Numbers',
-      description: 'Reveals every number that can legally go here.',
-      penalty: 15,
-      data: possible,
-    ));
-    hints.add(SmartHint(
-      type: HintType.giveAnswer,
-      title: 'Give Answer',
-      description: 'Fills in the correct number.',
-      penalty: 50,
-      data: solution[row][col],
-    ));
+    hints.add(
+      SmartHint(
+        type: HintType.showPossible,
+        title: 'Show Possible Numbers',
+        description: 'Reveals every number that can legally go here.',
+        penalty: 15,
+        data: possible,
+      ),
+    );
+    hints.add(
+      SmartHint(
+        type: HintType.giveAnswer,
+        title: 'Give Answer',
+        description: 'Fills in the correct number.',
+        penalty: 50,
+        data: solution[row][col],
+      ),
+    );
     return hints;
   }
 

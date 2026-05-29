@@ -9,7 +9,11 @@ import 'package:sudoku/sudoku_game.dart';
 // ---------------------------------------------------------------------------
 
 /// True if [grid] is a fully-filled, conflict-free solution for [regions].
-bool isValidFullSolution(List<List<int>> grid, List<List<int>> regions, int dim) {
+bool isValidFullSolution(
+  List<List<int>> grid,
+  List<List<int>> regions,
+  int dim,
+) {
   for (var r = 0; r < dim; r++) {
     final rowSeen = <int>{};
     final colSeen = <int>{};
@@ -34,7 +38,14 @@ bool isValidFullSolution(List<List<int>> grid, List<List<int>> regions, int dim)
   return true;
 }
 
-bool _safe(List<List<int>> g, List<List<int>> regions, int dim, int row, int col, int num) {
+bool _safe(
+  List<List<int>> g,
+  List<List<int>> regions,
+  int dim,
+  int row,
+  int col,
+  int num,
+) {
   for (var i = 0; i < dim; i++) {
     if (g[row][i] == num) return false;
     if (g[i][col] == num) return false;
@@ -69,8 +80,12 @@ List<int>? _firstEmptyMrv(List<List<int>> g, List<List<int>> regions, int dim) {
 }
 
 /// Counts solutions of [puzzle] up to [limit] (independent solver).
-int countSolutions(List<List<int>> puzzle, List<List<int>> regions, int dim,
-    {int limit = 2}) {
+int countSolutions(
+  List<List<int>> puzzle,
+  List<List<int>> regions,
+  int dim, {
+  int limit = 2,
+}) {
   final g = puzzle.map((row) => List<int>.from(row)).toList();
   var found = 0;
   void solve() {
@@ -121,16 +136,22 @@ void main() {
     for (final size in GridSize.values) {
       test('${size.name}: valid solution, regions, and unique puzzle', () {
         final game = SudokuGame.generate(
-            SudokuDifficulty.easy, size, GridShape.classic,
-            seed: 42);
+          SudokuDifficulty.easy,
+          size,
+          GridShape.classic,
+          seed: 42,
+        );
         final dim = gridDimensionFor(size);
 
         expect(game.gridDim, dim);
         expect(game.solution.length, dim);
         expect(game.grid.length, dim);
 
-        expect(isValidFullSolution(game.solution, game.regions, dim), isTrue,
-            reason: 'solution must be a valid full sudoku');
+        expect(
+          isValidFullSolution(game.solution, game.regions, dim),
+          isTrue,
+          reason: 'solution must be a valid full sudoku',
+        );
 
         // Classic regions: dim regions, each of size dim.
         final sizes = <int, int>{};
@@ -153,8 +174,11 @@ void main() {
         }
 
         // The puzzle the player sees has exactly one solution.
-        expect(countSolutions(game.grid, game.regions, dim), 1,
-            reason: '${size.name} puzzle must be uniquely solvable');
+        expect(
+          countSolutions(game.grid, game.regions, dim),
+          1,
+          reason: '${size.name} puzzle must be uniquely solvable',
+        );
       });
     }
   });
@@ -167,28 +191,39 @@ void main() {
       GridSize.standard,
       GridSize.big,
     ]) {
-      test('${size.name}: connected regions of correct size + valid solution',
-          () {
-        final game = SudokuGame.generate(
-            SudokuDifficulty.medium, size, GridShape.jigsaw,
-            seed: 7);
-        final dim = gridDimensionFor(size);
+      test(
+        '${size.name}: connected regions of correct size + valid solution',
+        () {
+          final game = SudokuGame.generate(
+            SudokuDifficulty.medium,
+            size,
+            GridShape.jigsaw,
+            seed: 7,
+          );
+          final dim = gridDimensionFor(size);
 
-        expect(isValidFullSolution(game.solution, game.regions, dim), isTrue);
+          expect(isValidFullSolution(game.solution, game.regions, dim), isTrue);
 
-        final sizes = <int, int>{};
-        for (var r = 0; r < dim; r++) {
-          for (var c = 0; c < dim; c++) {
-            sizes[game.regions[r][c]] = (sizes[game.regions[r][c]] ?? 0) + 1;
+          final sizes = <int, int>{};
+          for (var r = 0; r < dim; r++) {
+            for (var c = 0; c < dim; c++) {
+              sizes[game.regions[r][c]] = (sizes[game.regions[r][c]] ?? 0) + 1;
+            }
           }
-        }
-        expect(sizes.length, dim, reason: 'should be dim regions');
-        expect(sizes.values.every((s) => s == dim), isTrue,
-            reason: 'each region has dim cells');
+          expect(sizes.length, dim, reason: 'should be dim regions');
+          expect(
+            sizes.values.every((s) => s == dim),
+            isTrue,
+            reason: 'each region has dim cells',
+          );
 
-        expect(countSolutions(game.grid, game.regions, dim), 1,
-            reason: 'jigsaw puzzle must be uniquely solvable');
-      });
+          expect(
+            countSolutions(game.grid, game.regions, dim),
+            1,
+            reason: 'jigsaw puzzle must be uniquely solvable',
+          );
+        },
+      );
     }
   });
 
@@ -196,8 +231,11 @@ void main() {
     late SudokuGame game;
     setUp(() {
       game = SudokuGame.generate(
-          SudokuDifficulty.easy, GridSize.standard, GridShape.classic,
-          seed: 99);
+        SudokuDifficulty.easy,
+        GridSize.standard,
+        GridShape.classic,
+        seed: 99,
+      );
     });
 
     test('original cells are immutable', () {
@@ -223,9 +261,10 @@ void main() {
       for (var r = 0; r < 9; r++) {
         for (var c = 0; c < 9; c++) {
           if (game.grid[r][c] == 0) {
-            final rowValue =
-                List.generate(9, (i) => game.grid[r][i]).firstWhere((v) => v != 0,
-                    orElse: () => 0);
+            final rowValue = List.generate(
+              9,
+              (i) => game.grid[r][i],
+            ).firstWhere((v) => v != 0, orElse: () => 0);
             if (rowValue != 0) {
               expect(game.isValidMove(r, c, rowValue), isFalse);
             }
@@ -257,16 +296,22 @@ void main() {
         }
       }
       expect(game.isCompleted(), isTrue);
-      expect(game.isSolved(), isFalse,
-          reason: 'isSolved must reject conflicting full boards');
+      expect(
+        game.isSolved(),
+        isFalse,
+        reason: 'isSolved must reject conflicting full boards',
+      );
     });
   });
 
   group('hints', () {
     test('occupied / original cell returns a conflict hint', () {
       final game = SudokuGame.generate(
-          SudokuDifficulty.easy, GridSize.standard, GridShape.classic,
-          seed: 5);
+        SudokuDifficulty.easy,
+        GridSize.standard,
+        GridShape.classic,
+        seed: 5,
+      );
       for (var r = 0; r < 9; r++) {
         for (var c = 0; c < 9; c++) {
           if (game.isOriginal[r][c]) {
@@ -280,16 +325,21 @@ void main() {
 
     test('give-answer hint always matches the solution', () {
       final game = SudokuGame.generate(
-          SudokuDifficulty.medium, GridSize.standard, GridShape.classic,
-          seed: 11);
+        SudokuDifficulty.medium,
+        GridSize.standard,
+        GridShape.classic,
+        seed: 11,
+      );
       for (var r = 0; r < 9; r++) {
         for (var c = 0; c < 9; c++) {
           if (game.grid[r][c] == 0) {
             final hints = game.getSmartHints(r, c);
             final answer = hints
-                .where((h) =>
-                    h.type == HintType.giveAnswer ||
-                    h.type == HintType.nakedSingle)
+                .where(
+                  (h) =>
+                      h.type == HintType.giveAnswer ||
+                      h.type == HintType.nakedSingle,
+                )
                 .map((h) => h.data as int)
                 .toList();
             if (answer.isNotEmpty) {
@@ -305,8 +355,11 @@ void main() {
 
     test('possibleNumbers always contains the solution value', () {
       final game = SudokuGame.generate(
-          SudokuDifficulty.hard, GridSize.standard, GridShape.classic,
-          seed: 3);
+        SudokuDifficulty.hard,
+        GridSize.standard,
+        GridShape.classic,
+        seed: 3,
+      );
       for (var r = 0; r < 9; r++) {
         for (var c = 0; c < 9; c++) {
           if (game.grid[r][c] == 0) {
@@ -320,8 +373,11 @@ void main() {
   group('blueprint', () {
     test('round-trips through JSON', () {
       final game = SudokuGame.generate(
-          SudokuDifficulty.easy, GridSize.medium, GridShape.jigsaw,
-          seed: 21);
+        SudokuDifficulty.easy,
+        GridSize.medium,
+        GridShape.jigsaw,
+        seed: 21,
+      );
       final blueprint = PuzzleBlueprint(
         solutionGrid: game.solution,
         regions: game.regions,
@@ -337,8 +393,11 @@ void main() {
 
     test('fromBlueprint yields a playable, uniquely solvable puzzle', () {
       final source = SudokuGame.generate(
-          SudokuDifficulty.easy, GridSize.standard, GridShape.classic,
-          seed: 8);
+        SudokuDifficulty.easy,
+        GridSize.standard,
+        GridShape.classic,
+        seed: 8,
+      );
       final blueprint = PuzzleBlueprint(
         solutionGrid: source.solution,
         regions: source.regions,
@@ -354,7 +413,11 @@ void main() {
 
   group('notes, undo, conflicts', () {
     SudokuGame fresh() => SudokuGame.generate(
-        SudokuDifficulty.easy, GridSize.standard, GridShape.classic, seed: 77);
+      SudokuDifficulty.easy,
+      GridSize.standard,
+      GridShape.classic,
+      seed: 77,
+    );
 
     List<int> firstEmpty(SudokuGame g) {
       for (var r = 0; r < g.gridDim; r++) {
@@ -404,8 +467,10 @@ void main() {
       final g = fresh();
       // Find two empty cells in the same row and place the same value in both.
       for (var r = 0; r < 9; r++) {
-        final empties =
-            [for (var c = 0; c < 9; c++) if (g.grid[r][c] == 0) c];
+        final empties = [
+          for (var c = 0; c < 9; c++)
+            if (g.grid[r][c] == 0) c,
+        ];
         if (empties.length >= 2) {
           g.setCell(r, empties[0], 1);
           g.setCell(r, empties[1], 1); // conflicting — allowed
@@ -434,8 +499,11 @@ void main() {
   group('async create (isolate)', () {
     test('returns a valid, uniquely solvable puzzle', () async {
       final game = await SudokuGame.create(
-          SudokuDifficulty.easy, GridSize.standard, GridShape.classic,
-          timeout: const Duration(seconds: 15));
+        SudokuDifficulty.easy,
+        GridSize.standard,
+        GridShape.classic,
+        timeout: const Duration(seconds: 15),
+      );
       expect(game.gridDim, 9);
       expect(isValidFullSolution(game.solution, game.regions, 9), isTrue);
       expect(countSolutions(game.grid, game.regions, 9), 1);
@@ -444,8 +512,11 @@ void main() {
     test('throws TimeoutException when the budget is too small', () async {
       await expectLater(
         SudokuGame.create(
-            SudokuDifficulty.expert, GridSize.mega, GridShape.jigsaw,
-            timeout: const Duration(milliseconds: 1)),
+          SudokuDifficulty.expert,
+          GridSize.mega,
+          GridShape.jigsaw,
+          timeout: const Duration(milliseconds: 1),
+        ),
         throwsA(isA<TimeoutException>()),
       );
     });

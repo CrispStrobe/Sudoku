@@ -1,8 +1,9 @@
 # Sudoku Master Pro
 
 A Flutter Sudoku game with classic and **jigsaw** (irregular-region) variants across
-six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12), four difficulties, smart hints,
-themes, achievements, and a celebratory particle layer.
+six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12) and four difficulties. Features
+smart hints, pencil-mark **notes**, **undo**, live conflict highlighting, themes,
+achievements, persisted stats, and a celebratory particle layer.
 
 ## Architecture
 
@@ -36,9 +37,13 @@ The **Admin** panel (debug builds only) pre-generates puzzles into the on-disk c
 ## Testing
 
 ```bash
-flutter test               # unit + widget tests
+flutter test               # unit + widget tests (40)
 flutter analyze            # static analysis (expected: no issues)
+dart format .              # formatting (checked in CI)
 ```
+
+CI (`.github/workflows/ci.yml`) runs format-check, `flutter analyze`, and
+`flutter test` on every push to `main` and on PRs.
 
 - `test/sudoku_game_test.dart` — engine unit tests: valid solutions, region
   shape/connectivity, **unique-solution guarantee** (verified by an independent
@@ -53,8 +58,9 @@ build locally and deploy the prebuilt `build/web`. `./deploy.sh` does this in on
 step (build → write `vercel.json` → link the `sudoku` project → deploy):
 
 ```bash
-./deploy.sh            # production deploy
+./deploy.sh            # production deploy (JS/canvaskit)
 ./deploy.sh --preview  # preview deploy
+./deploy.sh --wasm     # WebAssembly (skwasm) build + COOP/COEP headers
 ```
 
 Requires `vercel login` (or a `VERCEL_TOKEN` env var). Live at

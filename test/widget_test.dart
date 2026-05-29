@@ -15,8 +15,9 @@ void main() {
     expect(find.text('Achievements'), findsOneWidget);
   });
 
-  testWidgets('Classic flow opens size and difficulty selection',
-      (tester) async {
+  testWidgets('Classic flow opens size and difficulty selection', (
+    tester,
+  ) async {
     await tester.pumpWidget(const SudokuApp());
 
     await tester.tap(find.text('🎯 CLASSIC MODE'));
@@ -40,8 +41,9 @@ void main() {
     expect(find.text('Ocean'), findsWidgets);
   });
 
-  testWidgets('Live game: play a cached 4×4 puzzle and place a number',
-      (tester) async {
+  testWidgets('Live game: play a cached 4×4 puzzle and place a number', (
+    tester,
+  ) async {
     // Use a realistic portrait phone surface (default test surface is a short
     // 800×600 landscape that crams the board + number pad).
     tester.view.physicalSize = const Size(1080, 2400);
@@ -55,24 +57,31 @@ void main() {
     // await it (avoids blocking on path_provider, which is unavailable in the
     // test host).
     final seedGame = SudokuGame.generate(
-        SudokuDifficulty.easy, GridSize.small, GridShape.classic,
-        seed: 1234);
+      SudokuDifficulty.easy,
+      GridSize.small,
+      GridShape.classic,
+      seed: 1234,
+    );
     // ignore: unawaited_futures
-    PuzzleCache().set(PuzzleBlueprint(
-      solutionGrid: seedGame.solution,
-      regions: seedGame.regions,
-      gridSize: GridSize.small,
-      gridShape: GridShape.classic,
-    ));
-
-    await tester.pumpWidget(const MaterialApp(
-      home: GameScreen(
-        difficulty: SudokuDifficulty.easy,
+    PuzzleCache().set(
+      PuzzleBlueprint(
+        solutionGrid: seedGame.solution,
+        regions: seedGame.regions,
         gridSize: GridSize.small,
         gridShape: GridShape.classic,
-        gameMode: GameMode.classic,
       ),
-    ));
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: GameScreen(
+          difficulty: SudokuDifficulty.easy,
+          gridSize: GridSize.small,
+          gridShape: GridShape.classic,
+          gameMode: GameMode.classic,
+        ),
+      ),
+    );
 
     // Pump until the post-frame initialization has built the game (bounded so a
     // regression can never hang the suite).
@@ -115,8 +124,11 @@ void main() {
     await tester.tap(find.widgetWithText(ElevatedButton, '$answer').last);
     await tester.pump();
 
-    expect(g.grid[er][ec], answer,
-        reason: 'placing the solution value should stick');
+    expect(
+      g.grid[er][ec],
+      answer,
+      reason: 'placing the solution value should stick',
+    );
 
     // Undo via the toolbar button should clear the cell again.
     await tester.tap(find.byTooltip('Undo'));
@@ -131,7 +143,8 @@ void main() {
 /// On-screen centre of cell (row,col) within the rendered Sudoku grid.
 Offset _cellCenter(WidgetTester tester, int row, int col, int dim) {
   final finder = find.byWidgetPredicate(
-      (w) => w is CustomPaint && w.painter is SudokuGridPainter);
+    (w) => w is CustomPaint && w.painter is SudokuGridPainter,
+  );
   final box = tester.renderObject<RenderBox>(finder);
   final topLeft = box.localToGlobal(Offset.zero);
   final cell = box.size.width / dim;

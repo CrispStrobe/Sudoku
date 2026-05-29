@@ -50,8 +50,10 @@ void main() {
     expect(GameStats.totalHintsUsed, 7);
     expect(GameStats.currentStreak, 4);
     expect(GameStats.bestTime, const Duration(minutes: 2, seconds: 30));
-    expect(GameStats.unlockedAchievements,
-        containsAll(<String>['first_solve', 'streak_master']));
+    expect(
+      GameStats.unlockedAchievements,
+      containsAll(<String>['first_solve', 'streak_master']),
+    );
   });
 
   test('applyJson tolerates an empty map (keeps current values)', () {

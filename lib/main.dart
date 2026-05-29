@@ -137,27 +137,28 @@ class GameStats {
   static final StatsService _store = StatsService();
 
   static Map<String, dynamic> toJson() => {
-        'totalPuzzlesSolved': totalPuzzlesSolved,
-        'totalHintsUsed': totalHintsUsed,
-        'bestTimeMs': bestTime.inMilliseconds,
-        'currentStreak': currentStreak,
-        'unlockedAchievements': unlockedAchievements.toList(),
-        'unlockedThemes': unlockedThemes.toList(),
-        'currentTheme': currentTheme,
-      };
+    'totalPuzzlesSolved': totalPuzzlesSolved,
+    'totalHintsUsed': totalHintsUsed,
+    'bestTimeMs': bestTime.inMilliseconds,
+    'currentStreak': currentStreak,
+    'unlockedAchievements': unlockedAchievements.toList(),
+    'unlockedThemes': unlockedThemes.toList(),
+    'currentTheme': currentTheme,
+  };
 
   /// Overlays persisted values onto the static fields. Tolerant of missing or
   /// malformed keys, and always keeps 'Ocean' unlocked (all themes in debug).
   static void applyJson(Map<String, dynamic> json) {
-    totalPuzzlesSolved = (json['totalPuzzlesSolved'] as num?)?.toInt() ??
-        totalPuzzlesSolved;
+    totalPuzzlesSolved =
+        (json['totalPuzzlesSolved'] as num?)?.toInt() ?? totalPuzzlesSolved;
     totalHintsUsed =
         (json['totalHintsUsed'] as num?)?.toInt() ?? totalHintsUsed;
     final bestMs = (json['bestTimeMs'] as num?)?.toInt();
     if (bestMs != null) bestTime = Duration(milliseconds: bestMs);
     currentStreak = (json['currentStreak'] as num?)?.toInt() ?? currentStreak;
 
-    final achievements = (json['unlockedAchievements'] as List?)?.cast<String>();
+    final achievements = (json['unlockedAchievements'] as List?)
+        ?.cast<String>();
     if (achievements != null) unlockedAchievements = achievements.toSet();
 
     final themesList = (json['unlockedThemes'] as List?)?.cast<String>();
@@ -336,14 +337,16 @@ class ParticleLayerState extends State<ParticleLayer>
   void _spawnAmbient() {
     if (_size == Size.zero) return;
     final emojis = GameStats.current.particleEmojis;
-    _particles.add(Particle(
-      x: _random.nextDouble() * _size.width,
-      y: _size.height,
-      vx: (_random.nextDouble() - 0.5) * 2,
-      vy: -_random.nextDouble() * 3 - 1,
-      emoji: emojis[_random.nextInt(emojis.length)],
-      maxLife: 180.0,
-    ));
+    _particles.add(
+      Particle(
+        x: _random.nextDouble() * _size.width,
+        y: _size.height,
+        vx: (_random.nextDouble() - 0.5) * 2,
+        vy: -_random.nextDouble() * 3 - 1,
+        emoji: emojis[_random.nextInt(emojis.length)],
+        maxLife: 180.0,
+      ),
+    );
     _ensureRunning();
   }
 
@@ -352,14 +355,16 @@ class ParticleLayerState extends State<ParticleLayer>
     if (_size == Size.zero) return;
     final emojis = GameStats.current.particleEmojis;
     for (var i = 0; i < 20; i++) {
-      _particles.add(Particle(
-        x: _size.width / 2,
-        y: _size.height / 2,
-        vx: (_random.nextDouble() - 0.5) * 8,
-        vy: -_random.nextDouble() * 6 - 2,
-        emoji: emojis[_random.nextInt(emojis.length)],
-        maxLife: 120.0,
-      ));
+      _particles.add(
+        Particle(
+          x: _size.width / 2,
+          y: _size.height / 2,
+          vx: (_random.nextDouble() - 0.5) * 8,
+          vy: -_random.nextDouble() * 6 - 2,
+          emoji: emojis[_random.nextInt(emojis.length)],
+          maxLife: 120.0,
+        ),
+      );
     }
     _ensureRunning();
   }
@@ -386,7 +391,10 @@ class ParticleLayerState extends State<ParticleLayer>
                     top: p.y,
                     child: Opacity(
                       opacity: (p.opacity * 0.7).clamp(0.0, 1.0),
-                      child: Text(p.emoji, style: const TextStyle(fontSize: 20)),
+                      child: Text(
+                        p.emoji,
+                        style: const TextStyle(fontSize: 20),
+                      ),
                     ),
                   ),
               ],
@@ -434,8 +442,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Column(
                       children: [
@@ -455,13 +464,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           'Puzzles Solved: ${GameStats.totalPuzzlesSolved} | '
                           'Streak: ${GameStats.currentStreak}',
                           style: const TextStyle(
-                              color: Colors.white70, fontSize: 14),
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
                         ),
                         const SizedBox(height: 5),
                         Text(
                           scheme.description,
                           style: const TextStyle(
-                              color: Colors.white60, fontSize: 12),
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -471,12 +484,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Expanded(
                         child: _buildQuickButton(
-                            'Themes', Icons.palette, _showThemes),
+                          'Themes',
+                          Icons.palette,
+                          _showThemes,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _buildQuickButton('Achievements',
-                            Icons.emoji_events, _showAchievements),
+                        child: _buildQuickButton(
+                          'Achievements',
+                          Icons.emoji_events,
+                          _showAchievements,
+                        ),
                       ),
                     ],
                   ),
@@ -491,8 +510,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  _buildModeButton('🎯 CLASSIC MODE', 'Traditional Sudoku',
-                      Colors.indigo.shade800, _showClassicOptions),
+                  _buildModeButton(
+                    '🎯 CLASSIC MODE',
+                    'Traditional Sudoku',
+                    Colors.indigo.shade800,
+                    _showClassicOptions,
+                  ),
                   const SizedBox(height: 30),
                   SizedBox(
                     width: double.infinity,
@@ -531,7 +554,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         backgroundColor: Colors.grey.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
-                            vertical: 12, horizontal: 20),
+                          vertical: 12,
+                          horizontal: 20,
+                        ),
                       ),
                     ),
                 ],
@@ -543,7 +568,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildQuickButton(String label, IconData icon, VoidCallback onPressed) {
+  Widget _buildQuickButton(
+    String label,
+    IconData icon,
+    VoidCallback onPressed,
+  ) {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
@@ -563,7 +592,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildModeButton(
-      String title, String subtitle, Color color, VoidCallback onPressed) {
+    String title,
+    String subtitle,
+    Color color,
+    VoidCallback onPressed,
+  ) {
     return SizedBox(
       width: double.infinity,
       height: 70,
@@ -619,8 +652,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Classic Sudoku',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text(
+              'Classic Sudoku',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 20),
             Expanded(
               child: GridView.count(
@@ -630,17 +665,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisSpacing: 15,
                 children: [
                   _buildGridSizeCard(
-                      GridSize.small, '4×4', 'SMALL', Colors.green.shade500),
+                    GridSize.small,
+                    '4×4',
+                    'SMALL',
+                    Colors.green.shade500,
+                  ),
                   _buildGridSizeCard(
-                      GridSize.medium, '6×6', 'MEDIUM', Colors.blue.shade400),
+                    GridSize.medium,
+                    '6×6',
+                    'MEDIUM',
+                    Colors.blue.shade400,
+                  ),
                   _buildGridSizeCard(
-                      GridSize.large, '8×8', 'LARGE', Colors.orange.shade400),
+                    GridSize.large,
+                    '8×8',
+                    'LARGE',
+                    Colors.orange.shade400,
+                  ),
                   _buildGridSizeCard(
-                      GridSize.standard, '9×9', 'CLASSIC', Colors.red.shade400),
+                    GridSize.standard,
+                    '9×9',
+                    'CLASSIC',
+                    Colors.red.shade400,
+                  ),
                   _buildGridSizeCard(
-                      GridSize.big, '10×10', 'BIG', Colors.purple.shade400),
+                    GridSize.big,
+                    '10×10',
+                    'BIG',
+                    Colors.purple.shade400,
+                  ),
                   _buildGridSizeCard(
-                      GridSize.mega, '12×12', 'MEGA', Colors.red.shade600),
+                    GridSize.mega,
+                    '12×12',
+                    'MEGA',
+                    Colors.red.shade600,
+                  ),
                 ],
               ),
             ),
@@ -651,7 +710,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildGridSizeCard(
-      GridSize size, String sizeLabel, String difficulty, Color color) {
+    GridSize size,
+    String sizeLabel,
+    String difficulty,
+    Color color,
+  ) {
     return GestureDetector(
       onTap: () {
         Navigator.pop(context);
@@ -672,25 +735,34 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(sizeLabel,
-                style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
+            Text(
+              sizeLabel,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(height: 5),
-            Text(difficulty,
-                style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w500)),
+            Text(
+              difficulty,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  void _showDifficultySelection(GridSize gridSize, GameMode gameMode,
-      {GridShape gridShape = GridShape.classic}) {
+  void _showDifficultySelection(
+    GridSize gridSize,
+    GameMode gameMode, {
+    GridShape gridShape = GridShape.classic,
+  }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -709,8 +781,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Select Difficulty',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text(
+              'Select Difficulty',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
             if (gridShape == GridShape.jigsaw)
               Container(
                 margin: const EdgeInsets.only(top: 10),
@@ -721,29 +795,57 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Text(
                   'Jigsaw mode: Regions have irregular shapes!',
-                  style:
-                      TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                  style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
               ),
             const SizedBox(height: 20),
-            _buildDifficultyOption('EASY', Colors.green,
-                SudokuDifficulty.easy, gridSize, gameMode, gridShape),
-            _buildDifficultyOption('MEDIUM', Colors.orange,
-                SudokuDifficulty.medium, gridSize, gameMode, gridShape),
-            _buildDifficultyOption('HARD', Colors.red, SudokuDifficulty.hard,
-                gridSize, gameMode, gridShape),
-            _buildDifficultyOption('EXPERT', Colors.purple,
-                SudokuDifficulty.expert, gridSize, gameMode, gridShape),
+            _buildDifficultyOption(
+              'EASY',
+              Colors.green,
+              SudokuDifficulty.easy,
+              gridSize,
+              gameMode,
+              gridShape,
+            ),
+            _buildDifficultyOption(
+              'MEDIUM',
+              Colors.orange,
+              SudokuDifficulty.medium,
+              gridSize,
+              gameMode,
+              gridShape,
+            ),
+            _buildDifficultyOption(
+              'HARD',
+              Colors.red,
+              SudokuDifficulty.hard,
+              gridSize,
+              gameMode,
+              gridShape,
+            ),
+            _buildDifficultyOption(
+              'EXPERT',
+              Colors.purple,
+              SudokuDifficulty.expert,
+              gridSize,
+              gameMode,
+              gridShape,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDifficultyOption(String label, Color color,
-      SudokuDifficulty difficulty, GridSize gridSize, GameMode gameMode,
-      GridShape gridShape) {
+  Widget _buildDifficultyOption(
+    String label,
+    Color color,
+    SudokuDifficulty difficulty,
+    GridSize gridSize,
+    GameMode gameMode,
+    GridShape gridShape,
+  ) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
@@ -757,15 +859,20 @@ class _HomeScreenState extends State<HomeScreen> {
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 15),
         ),
-        child: Text(label,
-            style:
-                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
 
-  void _startGame(SudokuDifficulty difficulty, GridSize gridSize,
-      GridShape gridShape, GameMode gameMode) {
+  void _startGame(
+    SudokuDifficulty difficulty,
+    GridSize gridSize,
+    GridShape gridShape,
+    GameMode gameMode,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -796,8 +903,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('🧩 Jigsaw Sudoku',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text(
+              '🧩 Jigsaw Sudoku',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 10),
             Text(
               'Irregular shaped regions instead of squares! Each size has '
@@ -813,17 +922,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisSpacing: 10,
                 children: [
                   _buildJigsawOption(
-                      '4×4 Jigsaw', GridSize.small, 'Mini Challenge'),
+                    '4×4 Jigsaw',
+                    GridSize.small,
+                    'Mini Challenge',
+                  ),
                   _buildJigsawOption(
-                      '6×6 Jigsaw', GridSize.medium, 'Quick Puzzle'),
+                    '6×6 Jigsaw',
+                    GridSize.medium,
+                    'Quick Puzzle',
+                  ),
                   _buildJigsawOption(
-                      '8×8 Jigsaw', GridSize.large, 'Brain Teaser'),
+                    '8×8 Jigsaw',
+                    GridSize.large,
+                    'Brain Teaser',
+                  ),
                   _buildJigsawOption(
-                      '9×9 Jigsaw', GridSize.standard, 'Classic Twist'),
+                    '9×9 Jigsaw',
+                    GridSize.standard,
+                    'Classic Twist',
+                  ),
                   _buildJigsawOption(
-                      '10×10 Jigsaw', GridSize.big, 'Big Challenge'),
+                    '10×10 Jigsaw',
+                    GridSize.big,
+                    'Big Challenge',
+                  ),
                   _buildJigsawOption(
-                      '12×12 Jigsaw', GridSize.mega, 'Ultimate Test'),
+                    '12×12 Jigsaw',
+                    GridSize.mega,
+                    'Ultimate Test',
+                  ),
                 ],
               ),
             ),
@@ -837,8 +964,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: () {
         Navigator.pop(context);
-        _showDifficultySelection(gridSize, GameMode.classic,
-            gridShape: GridShape.jigsaw);
+        _showDifficultySelection(
+          gridSize,
+          GameMode.classic,
+          gridShape: GridShape.jigsaw,
+        );
       },
       child: Container(
         decoration: BoxDecoration(
@@ -859,15 +989,20 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white)),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(subtitle,
-                  style: const TextStyle(fontSize: 10, color: Colors.white70),
-                  textAlign: TextAlign.center),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 10, color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
@@ -890,13 +1025,14 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Environmental Themes',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text(
+              'Environmental Themes',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 20),
             Expanded(
               child: GridView.builder(
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 1,
                   childAspectRatio: 4,
                   mainAxisSpacing: 10,
@@ -904,8 +1040,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemCount: GameStats.themes.length,
                 itemBuilder: (context, index) {
                   final theme = GameStats.themes.values.elementAt(index);
-                  final isUnlocked =
-                      GameStats.unlockedThemes.contains(theme.name);
+                  final isUnlocked = GameStats.unlockedThemes.contains(
+                    theme.name,
+                  );
                   final isSelected = GameStats.currentTheme == theme.name;
 
                   return GestureDetector(
@@ -941,15 +1078,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        Text(theme.name,
-                                            style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 18)),
-                                        Text(theme.description,
-                                            style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12)),
+                                        Text(
+                                          theme.name,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                          ),
+                                        ),
+                                        Text(
+                                          theme.description,
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -973,8 +1116,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(15),
                               ),
                               child: const Center(
-                                child: Icon(Icons.lock,
-                                    color: Colors.white, size: 32),
+                                child: Icon(
+                                  Icons.lock,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
                               ),
                             ),
                         ],
@@ -1006,37 +1152,46 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Achievements',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text(
+              'Achievements',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 20),
             Expanded(
               child: ListView.builder(
                 itemCount: AchievementSystem.achievements.length,
                 itemBuilder: (context, index) {
-                  final achievement =
-                      AchievementSystem.achievements[index];
-                  final isUnlocked = GameStats.unlockedAchievements
-                      .contains(achievement.id);
+                  final achievement = AchievementSystem.achievements[index];
+                  final isUnlocked = GameStats.unlockedAchievements.contains(
+                    achievement.id,
+                  );
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: ListTile(
-                      leading: Text(achievement.icon,
-                          style: const TextStyle(fontSize: 30)),
-                      title: Text(achievement.name,
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color:
-                                  isUnlocked ? Colors.black : Colors.grey)),
+                      leading: Text(
+                        achievement.icon,
+                        style: const TextStyle(fontSize: 30),
+                      ),
+                      title: Text(
+                        achievement.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isUnlocked ? Colors.black : Colors.grey,
+                        ),
+                      ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(achievement.description),
                           if (achievement.rewardTheme != null)
-                            Text('Reward: ${achievement.rewardTheme} theme',
-                                style: const TextStyle(
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.w500)),
+                            Text(
+                              'Reward: ${achievement.rewardTheme} theme',
+                              style: const TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                         ],
                       ),
                       trailing: isUnlocked
@@ -1076,8 +1231,7 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen>
-    with TickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   SudokuGame? game;
   int? selectedRow;
   int? selectedCol;
@@ -1109,14 +1263,20 @@ class _GameScreenState extends State<GameScreen>
 
   void _initializeAnimations() {
     _pulseController = AnimationController(
-        duration: const Duration(milliseconds: 600), vsync: this);
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
     _shakeController = AnimationController(
-        duration: const Duration(milliseconds: 400), vsync: this);
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
 
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
-        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
     _shakeAnimation = Tween<double>(begin: 0, end: 10).animate(
-        CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn));
+      CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
+    );
   }
 
   void _startGameTimer() {
@@ -1142,8 +1302,9 @@ class _GameScreenState extends State<GameScreen>
     if (_errorMessage != null && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _errorMessage != null) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(_errorMessage!)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(_errorMessage!)));
           _errorMessage = null;
         }
       });
@@ -1155,13 +1316,18 @@ class _GameScreenState extends State<GameScreen>
     const maxAttempts = 3;
     final stopwatch = Stopwatch()..start();
     Object? lastError;
-    for (var attempt = 1;
-        attempt <= maxAttempts && stopwatch.elapsed < totalBudget;
-        attempt++) {
+    for (
+      var attempt = 1;
+      attempt <= maxAttempts && stopwatch.elapsed < totalBudget;
+      attempt++
+    ) {
       try {
         return await SudokuGame.create(
-            widget.difficulty, widget.gridSize, widget.gridShape,
-            timeout: const Duration(seconds: 4));
+          widget.difficulty,
+          widget.gridSize,
+          widget.gridShape,
+          timeout: const Duration(seconds: 4),
+        );
       } catch (e) {
         lastError = e;
         DebugLogger.log('Generation attempt $attempt failed; retrying.');
@@ -1176,8 +1342,10 @@ class _GameScreenState extends State<GameScreen>
 
       SudokuGame? built;
       if (GameStats.useSavedPuzzles) {
-        final blueprint =
-            PuzzleCache().getRandom(widget.gridSize, widget.gridShape);
+        final blueprint = PuzzleCache().getRandom(
+          widget.gridSize,
+          widget.gridShape,
+        );
         if (blueprint != null) {
           built = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
         }
@@ -1187,12 +1355,14 @@ class _GameScreenState extends State<GameScreen>
         built = await _generatePuzzleWithRetries();
         // Cache the freshly generated solution so future plays are instant.
         if (GameStats.useSavedPuzzles) {
-          await PuzzleCache().set(PuzzleBlueprint(
-            solutionGrid: built.solution,
-            regions: built.regions,
-            gridSize: widget.gridSize,
-            gridShape: widget.gridShape,
-          ));
+          await PuzzleCache().set(
+            PuzzleBlueprint(
+              solutionGrid: built.solution,
+              regions: built.regions,
+              gridSize: widget.gridSize,
+              gridShape: widget.gridShape,
+            ),
+          );
         }
       }
 
@@ -1204,15 +1374,19 @@ class _GameScreenState extends State<GameScreen>
       DebugLogger.error('Generation failed; falling back to classic.', e, st);
       try {
         game = await SudokuGame.create(
-            widget.difficulty, widget.gridSize, GridShape.classic);
+          widget.difficulty,
+          widget.gridSize,
+          GridShape.classic,
+        );
         _startGameTimer();
         score = _calculateInitialScore();
         if (mounted) setState(() {});
       } catch (e2, st2) {
         DebugLogger.error('Fallback also failed.', e2, st2);
         if (mounted) {
-          setState(() =>
-              _errorMessage = 'Failed to create puzzle. Please restart.');
+          setState(
+            () => _errorMessage = 'Failed to create puzzle. Please restart.',
+          );
         }
       }
     }
@@ -1307,8 +1481,9 @@ class _GameScreenState extends State<GameScreen>
     if (selectedRow != null && selectedCol != null && game != null) {
       _showHintDialog();
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Select a cell first!')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Select a cell first!')));
     }
   }
 
@@ -1328,21 +1503,25 @@ class _GameScreenState extends State<GameScreen>
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: hints
-              .map((hint) => Card(
-                    child: ListTile(
-                      title: Text(hint.title),
-                      subtitle: Text(hint.description),
-                      trailing: Text(
-                        hint.penalty > 0 ? '-${hint.penalty}' : '',
-                        style: const TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.bold),
+              .map(
+                (hint) => Card(
+                  child: ListTile(
+                    title: Text(hint.title),
+                    subtitle: Text(hint.description),
+                    trailing: Text(
+                      hint.penalty > 0 ? '-${hint.penalty}' : '',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
                       ),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showHintConfirmation(hint);
-                      },
                     ),
-                  ))
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showHintConfirmation(hint);
+                    },
+                  ),
+                ),
+              )
               .toList(),
         ),
       ),
@@ -1356,8 +1535,7 @@ class _GameScreenState extends State<GameScreen>
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(hint.title),
-        content: Text(
-            'Use this hint for a -${hint.penalty} score penalty?'),
+        content: Text('Use this hint for a -${hint.penalty} score penalty?'),
         actions: [
           TextButton(
             child: const Text('Cancel'),
@@ -1385,8 +1563,9 @@ class _GameScreenState extends State<GameScreen>
       switch (hint.type) {
         case HintType.showPossible:
           final numbers = (hint.data as List<int>).join(', ');
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Possible Numbers: $numbers')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Possible Numbers: $numbers')));
           break;
         case HintType.giveAnswer:
         case HintType.nakedSingle:
@@ -1432,16 +1611,18 @@ class _GameScreenState extends State<GameScreen>
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('🎉 Completed!',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontWeight: FontWeight.bold, color: scheme.primary)),
+        title: Text(
+          '🎉 Completed!',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Score: $finalScore',
-                style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(
+              'Score: $finalScore',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
             Text('Time: ${_formatDuration(time)}  •  Bonus: +$timeBonus'),
           ],
         ),
@@ -1497,8 +1678,10 @@ class _GameScreenState extends State<GameScreen>
               children: [
                 CircularProgressIndicator(color: Colors.white),
                 SizedBox(height: 20),
-                Text('Generating puzzle...',
-                    style: TextStyle(color: Colors.white, fontSize: 18)),
+                Text(
+                  'Generating puzzle...',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
+                ),
               ],
             ),
           ),
@@ -1513,8 +1696,9 @@ class _GameScreenState extends State<GameScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            '${widget.gridSize.name.toUpperCase()} '
-            '${widget.gridShape.name.toUpperCase()}'),
+          '${widget.gridSize.name.toUpperCase()} '
+          '${widget.gridShape.name.toUpperCase()}',
+        ),
         backgroundColor: scheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -1527,9 +1711,13 @@ class _GameScreenState extends State<GameScreen>
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Text('Score: $score',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Score: $score',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
           Center(
@@ -1540,7 +1728,9 @@ class _GameScreenState extends State<GameScreen>
                 builder: (context, value, _) => Text(
                   _formatDuration(value),
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -1657,8 +1847,10 @@ class _GameScreenState extends State<GameScreen>
     final g = game!;
     final gridDim = g.gridDim;
     final maxGridSize = isTablet ? 450.0 : 320.0;
-    final gridPixels =
-        math.min(maxGridSize, MediaQuery.of(context).size.width - 32);
+    final gridPixels = math.min(
+      maxGridSize,
+      MediaQuery.of(context).size.width - 32,
+    );
     final cellSize = gridPixels / gridDim;
 
     return Container(
@@ -1681,8 +1873,11 @@ class _GameScreenState extends State<GameScreen>
           children: [
             CustomPaint(
               size: Size(gridPixels, gridPixels),
-              painter: SudokuGridPainter(g.gridDim, g.regions,
-                  jigsaw: widget.gridShape == GridShape.jigsaw),
+              painter: SudokuGridPainter(
+                g.gridDim,
+                g.regions,
+                jigsaw: widget.gridShape == GridShape.jigsaw,
+              ),
             ),
             for (int row = 0; row < gridDim; row++)
               for (int col = 0; col < gridDim; col++)
@@ -1700,7 +1895,11 @@ class _GameScreenState extends State<GameScreen>
   }
 
   Widget _buildCell(
-      int row, int col, bool isTablet, EnvironmentalTheme scheme) {
+    int row,
+    int col,
+    bool isTablet,
+    EnvironmentalTheme scheme,
+  ) {
     final g = game!;
     final isSelected = selectedRow == row && selectedCol == col;
 
@@ -1720,14 +1919,14 @@ class _GameScreenState extends State<GameScreen>
               color: isHovered
                   ? scheme.accent.withValues(alpha: 0.7)
                   : (conflict
-                      ? const Color(0xFFFFCDD2) // red tint for conflicts
-                      : _getCellColor(row, col, scheme)),
+                        ? const Color(0xFFFFCDD2) // red tint for conflicts
+                        : _getCellColor(row, col, scheme)),
               border: Border.all(
                 color: isSelected
                     ? scheme.primary
                     : (isHovered
-                        ? scheme.primary.withValues(alpha: 0.5)
-                        : Colors.transparent),
+                          ? scheme.primary.withValues(alpha: 0.5)
+                          : Colors.transparent),
                 width: isSelected ? 3 : (isHovered ? 2 : 0),
               ),
             ),
@@ -1805,8 +2004,9 @@ class _GameScreenState extends State<GameScreen>
                     '$n',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        fontSize: fontSize.clamp(6, 12),
-                        color: Colors.grey.shade600),
+                      fontSize: fontSize.clamp(6, 12),
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                 ),
             ],
@@ -1856,11 +2056,14 @@ class _GameScreenState extends State<GameScreen>
                 ],
               ),
               child: Center(
-                child: Text('$number',
-                    style: TextStyle(
-                        fontSize: fontSize,
-                        fontWeight: FontWeight.bold,
-                        color: primary)),
+                child: Text(
+                  '$number',
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.bold,
+                    color: primary,
+                  ),
+                ),
               ),
             ),
             childWhenDragging: ElevatedButton(
@@ -1868,28 +2071,38 @@ class _GameScreenState extends State<GameScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white.withValues(alpha: 0.5),
                 foregroundColor: primary.withValues(alpha: 0.5),
-                shape:
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 elevation: 4,
                 padding: EdgeInsets.zero,
               ),
-              child: Text('$number',
-                  style: TextStyle(
-                      fontSize: fontSize, fontWeight: FontWeight.bold)),
+              child: Text(
+                '$number',
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             child: ElevatedButton(
               onPressed: () => _inputNumber(number),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: primary,
-                shape:
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 elevation: 8,
                 padding: EdgeInsets.zero,
               ),
-              child: Text('$number',
-                  style: TextStyle(
-                      fontSize: fontSize, fontWeight: FontWeight.bold)),
+              child: Text(
+                '$number',
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           );
         },
@@ -1932,10 +2145,16 @@ class SudokuGridPainter extends CustomPainter {
     final colsPerBox = box[1];
 
     for (var i = 0; i <= gridDim; i++) {
-      canvas.drawLine(Offset(i * cellSize, 0), Offset(i * cellSize, size.height),
-          i % colsPerBox == 0 ? thickPaint : paint);
-      canvas.drawLine(Offset(0, i * cellSize), Offset(size.width, i * cellSize),
-          i % rowsPerBox == 0 ? thickPaint : paint);
+      canvas.drawLine(
+        Offset(i * cellSize, 0),
+        Offset(i * cellSize, size.height),
+        i % colsPerBox == 0 ? thickPaint : paint,
+      );
+      canvas.drawLine(
+        Offset(0, i * cellSize),
+        Offset(size.width, i * cellSize),
+        i % rowsPerBox == 0 ? thickPaint : paint,
+      );
     }
   }
 
@@ -2011,7 +2230,9 @@ class PuzzleCache {
 
   Future<void> set(PuzzleBlueprint blueprint) async {
     final list = _cache.putIfAbsent(
-        _key(blueprint.gridSize, blueprint.gridShape), () => []);
+      _key(blueprint.gridSize, blueprint.gridShape),
+      () => [],
+    );
     list.add(blueprint);
     if (list.length > _maxPerKey) {
       list.removeRange(0, list.length - _maxPerKey); // drop oldest
@@ -2048,7 +2269,9 @@ class StorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-          _key, jsonEncode(blueprints.map((bp) => bp.toJson()).toList()));
+        _key,
+        jsonEncode(blueprints.map((bp) => bp.toJson()).toList()),
+      );
     } catch (e) {
       DebugLogger.error('Failed to save blueprints.', e);
     }
@@ -2111,21 +2334,31 @@ class _AdminScreenState extends State<AdminScreen> {
     while (_isGenerating) {
       final size = GridSize.values[random.nextInt(GridSize.values.length)];
       final shape = GridShape.values[random.nextInt(GridShape.values.length)];
-      setState(() => _currentStatus =
-          'Generating new blueprint for: ${size.name}-${shape.name}');
+      setState(
+        () => _currentStatus =
+            'Generating new blueprint for: ${size.name}-${shape.name}',
+      );
 
       try {
-        final solved = await SudokuGame.create(SudokuDifficulty.easy, size, shape,
-            timeout: const Duration(seconds: 5));
-        await PuzzleCache().set(PuzzleBlueprint(
-          solutionGrid: solved.solution,
-          regions: solved.regions,
-          gridSize: size,
-          gridShape: shape,
-        ));
+        final solved = await SudokuGame.create(
+          SudokuDifficulty.easy,
+          size,
+          shape,
+          timeout: const Duration(seconds: 5),
+        );
+        await PuzzleCache().set(
+          PuzzleBlueprint(
+            solutionGrid: solved.solution,
+            regions: solved.regions,
+            gridSize: size,
+            gridShape: shape,
+          ),
+        );
         setState(() => _generatedCount++);
       } catch (e) {
-        DebugLogger.error('Admin generator skipped ${size.name}-${shape.name}.');
+        DebugLogger.error(
+          'Admin generator skipped ${size.name}-${shape.name}.',
+        );
       }
       await Future.delayed(const Duration(milliseconds: 100));
     }
@@ -2157,22 +2390,31 @@ class _AdminScreenState extends State<AdminScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('Puzzle Cache Pre-Generator',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center),
+              const Text(
+                'Puzzle Cache Pre-Generator',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 30),
-              const Text('Puzzles Generated in this Session:',
-                  style: TextStyle(fontSize: 16)),
-              Text('$_generatedCount',
-                  style: const TextStyle(
-                      fontSize: 52,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.indigo)),
+              const Text(
+                'Puzzles Generated in this Session:',
+                style: TextStyle(fontSize: 16),
+              ),
+              Text(
+                '$_generatedCount',
+                style: const TextStyle(
+                  fontSize: 52,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.indigo,
+                ),
+              ),
               const SizedBox(height: 20),
               const Text('Status:', style: TextStyle(fontSize: 16)),
-              Text(_currentStatus,
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                  textAlign: TextAlign.center),
+              Text(
+                _currentStatus,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 40),
               ElevatedButton(
                 onPressed: _isGenerating ? _stopGeneration : _startGeneration,
@@ -2180,18 +2422,24 @@ class _AdminScreenState extends State<AdminScreen> {
                   backgroundColor: _isGenerating ? Colors.red : Colors.green,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 50, vertical: 15),
+                    horizontal: 50,
+                    vertical: 15,
+                  ),
                   textStyle: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                child:
-                    Text(_isGenerating ? 'Stop Generation' : 'Start Generation'),
+                child: Text(
+                  _isGenerating ? 'Stop Generation' : 'Start Generation',
+                ),
               ),
               const SizedBox(height: 40),
               SwitchListTile(
                 title: const Text('Load puzzles from storage'),
                 subtitle: const Text(
-                    'If off, puzzles are always generated on-the-fly.'),
+                  'If off, puzzles are always generated on-the-fly.',
+                ),
                 value: GameStats.useSavedPuzzles,
                 onChanged: (value) =>
                     setState(() => GameStats.useSavedPuzzles = value),

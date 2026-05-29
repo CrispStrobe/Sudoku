@@ -10,8 +10,11 @@ void main() {
 
   PuzzleBlueprint makeBlueprint(int seed) {
     final game = SudokuGame.generate(
-        SudokuDifficulty.easy, GridSize.small, GridShape.classic,
-        seed: seed);
+      SudokuDifficulty.easy,
+      GridSize.small,
+      GridShape.classic,
+      seed: seed,
+    );
     return PuzzleBlueprint(
       solutionGrid: game.solution,
       regions: game.regions,
@@ -20,19 +23,22 @@ void main() {
     );
   }
 
-  test('StorageService round-trips blueprints through SharedPreferences', () async {
-    final storage = StorageService();
-    expect(await storage.loadBlueprints(), isEmpty);
+  test(
+    'StorageService round-trips blueprints through SharedPreferences',
+    () async {
+      final storage = StorageService();
+      expect(await storage.loadBlueprints(), isEmpty);
 
-    final bp = makeBlueprint(1);
-    await storage.saveBlueprints([bp]);
+      final bp = makeBlueprint(1);
+      await storage.saveBlueprints([bp]);
 
-    final loaded = await storage.loadBlueprints();
-    expect(loaded, hasLength(1));
-    expect(loaded.first.solutionGrid, bp.solutionGrid);
-    expect(loaded.first.gridSize, GridSize.small);
-    expect(loaded.first.gridShape, GridShape.classic);
-  });
+      final loaded = await storage.loadBlueprints();
+      expect(loaded, hasLength(1));
+      expect(loaded.first.solutionGrid, bp.solutionGrid);
+      expect(loaded.first.gridSize, GridSize.small);
+      expect(loaded.first.gridShape, GridShape.classic);
+    },
+  );
 
   test('StatsService round-trips stats through SharedPreferences', () async {
     final stats = StatsService();
@@ -52,8 +58,10 @@ void main() {
     }
     // Whatever this singleton accumulated, persistence must be capped at 25.
     final persisted = (await StorageService().loadBlueprints())
-        .where((b) =>
-            b.gridSize == GridSize.small && b.gridShape == GridShape.classic)
+        .where(
+          (b) =>
+              b.gridSize == GridSize.small && b.gridShape == GridShape.classic,
+        )
         .toList();
     expect(persisted.length, lessThanOrEqualTo(25));
     expect(persisted.length, 25, reason: '30 inserts should saturate the cap');
