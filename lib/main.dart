@@ -1084,22 +1084,18 @@ class _GameScreenState extends State<GameScreen>
 
   late AnimationController _pulseController;
   late AnimationController _shakeController;
-  late AnimationController _scoreController;
   late Animation<double> _pulseAnimation;
   late Animation<double> _shakeAnimation;
-  late Animation<Offset> _scoreAnimation;
 
   final GlobalKey<ParticleLayerState> _particleKey =
       GlobalKey<ParticleLayerState>();
 
   int hintsUsed = 0;
   int score = 1000;
-  bool _showingScore = false;
+  bool _notesMode = false;
 
-  Timer? _nextGameTimer;
   Timer? _gameTimer;
   final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
-  Duration _finalTime = Duration.zero;
   DateTime? _startTime;
 
   String? _errorMessage;
@@ -1116,15 +1112,11 @@ class _GameScreenState extends State<GameScreen>
         duration: const Duration(milliseconds: 600), vsync: this);
     _shakeController = AnimationController(
         duration: const Duration(milliseconds: 400), vsync: this);
-    _scoreController = AnimationController(
-        duration: const Duration(milliseconds: 2000), vsync: this);
 
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
         CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
     _shakeAnimation = Tween<double>(begin: 0, end: 10).animate(
         CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn));
-    _scoreAnimation = Tween<Offset>(begin: Offset.zero, end: const Offset(0, -0.5))
-        .animate(CurvedAnimation(parent: _scoreController, curve: Curves.easeOut));
   }
 
   void _startGameTimer() {
@@ -1249,11 +1241,9 @@ class _GameScreenState extends State<GameScreen>
   @override
   void dispose() {
     _stopGameTimer();
-    _nextGameTimer?.cancel();
     _elapsed.dispose();
     _pulseController.dispose();
     _shakeController.dispose();
-    _scoreController.dispose();
     super.dispose();
   }
 
@@ -1270,22 +1260,29 @@ class _GameScreenState extends State<GameScreen>
     _pulseController.forward().then((_) => _pulseController.reverse());
   }
 
+  /// Number-pad tap: toggles a note in notes mode, otherwise places the value.
   void _inputNumber(int number) {
-    if (selectedRow != null && selectedCol != null) {
-      _placeNumber(selectedRow!, selectedCol!, number);
+    if (selectedRow == null || selectedCol == null) return;
+    if (_notesMode) {
+      setState(() => game?.toggleNote(selectedRow!, selectedCol!, number));
+    } else {
+      _placeValue(selectedRow!, selectedCol!, number);
     }
   }
 
-  void _placeNumber(int row, int col, int number) {
+  /// Places [number] at (row,col). Wrong (conflicting) moves are allowed — they
+  /// stay on the board (highlighted) and cost score; the puzzle is won only
+  /// when [SudokuGame.isSolved] holds.
+  void _placeValue(int row, int col, int number) {
     final g = game;
-    if (g == null) return;
-    if (g.isValidMove(row, col, number)) {
-      setState(() => g.setCell(row, col, number));
-      if (g.isSolved()) _completeGame();
-    } else {
+    if (g == null || g.isOriginal[row][col]) return;
+    final wasValid = g.isValidMove(row, col, number);
+    setState(() => g.setCell(row, col, number));
+    if (!wasValid) {
       _shakeController.forward().then((_) => _shakeController.reverse());
       setState(() => score = math.max(0, score - 25));
     }
+    if (g.isSolved()) _completeGame();
   }
 
   void _clearCell() {
@@ -1293,6 +1290,18 @@ class _GameScreenState extends State<GameScreen>
       setState(() => game?.clearCell(selectedRow!, selectedCol!));
     }
   }
+
+  void _undo() {
+    final cell = game?.undo();
+    if (cell != null) {
+      setState(() {
+        selectedRow = cell[0];
+        selectedCol = cell[1];
+      });
+    }
+  }
+
+  void _toggleNotesMode() => setState(() => _notesMode = !_notesMode);
 
   void _showHint() {
     if (selectedRow != null && selectedCol != null && game != null) {
@@ -1411,44 +1420,63 @@ class _GameScreenState extends State<GameScreen>
     AchievementSystem.checkAchievements();
     GameStats.save(); // persist solved count, streak, best time, unlocks
 
+    setState(() => score = finalScore);
     _particleKey.currentState?.burst();
-    _showFloatingScore(finalScore, completionTime);
-
-    _nextGameTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) _startNextLevel();
-    });
+    _showCompletionDialog(finalScore, completionTime, timeBonus);
   }
 
-  void _showFloatingScore(int finalScore, Duration completionTime) {
-    setState(() {
-      _showingScore = true;
-      _finalTime = completionTime;
-      score = finalScore;
-    });
-    _scoreController.forward().then((_) {
-      Timer(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() => _showingScore = false);
-          _scoreController.reset();
-        }
-      });
-    });
+  void _showCompletionDialog(int finalScore, Duration time, int timeBonus) {
+    final scheme = GameStats.current;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('🎉 Completed!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: scheme.primary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Score: $finalScore',
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold)),
+            Text('Time: ${_formatDuration(time)}  •  Bonus: +$timeBonus'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _goToMainMenu();
+            },
+            child: const Text('Main Menu'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _startNextLevel();
+            },
+            child: const Text('Next Puzzle'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _startNextLevel() {
-    _initializeGame();
     setState(() {
       selectedRow = null;
       selectedCol = null;
       hintsUsed = 0;
-      _showingScore = false;
+      _notesMode = false;
     });
-    _scoreController.reset();
+    _initializeGame();
   }
 
   void _goToMainMenu() {
-    _nextGameTimer?.cancel();
-    Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -1548,41 +1576,13 @@ class _GameScreenState extends State<GameScreen>
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _showHint,
-                            icon: const Icon(Icons.lightbulb),
-                            label: const Text('Smart Hint'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        ElevatedButton(
-                          onPressed: _clearCell,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 12, horizontal: 20),
-                          ),
-                          child: const Icon(Icons.clear),
-                        ),
-                      ],
-                    ),
+                    const SizedBox(height: 16),
+                    _buildControls(scheme),
                     const SizedBox(height: 10),
                     Expanded(flex: 1, child: _buildNumberPad(isTablet)),
                   ],
                 ),
               ),
-              if (_showingScore) _buildFloatingScore(scheme),
             ],
           ),
         ),
@@ -1590,48 +1590,65 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _buildFloatingScore(EnvironmentalTheme scheme) {
-    return AnimatedBuilder(
-      animation: _scoreAnimation,
-      builder: (context, child) => Transform.translate(
-        offset: Offset(
-            0, _scoreAnimation.value.dy * MediaQuery.of(context).size.height),
-        child: child,
-      ),
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('🎉 COMPLETED!',
-                  style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: scheme.primary)),
-              const SizedBox(height: 10),
-              Text('Score: $score',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
-              Text('Time: ${_formatDuration(_finalTime)}',
-                  style: const TextStyle(fontSize: 16)),
-              const SizedBox(height: 10),
-              Text('Next puzzle in 3s...',
-                  style: TextStyle(color: Colors.grey.shade600)),
-            ],
+  Widget _buildControls(EnvironmentalTheme scheme) {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: _showHint,
+            icon: const Icon(Icons.lightbulb),
+            label: const Text('Hint'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
           ),
         ),
+        const SizedBox(width: 8),
+        _circleButton(
+          icon: Icons.edit,
+          tooltip: 'Notes mode',
+          active: _notesMode,
+          activeColor: scheme.primary,
+          onPressed: _toggleNotesMode,
+        ),
+        const SizedBox(width: 8),
+        _circleButton(
+          icon: Icons.undo,
+          tooltip: 'Undo',
+          onPressed: (game?.canUndo ?? false) ? _undo : null,
+        ),
+        const SizedBox(width: 8),
+        _circleButton(
+          icon: Icons.clear,
+          tooltip: 'Erase',
+          activeColor: Colors.red,
+          active: true,
+          onPressed: _clearCell,
+        ),
+      ],
+    );
+  }
+
+  Widget _circleButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    bool active = false,
+    Color activeColor = Colors.white,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: active ? activeColor : Colors.white,
+          foregroundColor: active ? Colors.white : Colors.black87,
+          shape: const CircleBorder(),
+          padding: const EdgeInsets.all(12),
+        ),
+        child: Icon(icon),
       ),
     );
   }
@@ -1687,8 +1704,11 @@ class _GameScreenState extends State<GameScreen>
     final g = game!;
     final isSelected = selectedRow == row && selectedCol == col;
 
+    final value = g.grid[row][col];
+    final conflict = g.hasConflict(row, col);
+
     Widget cell = DragTarget<int>(
-      onAcceptWithDetails: (details) => _placeNumber(row, col, details.data),
+      onAcceptWithDetails: (details) => _placeValue(row, col, details.data),
       onWillAcceptWithDetails: (_) => true,
       builder: (context, candidateData, rejectedData) {
         final isHovered = candidateData.isNotEmpty;
@@ -1699,7 +1719,9 @@ class _GameScreenState extends State<GameScreen>
             decoration: BoxDecoration(
               color: isHovered
                   ? scheme.accent.withValues(alpha: 0.7)
-                  : _getCellColor(row, col, scheme),
+                  : (conflict
+                      ? const Color(0xFFFFCDD2) // red tint for conflicts
+                      : _getCellColor(row, col, scheme)),
               border: Border.all(
                 color: isSelected
                     ? scheme.primary
@@ -1710,15 +1732,20 @@ class _GameScreenState extends State<GameScreen>
               ),
             ),
             child: Center(
-              child: Text(
-                g.grid[row][col] == 0 ? '' : '${g.grid[row][col]}',
-                style: TextStyle(
-                  fontSize: isTablet ? 28 : 20,
-                  fontWeight:
-                      g.isOriginal[row][col] ? FontWeight.bold : FontWeight.w500,
-                  color: g.isOriginal[row][col] ? Colors.black : scheme.primary,
-                ),
-              ),
+              child: value != 0
+                  ? Text(
+                      '$value',
+                      style: TextStyle(
+                        fontSize: isTablet ? 28 : 20,
+                        fontWeight: g.isOriginal[row][col]
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                        color: g.isOriginal[row][col]
+                            ? Colors.black
+                            : (conflict ? Colors.red.shade800 : scheme.primary),
+                      ),
+                    )
+                  : _buildNotes(g.notes[row][col], g.gridDim),
             ),
           ),
         );
@@ -1756,6 +1783,37 @@ class _GameScreenState extends State<GameScreen>
     }
     if (regionId % 2 == 0) return scheme.cellHighlight;
     return Colors.white;
+  }
+
+  /// Renders pencil-mark candidates as a compact grid inside an empty cell.
+  Widget _buildNotes(Set<int> notes, int gridDim) {
+    if (notes.isEmpty) return const SizedBox.shrink();
+    final perRow = math.sqrt(gridDim).ceil();
+    final sorted = notes.toList()..sort();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fontSize = (constraints.maxWidth / perRow) * 0.5;
+        return Padding(
+          padding: const EdgeInsets.all(1),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            children: [
+              for (final n in sorted)
+                SizedBox(
+                  width: constraints.maxWidth / perRow,
+                  child: Text(
+                    '$n',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: fontSize.clamp(6, 12),
+                        color: Colors.grey.shade600),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildNumberPad(bool isTablet) {

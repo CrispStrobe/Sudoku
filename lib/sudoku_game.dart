@@ -148,10 +148,17 @@ class SudokuGame {
   late List<List<bool>> isOriginal;
   late List<List<int>> solution;
   late List<List<int>> regions;
+
+  /// Player pencil-marks (candidate numbers) per cell.
+  late List<List<Set<int>>> notes;
+
   late int gridDim;
   final SudokuDifficulty difficulty;
 
   final math.Random _rng;
+
+  /// Stack of reversible edits for [undo].
+  final List<_UndoEntry> _history = [];
 
   /// How long hole-digging may spend trying to preserve a unique solution.
   static const Duration _digBudget = Duration(milliseconds: 2500);
@@ -467,6 +474,8 @@ class SudokuGame {
         isOriginal[r][c] = grid[r][c] != 0;
       }
     }
+
+    notes = List.generate(gridDim, (_) => List.generate(gridDim, (_) => <int>{}));
   }
 
   int _cellsToRemove(SudokuDifficulty difficulty) {
@@ -558,12 +567,60 @@ class SudokuGame {
     return true;
   }
 
-  void setCell(int row, int col, int value) {
-    if (!isOriginal[row][col]) grid[row][col] = value;
+  void _record(int row, int col) {
+    _history.add(_UndoEntry(
+        row, col, grid[row][col], Set<int>.from(notes[row][col])));
   }
 
-  void clearCell(int row, int col) {
-    if (!isOriginal[row][col]) grid[row][col] = 0;
+  /// Place [value] (or 0 to erase). Conflicting values are allowed — the move
+  /// is recorded for [undo] and clears the cell's notes. No-ops on givens.
+  void setCell(int row, int col, int value) {
+    if (isOriginal[row][col]) return;
+    _record(row, col);
+    grid[row][col] = value;
+    notes[row][col].clear();
+  }
+
+  void clearCell(int row, int col) => setCell(row, col, 0);
+
+  /// Toggle a pencil-mark. No-op on givens or cells already holding a value.
+  void toggleNote(int row, int col, int value) {
+    if (isOriginal[row][col] || grid[row][col] != 0) return;
+    if (value < 1 || value > gridDim) return;
+    _record(row, col);
+    if (!notes[row][col].remove(value)) notes[row][col].add(value);
+  }
+
+  /// Revert the most recent edit. Returns the affected cell, or null if the
+  /// history is empty.
+  List<int>? undo() {
+    if (_history.isEmpty) return null;
+    final entry = _history.removeLast();
+    grid[entry.row][entry.col] = entry.value;
+    notes[entry.row][entry.col] = entry.notes;
+    return [entry.row, entry.col];
+  }
+
+  bool get canUndo => _history.isNotEmpty;
+
+  /// True if (row,col) holds a value that conflicts with another cell in its
+  /// row, column or region (used for live error highlighting).
+  bool hasConflict(int row, int col) {
+    final v = grid[row][col];
+    if (v == 0) return false;
+    for (var i = 0; i < gridDim; i++) {
+      if (i != col && grid[row][i] == v) return true;
+      if (i != row && grid[i][col] == v) return true;
+    }
+    final region = regions[row][col];
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if ((r != row || c != col) && regions[r][c] == region && grid[r][c] == v) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /// Board is full (no validity guarantee).
@@ -723,4 +780,13 @@ class _StepCounter {
   final int max;
   int value = 0;
   bool get exceeded => value > max;
+}
+
+/// A single reversible edit (value + notes snapshot) for the undo stack.
+class _UndoEntry {
+  _UndoEntry(this.row, this.col, this.value, this.notes);
+  final int row;
+  final int col;
+  final int value;
+  final Set<int> notes;
 }

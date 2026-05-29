@@ -352,6 +352,85 @@ void main() {
     });
   });
 
+  group('notes, undo, conflicts', () {
+    SudokuGame fresh() => SudokuGame.generate(
+        SudokuDifficulty.easy, GridSize.standard, GridShape.classic, seed: 77);
+
+    List<int> firstEmpty(SudokuGame g) {
+      for (var r = 0; r < g.gridDim; r++) {
+        for (var c = 0; c < g.gridDim; c++) {
+          if (!g.isOriginal[r][c] && g.grid[r][c] == 0) return [r, c];
+        }
+      }
+      throw StateError('no empty cell');
+    }
+
+    test('toggleNote adds then removes a candidate', () {
+      final g = fresh();
+      final cell = firstEmpty(g);
+      g.toggleNote(cell[0], cell[1], 3);
+      expect(g.notes[cell[0]][cell[1]], contains(3));
+      g.toggleNote(cell[0], cell[1], 3);
+      expect(g.notes[cell[0]][cell[1]], isNot(contains(3)));
+    });
+
+    test('placing a value clears that cell\'s notes', () {
+      final g = fresh();
+      final cell = firstEmpty(g);
+      g.toggleNote(cell[0], cell[1], 1);
+      g.toggleNote(cell[0], cell[1], 2);
+      g.setCell(cell[0], cell[1], 5);
+      expect(g.notes[cell[0]][cell[1]], isEmpty);
+      expect(g.grid[cell[0]][cell[1]], 5);
+    });
+
+    test('undo reverts the last edit (value and notes)', () {
+      final g = fresh();
+      final cell = firstEmpty(g);
+      final r = cell[0], c = cell[1];
+      expect(g.canUndo, isFalse);
+      g.toggleNote(r, c, 4);
+      g.setCell(r, c, 7); // clears the note
+      expect(g.grid[r][c], 7);
+      g.undo(); // back to noted, empty value
+      expect(g.grid[r][c], 0);
+      expect(g.notes[r][c], contains(4));
+      g.undo(); // back to no notes
+      expect(g.notes[r][c], isEmpty);
+      expect(g.canUndo, isFalse);
+    });
+
+    test('hasConflict detects duplicates and allows free (wrong) placement', () {
+      final g = fresh();
+      // Find two empty cells in the same row and place the same value in both.
+      for (var r = 0; r < 9; r++) {
+        final empties =
+            [for (var c = 0; c < 9; c++) if (g.grid[r][c] == 0) c];
+        if (empties.length >= 2) {
+          g.setCell(r, empties[0], 1);
+          g.setCell(r, empties[1], 1); // conflicting — allowed
+          expect(g.grid[r][empties[1]], 1, reason: 'free placement allowed');
+          expect(g.hasConflict(r, empties[0]), isTrue);
+          expect(g.hasConflict(r, empties[1]), isTrue);
+          return;
+        }
+      }
+    });
+
+    test('toggleNote is a no-op on givens', () {
+      final g = fresh();
+      for (var r = 0; r < 9; r++) {
+        for (var c = 0; c < 9; c++) {
+          if (g.isOriginal[r][c]) {
+            g.toggleNote(r, c, 5);
+            expect(g.notes[r][c], isEmpty);
+            return;
+          }
+        }
+      }
+    });
+  });
+
   group('async create (isolate)', () {
     test('returns a valid, uniquely solvable puzzle', () async {
       final game = await SudokuGame.create(

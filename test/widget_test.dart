@@ -88,7 +88,7 @@ void main() {
 
     // The number pad for a 4×4 grid exposes buttons 1..4.
     expect(find.widgetWithText(ElevatedButton, '1'), findsWidgets);
-    expect(find.text('Smart Hint'), findsOneWidget);
+    expect(find.text('Hint'), findsOneWidget);
 
     // Tap the first empty cell, then a candidate number for it.
     int er = -1, ec = -1;
@@ -117,6 +117,11 @@ void main() {
 
     expect(g.grid[er][ec], answer,
         reason: 'placing the solution value should stick');
+
+    // Undo via the toolbar button should clear the cell again.
+    await tester.tap(find.byTooltip('Undo'));
+    await tester.pump();
+    expect(g.grid[er][ec], 0, reason: 'undo should revert the placement');
 
     // Dispose to cancel timers/animations cleanly.
     await tester.pumpWidget(const SizedBox());
