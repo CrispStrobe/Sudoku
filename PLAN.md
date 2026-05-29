@@ -158,11 +158,33 @@ Follow-up work after the initial audit shipped and deployed.
 - [x] **E6 — Pruned dead dependencies.** Removed `path_provider` (unused after E1)
   and `audioplayers` (sound was never wired up).
 
+### "Generation takes forever on web" — root-caused and fixed
+
+Two distinct problems behind the report:
+
+- [x] **E7 — Web generation hung.** E2's `Isolate.spawn` does not exist on Flutter
+  web, so `create()` never returned and the loading spinner stuck forever.
+  → On web, generate inline on the main thread (`kIsWeb` branch in `main.dart`);
+  the killable isolate is kept for native platforms.
+- [x] **E8 — O(n⁵) solver (the real culprit).** The safety check rescanned the whole
+  grid for every candidate at every backtracking step, so an irregular jigsaw layout
+  that needed deep backtracking ground for minutes. Measured **10×10 jigsaw:
+  166,567 ms**. → Rewrote the solver and uniqueness counter to use incremental
+  row/column/region **bitmasks** (O(1) safety). Now **10×10 jigsaw: ~430 ms** (~380×),
+  and 12×12 completes in a few seconds instead of effectively never. Generation
+  timeout widened so 12×12 fits on native.
+- [x] **E9 — Bundled puzzle database.** `assets/puzzles.json` ships pre-solved
+  blueprints (generated offline by `tool/generate_puzzles.dart`), loaded at startup
+  so the first play and the web build are instant — no on-device solving required.
+  Bundled puzzles are read-only; player-generated ones still persist via E1.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **40 passing** (engine, persistence, isolate, notes/undo/
-  conflict, and widget/live tests).
+- `flutter test` → **41 passing** (engine, persistence + bundled-DB, isolate,
+  notes/undo/conflict, and widget/live tests).
+- Generation: all sizes sub-second except 12×12 (a few seconds); first play served
+  instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app
 
 ## Known limitations / not planned
@@ -170,5 +192,7 @@ Follow-up work after the initial audit shipped and deployed.
 - Streak never resets (the game auto-advances; there is no "lose" path).
 - Notes-mode toggle and the completion dialog are covered at the engine level and
   via the live undo test, but not asserted individually in widget tests.
+- 12×12 generation is a few seconds; the bundled DB hides this on first play, and a
+  fresh dig still runs (≤2.5 s) when a cached solution is reused.
 - `--wasm` is validated and available but the live deploy uses the JS/canvaskit
   build for broadest compatibility.

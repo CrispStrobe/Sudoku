@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sudoku_game.dart';
@@ -1312,7 +1313,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Future<SudokuGame> _generatePuzzleWithRetries() async {
-    const totalBudget = Duration(seconds: 10);
+    // The web has no Isolate.spawn, so generate inline on the main thread
+    // (bounded by the engine's internal budgets). A microtask yield lets the
+    // loading indicator paint first.
+    if (kIsWeb) {
+      await Future<void>.delayed(Duration.zero);
+      return SudokuGame.generate(
+        widget.difficulty,
+        widget.gridSize,
+        widget.gridShape,
+      );
+    }
+
+    const totalBudget = Duration(seconds: 24);
     const maxAttempts = 3;
     final stopwatch = Stopwatch()..start();
     Object? lastError;
@@ -1326,7 +1339,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           widget.difficulty,
           widget.gridSize,
           widget.gridShape,
-          timeout: const Duration(seconds: 4),
+          timeout: const Duration(seconds: 12),
         );
       } catch (e) {
         lastError = e;
@@ -1373,11 +1386,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     } catch (e, st) {
       DebugLogger.error('Generation failed; falling back to classic.', e, st);
       try {
-        game = await SudokuGame.create(
-          widget.difficulty,
-          widget.gridSize,
-          GridShape.classic,
-        );
+        game = kIsWeb
+            ? SudokuGame.generate(
+                widget.difficulty,
+                widget.gridSize,
+                GridShape.classic,
+              )
+            : await SudokuGame.create(
+                widget.difficulty,
+                widget.gridSize,
+                GridShape.classic,
+              );
         _startGameTimer();
         score = _calculateInitialScore();
         if (mounted) setState(() {});
@@ -2208,24 +2227,47 @@ class PuzzleCache {
   /// (and avoids unbounded growth) while keeping plenty of variety.
   static const int _maxPerKey = 25;
 
+  /// Bundled, read-only database (shipped as an asset) — never persisted back.
+  final Map<String, List<PuzzleBlueprint>> _bundled = {};
+
+  /// Player-generated blueprints, persisted to [SharedPreferences].
   final Map<String, List<PuzzleBlueprint>> _cache = {};
   final StorageService _storage = StorageService();
   final math.Random _random = math.Random();
 
   Future<void> initialize() async {
-    final blueprints = await _storage.loadBlueprints();
-    for (final bp in blueprints) {
+    // 1. The bundled, pre-generated database (always present, so the first play
+    //    — and the web build — is instant, with no solving required).
+    await _loadBundled();
+    // 2. Anything the player generated and persisted locally.
+    for (final bp in await _storage.loadBlueprints()) {
       _cache.putIfAbsent(_key(bp.gridSize, bp.gridShape), () => []).add(bp);
     }
-    DebugLogger.log('Puzzle cache initialized: ${_cache.length} types.');
+    DebugLogger.log(
+      'Puzzle cache: ${_bundled.length} bundled + ${_cache.length} local types.',
+    );
+  }
+
+  Future<void> _loadBundled() async {
+    try {
+      final data = await rootBundle.loadString('assets/puzzles.json');
+      final List<dynamic> list = jsonDecode(data);
+      for (final json in list) {
+        final bp = PuzzleBlueprint.fromJson(json as Map<String, dynamic>);
+        _bundled.putIfAbsent(_key(bp.gridSize, bp.gridShape), () => []).add(bp);
+      }
+    } catch (e) {
+      DebugLogger.error('No bundled puzzle database.', e);
+    }
   }
 
   String _key(GridSize size, GridShape shape) => '${size.name}-${shape.name}';
 
   PuzzleBlueprint? getRandom(GridSize size, GridShape shape) {
-    final list = _cache[_key(size, shape)];
-    if (list == null || list.isEmpty) return null;
-    return list[_random.nextInt(list.length)];
+    final key = _key(size, shape);
+    final pool = [...?_bundled[key], ...?_cache[key]];
+    if (pool.isEmpty) return null;
+    return pool[_random.nextInt(pool.length)];
   }
 
   Future<void> set(PuzzleBlueprint blueprint) async {
@@ -2237,6 +2279,7 @@ class PuzzleCache {
     if (list.length > _maxPerKey) {
       list.removeRange(0, list.length - _maxPerKey); // drop oldest
     }
+    // Persist only player-generated blueprints (the bundled DB ships with app).
     await _storage.saveBlueprints(_cache.values.expand((l) => l).toList());
   }
 }

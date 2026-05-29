@@ -18,11 +18,25 @@ achievements, persisted stats, and a celebratory particle layer.
 
 ### How generation works
 
-A complete grid is solved with MRV backtracking, then cells are removed one at a
-time — each removal is kept **only if the puzzle still has exactly one solution**
-(bounded by a time budget so large boards never hang). Solved blueprints are cached
-to disk so subsequent plays of the same size/shape start instantly; each play digs
-a fresh set of holes from the cached solution.
+A complete grid is solved with MRV backtracking over **incremental row/column/
+region bitmasks** (O(1) safety checks — this keeps even irregular 10×10/12×12
+jigsaw layouts sub-second). Cells are then removed one at a time, each kept **only
+if the puzzle still has exactly one solution** (bounded by a time budget). On
+native platforms generation runs in a **killable background isolate**; the web has
+no `Isolate.spawn`, so it generates inline (fast enough for all sizes).
+
+### Pre-built puzzle database
+
+`assets/puzzles.json` ships a set of pre-solved blueprints (generated offline) that
+load at startup, so the first play — and the web build — is instant with no on-device
+solving. Regenerate it with:
+
+```bash
+dart run tool/generate_puzzles.dart [perKey]   # default 12
+```
+
+Player-generated solutions are additionally cached in `shared_preferences`
+(cross-platform, incl. web).
 
 ## Running
 

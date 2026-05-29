@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'sudoku_game.g.dart';
@@ -65,15 +64,19 @@ List<int> boxDimensionsFor(int gridDim) {
 
 class DebugLogger {
   static void log(String message) {
-    if (kDebugMode) debugPrint('[SUDOKU] $message');
+    assert(() {
+      // ignore: avoid_print
+      print('[SUDOKU] $message');
+      return true;
+    }());
   }
 
   static void error(String message, [Object? error, StackTrace? stackTrace]) {
-    if (kDebugMode) {
-      debugPrint('[SUDOKU ERROR] $message');
-      if (error != null) debugPrint('  $error');
-      if (stackTrace != null) debugPrint('  $stackTrace');
-    }
+    assert(() {
+      // ignore: avoid_print
+      print('[SUDOKU ERROR] $message${error != null ? ' — $error' : ''}');
+      return true;
+    }());
   }
 }
 
@@ -185,6 +188,10 @@ class SudokuGame {
   /// timeout. Unlike `compute`, the worker isolate is **killed** on timeout or
   /// error, so a pathological shape can neither freeze the UI nor leak a
   /// runaway isolate.
+  ///
+  /// The web (dart2js/dart2wasm) has no `Isolate.spawn`, so there we generate
+  /// inline on the main thread — generation is bounded by the engine's internal
+  /// step/time budgets, and results are cached so repeat plays stay fast.
   static Future<SudokuGame> create(
     SudokuDifficulty difficulty,
     GridSize gridSize,
@@ -426,68 +433,85 @@ class SudokuGame {
     return visited.length == cells.length;
   }
 
-  // --- Complete-grid solver (MRV backtracking) ---------------------------
+  // --- Complete-grid solver (MRV + incremental bitmasks) -----------------
+  //
+  // Row/column/region "used-value" bitmasks make the safety test O(1), so a
+  // backtracking step costs O(n²) (the MRV scan) instead of O(n⁵). This is the
+  // difference between sub-second and multi-minute generation for irregular
+  // jigsaw layouts that require deep backtracking.
 
-  bool _fillComplete() {
-    // Limit total backtracking steps so a bad jigsaw shape fails fast (and the
-    // caller retries with fresh regions) instead of exploring forever.
-    final maxSteps = gridDim <= 9 ? 200000 : 400000;
-    return _fill(_StepCounter(maxSteps));
+  int get _fullMask => ((1 << gridDim) - 1) << 1; // bits 1..gridDim
+
+  static int _popcount(int x) {
+    var n = 0;
+    while (x != 0) {
+      x &= x - 1;
+      n++;
+    }
+    return n;
   }
 
-  bool _fill(_StepCounter steps) {
+  bool _fillComplete() {
+    // A bad jigsaw shape can still need pathological backtracking; cap the steps
+    // so we bail fast and retry with a fresh shape rather than grind for minutes.
+    final maxSteps = gridDim <= 9 ? 100000 : 50000;
+    final rowMask = List<int>.filled(gridDim, 0);
+    final colMask = List<int>.filled(gridDim, 0);
+    final regMask = List<int>.filled(gridDim, 0);
+    return _solveFill(rowMask, colMask, regMask, _StepCounter(maxSteps));
+  }
+
+  bool _solveFill(
+    List<int> rowMask,
+    List<int> colMask,
+    List<int> regMask,
+    _StepCounter steps,
+  ) {
     if (steps.exceeded) return false;
     steps.value++;
 
-    final cell = _mostConstrainedEmptyCell(grid);
-    if (cell == null) return true; // full
-
-    final row = cell[0];
-    final col = cell[1];
-    final numbers = List.generate(gridDim, (i) => i + 1)..shuffle(_rng);
-    for (final num in numbers) {
-      if (_isSafe(grid, row, col, num)) {
-        grid[row][col] = num;
-        if (_fill(steps)) return true;
-        grid[row][col] = 0;
+    // Pick the empty cell with the fewest candidates (MRV).
+    var br = -1, bc = -1, bestCount = gridDim + 2, bestAllowed = 0;
+    final full = _fullMask;
+    outer:
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (grid[r][c] != 0) continue;
+        final allowed =
+            full & ~(rowMask[r] | colMask[c] | regMask[regions[r][c]]);
+        if (allowed == 0) return false; // dead end
+        final count = _popcount(allowed);
+        if (count < bestCount) {
+          bestCount = count;
+          br = r;
+          bc = c;
+          bestAllowed = allowed;
+          if (count == 1) break outer;
+        }
       }
+    }
+    if (br == -1) return true; // grid full → solved
+
+    final candidates = <int>[];
+    for (var v = 1; v <= gridDim; v++) {
+      if ((bestAllowed & (1 << v)) != 0) candidates.add(v);
+    }
+    candidates.shuffle(_rng);
+
+    final reg = regions[br][bc];
+    for (final v in candidates) {
+      final bit = 1 << v;
+      grid[br][bc] = v;
+      rowMask[br] |= bit;
+      colMask[bc] |= bit;
+      regMask[reg] |= bit;
+      if (_solveFill(rowMask, colMask, regMask, steps)) return true;
+      grid[br][bc] = 0;
+      rowMask[br] &= ~bit;
+      colMask[bc] &= ~bit;
+      regMask[reg] &= ~bit;
     }
     return false;
-  }
-
-  List<int>? _mostConstrainedEmptyCell(List<List<int>> g) {
-    var best = gridDim + 1;
-    List<int>? bestCell;
-    for (var r = 0; r < gridDim; r++) {
-      for (var c = 0; c < gridDim; c++) {
-        if (g[r][c] != 0) continue;
-        var options = 0;
-        for (var num = 1; num <= gridDim; num++) {
-          if (_isSafe(g, r, c, num)) options++;
-        }
-        if (options == 0) return [r, c]; // dead end — fail fast
-        if (options < best) {
-          best = options;
-          bestCell = [r, c];
-        }
-      }
-    }
-    return bestCell;
-  }
-
-  /// True if [num] can legally occupy (row,col) in grid [g] given current fills.
-  bool _isSafe(List<List<int>> g, int row, int col, int num) {
-    for (var i = 0; i < gridDim; i++) {
-      if (g[row][i] == num) return false;
-      if (g[i][col] == num) return false;
-    }
-    final region = regions[row][col];
-    for (var r = 0; r < gridDim; r++) {
-      for (var c = 0; c < gridDim; c++) {
-        if (regions[r][c] == region && g[r][c] == num) return false;
-      }
-    }
-    return true;
   }
 
   // --- Hole digging that preserves a unique solution ---------------------
@@ -561,23 +585,67 @@ class SudokuGame {
   }
 
   /// True iff the current [grid] (with holes) has exactly one completion.
+  /// Solves in place using bitmasks and fully restores the grid afterwards.
   bool _hasUniqueSolution() {
-    final work = grid.map((row) => List<int>.from(row)).toList();
-    return _countSolutions(work, 0, 2) == 1;
+    final rowMask = List<int>.filled(gridDim, 0);
+    final colMask = List<int>.filled(gridDim, 0);
+    final regMask = List<int>.filled(gridDim, 0);
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        final v = grid[r][c];
+        if (v != 0) {
+          final bit = 1 << v;
+          rowMask[r] |= bit;
+          colMask[c] |= bit;
+          regMask[regions[r][c]] |= bit;
+        }
+      }
+    }
+    return _countSolutions(rowMask, colMask, regMask, 0, 2) == 1;
   }
 
-  int _countSolutions(List<List<int>> g, int found, int limit) {
-    final cell = _mostConstrainedEmptyCell(g);
-    if (cell == null) return found + 1; // a complete solution
-    final row = cell[0];
-    final col = cell[1];
-    for (var num = 1; num <= gridDim; num++) {
-      if (_isSafe(g, row, col, num)) {
-        g[row][col] = num;
-        found = _countSolutions(g, found, limit);
-        g[row][col] = 0;
-        if (found >= limit) return found; // early-out: not unique
+  int _countSolutions(
+    List<int> rowMask,
+    List<int> colMask,
+    List<int> regMask,
+    int found,
+    int limit,
+  ) {
+    var br = -1, bc = -1, bestCount = gridDim + 2, bestAllowed = 0;
+    final full = _fullMask;
+    outer:
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (grid[r][c] != 0) continue;
+        final allowed =
+            full & ~(rowMask[r] | colMask[c] | regMask[regions[r][c]]);
+        if (allowed == 0) return found; // dead end, no solution down here
+        final count = _popcount(allowed);
+        if (count < bestCount) {
+          bestCount = count;
+          br = r;
+          bc = c;
+          bestAllowed = allowed;
+          if (count == 1) break outer;
+        }
       }
+    }
+    if (br == -1) return found + 1; // a complete solution
+
+    final reg = regions[br][bc];
+    for (var v = 1; v <= gridDim; v++) {
+      if ((bestAllowed & (1 << v)) == 0) continue;
+      final bit = 1 << v;
+      grid[br][bc] = v;
+      rowMask[br] |= bit;
+      colMask[bc] |= bit;
+      regMask[reg] |= bit;
+      found = _countSolutions(rowMask, colMask, regMask, found, limit);
+      grid[br][bc] = 0;
+      rowMask[br] &= ~bit;
+      colMask[bc] &= ~bit;
+      regMask[reg] &= ~bit;
+      if (found >= limit) return found; // early-out: not unique
     }
     return found;
   }

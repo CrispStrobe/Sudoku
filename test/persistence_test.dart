@@ -68,4 +68,13 @@ void main() {
     // And the cache still returns a usable blueprint.
     expect(cache.getRandom(GridSize.small, GridShape.classic), isNotNull);
   });
+
+  test('PuzzleCache loads the bundled puzzle database', () async {
+    final cache = PuzzleCache();
+    await cache.initialize();
+    // The bundled DB ships every size/shape, including the slow-to-generate
+    // 12×12 jigsaw — so generation is never required on first play.
+    expect(cache.getRandom(GridSize.mega, GridShape.jigsaw), isNotNull);
+    expect(cache.getRandom(GridSize.standard, GridShape.classic), isNotNull);
+  });
 }
