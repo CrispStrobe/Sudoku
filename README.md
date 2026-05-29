@@ -46,6 +46,20 @@ flutter analyze            # static analysis (expected: no issues)
 - `test/widget_test.dart` — widget/integration tests: home navigation, difficulty
   selection, and a live play-through that places a number on a cached 4×4 board.
 
+## Deploying (Vercel)
+
+The web build is a static site. Because Vercel's build image has no Flutter, we
+build locally and deploy the prebuilt `build/web`. `./deploy.sh` does this in one
+step (build → write `vercel.json` → link the `sudoku` project → deploy):
+
+```bash
+./deploy.sh            # production deploy
+./deploy.sh --preview  # preview deploy
+```
+
+Requires `vercel login` (or a `VERCEL_TOKEN` env var). Live at
+https://sudoku-lac-five.vercel.app
+
 ## Regenerating serialization code
 
 ```bash
