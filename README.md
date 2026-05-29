@@ -10,7 +10,8 @@ themes, achievements, and a celebratory particle layer.
   enums, `PuzzleBlueprint`, `SmartHint`, and the `SudokuGame` class (generation,
   uniqueness-preserving hole digging, validation, hints). Fully unit-testable.
 - **`lib/main.dart`** — the UI: screens, theming, particle overlay, the puzzle
-  cache, and on-disk storage of solved blueprints.
+  cache, on-disk storage of solved blueprints, and persisted player stats
+  (`stats.json`: solved count, streak, best time, achievements, unlocked themes).
 - **`lib/sudoku_game.g.dart`** — generated `json_serializable` code for
   `PuzzleBlueprint`. Regenerate with build_runner (below).
 

@@ -38,10 +38,12 @@ lands: `[ ]` todo, `[x]` done.
   `.timeout(3s)`; on timeout the background isolate keeps running. The retry wrapper
   also re-applies a 3s timeout on top, so failures stack. → Simplify the retry/timeout
   story and document the limitation.
-- [ ] **C7 — Stats are not persisted (DEFERRED).** `GameStats` is entirely static;
-  solved count, streak, best time, achievements and unlocked themes reset every
-  launch. → A feature addition rather than a correctness fix; intentionally left for
-  a follow-up so it can be built and verified properly rather than rushed.
+- [x] **C7 — Stats are not persisted.** `GameStats` was entirely static; solved
+  count, streak, best time, achievements and unlocked themes reset every launch.
+  → Added `GameStats.toJson`/`applyJson` plus a `StatsService` that reads/writes
+  `stats.json`. Loaded at startup; saved on puzzle completion and theme change.
+  `applyJson` is tolerant of missing/garbage keys, always keeps 'Ocean' unlocked,
+  and never selects a locked/unknown theme. Covered by `test/game_stats_test.dart`.
 
 ## 2. Performance
 
@@ -121,15 +123,14 @@ lands: `[ ]` todo, `[x]` done.
 ## Results
 
 - `flutter analyze` → **0 issues** (was 41).
-- `flutter test` → **26 passing** (22 engine unit tests + 4 widget/live tests; was
-  0 — the suite didn't compile).
+- `flutter test` → **30 passing** (22 engine unit tests + 4 widget/live tests +
+  4 stats-persistence tests; was 0 — the suite didn't compile).
 - `flutter build web` → **succeeds**.
 - A latent UI bug surfaced and fixed while testing: the difficulty bottom sheet was
   not `isScrollControlled` and overflowed on short screens.
 - The engine now retries jigsaw region generation internally, so a single
   `generate()` call reliably produces solvable 9×9/10×10 jigsaw boards (previously
   this only worked because the UI retried via fresh isolates).
-
-**Deferred (documented, not done):** C7 (persisting stats across launches).
+- C7 (persisting stats across launches) is now implemented and tested.
 </content>
 </invoke>

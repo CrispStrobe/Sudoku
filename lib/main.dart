@@ -12,6 +12,7 @@ import 'sudoku_game.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await PuzzleCache().initialize();
+  await GameStats.load();
   runApp(const SudokuApp());
 }
 
@@ -131,6 +132,52 @@ class GameStats {
   };
 
   static EnvironmentalTheme get current => themes[currentTheme]!;
+
+  // --- Persistence ---------------------------------------------------------
+
+  static final StatsService _store = StatsService();
+
+  static Map<String, dynamic> toJson() => {
+        'totalPuzzlesSolved': totalPuzzlesSolved,
+        'totalHintsUsed': totalHintsUsed,
+        'bestTimeMs': bestTime.inMilliseconds,
+        'currentStreak': currentStreak,
+        'unlockedAchievements': unlockedAchievements.toList(),
+        'unlockedThemes': unlockedThemes.toList(),
+        'currentTheme': currentTheme,
+      };
+
+  /// Overlays persisted values onto the static fields. Tolerant of missing or
+  /// malformed keys, and always keeps 'Ocean' unlocked (all themes in debug).
+  static void applyJson(Map<String, dynamic> json) {
+    totalPuzzlesSolved = (json['totalPuzzlesSolved'] as num?)?.toInt() ??
+        totalPuzzlesSolved;
+    totalHintsUsed =
+        (json['totalHintsUsed'] as num?)?.toInt() ?? totalHintsUsed;
+    final bestMs = (json['bestTimeMs'] as num?)?.toInt();
+    if (bestMs != null) bestTime = Duration(milliseconds: bestMs);
+    currentStreak = (json['currentStreak'] as num?)?.toInt() ?? currentStreak;
+
+    final achievements = (json['unlockedAchievements'] as List?)?.cast<String>();
+    if (achievements != null) unlockedAchievements = achievements.toSet();
+
+    final themesList = (json['unlockedThemes'] as List?)?.cast<String>();
+    if (themesList != null) {
+      unlockedThemes = themesList.where(themes.containsKey).toSet();
+    }
+    unlockedThemes.add('Ocean');
+    if (debugMode) unlockedThemes.addAll(themes.keys);
+
+    final theme = json['currentTheme'] as String?;
+    if (theme != null && unlockedThemes.contains(theme)) currentTheme = theme;
+  }
+
+  static Future<void> load() async {
+    final json = await _store.load();
+    if (json != null) applyJson(json);
+  }
+
+  static Future<void> save() => _store.save(toJson());
 }
 
 class Achievement {
@@ -868,6 +915,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             setState(() {
                               GameStats.currentTheme = theme.name;
                             });
+                            GameStats.save();
                             Navigator.pop(context);
                           }
                         : null,
@@ -1362,6 +1410,7 @@ class _GameScreenState extends State<GameScreen>
       GameStats.unlockedAchievements.add('no_hints_hard');
     }
     AchievementSystem.checkAchievements();
+    GameStats.save(); // persist solved count, streak, best time, unlocks
 
     _particleKey.currentState?.burst();
     _showFloatingScore(finalScore, completionTime);
@@ -1947,6 +1996,40 @@ class StorageService {
     final existing = await loadBlueprints();
     existing.add(blueprint);
     await _saveBlueprints(existing);
+  }
+}
+
+/// Persists [GameStats] to a small JSON file in the app documents directory.
+class StatsService {
+  static final StatsService _instance = StatsService._internal();
+  factory StatsService() => _instance;
+  StatsService._internal();
+
+  Future<File> get _localFile async {
+    final directory = await getApplicationDocumentsDirectory();
+    return File('${directory.path}/stats.json');
+  }
+
+  Future<Map<String, dynamic>?> load() async {
+    try {
+      final file = await _localFile;
+      if (!await file.exists()) return null;
+      final contents = await file.readAsString();
+      if (contents.isEmpty) return null;
+      return jsonDecode(contents) as Map<String, dynamic>;
+    } catch (e) {
+      DebugLogger.error('Failed to load stats.', e);
+      return null;
+    }
+  }
+
+  Future<void> save(Map<String, dynamic> json) async {
+    try {
+      final file = await _localFile;
+      await file.writeAsString(jsonEncode(json));
+    } catch (e) {
+      DebugLogger.error('Failed to save stats.', e);
+    }
   }
 }
 
