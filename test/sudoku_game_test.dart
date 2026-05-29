@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sudoku/sudoku_game.dart';
 
@@ -347,6 +349,26 @@ void main() {
       expect(game.gridDim, 9);
       expect(isValidFullSolution(game.solution, game.regions, 9), isTrue);
       expect(countSolutions(game.grid, game.regions, 9), 1);
+    });
+  });
+
+  group('async create (isolate)', () {
+    test('returns a valid, uniquely solvable puzzle', () async {
+      final game = await SudokuGame.create(
+          SudokuDifficulty.easy, GridSize.standard, GridShape.classic,
+          timeout: const Duration(seconds: 15));
+      expect(game.gridDim, 9);
+      expect(isValidFullSolution(game.solution, game.regions, 9), isTrue);
+      expect(countSolutions(game.grid, game.regions, 9), 1);
+    });
+
+    test('throws TimeoutException when the budget is too small', () async {
+      await expectLater(
+        SudokuGame.create(
+            SudokuDifficulty.expert, GridSize.mega, GridShape.jigsaw,
+            timeout: const Duration(milliseconds: 1)),
+        throwsA(isA<TimeoutException>()),
+      );
     });
   });
 }

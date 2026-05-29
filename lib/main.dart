@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sudoku_game.dart';
 
@@ -1928,6 +1927,10 @@ class PuzzleCache {
   factory PuzzleCache() => _instance;
   PuzzleCache._internal();
 
+  /// Cap on cached blueprints per size/shape key — bounds the persisted payload
+  /// (and avoids unbounded growth) while keeping plenty of variety.
+  static const int _maxPerKey = 25;
+
   final Map<String, List<PuzzleBlueprint>> _cache = {};
   final StorageService _storage = StorageService();
   final math.Random _random = math.Random();
@@ -1949,29 +1952,30 @@ class PuzzleCache {
   }
 
   Future<void> set(PuzzleBlueprint blueprint) async {
-    _cache
-        .putIfAbsent(_key(blueprint.gridSize, blueprint.gridShape), () => [])
-        .add(blueprint);
-    await _storage.appendBlueprint(blueprint);
+    final list = _cache.putIfAbsent(
+        _key(blueprint.gridSize, blueprint.gridShape), () => []);
+    list.add(blueprint);
+    if (list.length > _maxPerKey) {
+      list.removeRange(0, list.length - _maxPerKey); // drop oldest
+    }
+    await _storage.saveBlueprints(_cache.values.expand((l) => l).toList());
   }
 }
 
+/// Stores the puzzle-blueprint cache in [SharedPreferences] (works on web,
+/// mobile and desktop alike).
 class StorageService {
   static final StorageService _instance = StorageService._internal();
   factory StorageService() => _instance;
   StorageService._internal();
 
-  Future<File> get _localFile async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/puzzles.json');
-  }
+  static const String _key = 'puzzle_blueprints';
 
   Future<List<PuzzleBlueprint>> loadBlueprints() async {
     try {
-      final file = await _localFile;
-      if (!await file.exists()) return [];
-      final contents = await file.readAsString();
-      if (contents.isEmpty) return [];
+      final prefs = await SharedPreferences.getInstance();
+      final contents = prefs.getString(_key);
+      if (contents == null || contents.isEmpty) return [];
       final List<dynamic> jsonList = jsonDecode(contents);
       return jsonList
           .map((json) => PuzzleBlueprint.fromJson(json as Map<String, dynamic>))
@@ -1982,40 +1986,30 @@ class StorageService {
     }
   }
 
-  Future<void> _saveBlueprints(List<PuzzleBlueprint> blueprints) async {
+  Future<void> saveBlueprints(List<PuzzleBlueprint> blueprints) async {
     try {
-      final file = await _localFile;
-      await file
-          .writeAsString(jsonEncode(blueprints.map((bp) => bp.toJson()).toList()));
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _key, jsonEncode(blueprints.map((bp) => bp.toJson()).toList()));
     } catch (e) {
       DebugLogger.error('Failed to save blueprints.', e);
     }
   }
-
-  Future<void> appendBlueprint(PuzzleBlueprint blueprint) async {
-    final existing = await loadBlueprints();
-    existing.add(blueprint);
-    await _saveBlueprints(existing);
-  }
 }
 
-/// Persists [GameStats] to a small JSON file in the app documents directory.
+/// Persists [GameStats] in [SharedPreferences].
 class StatsService {
   static final StatsService _instance = StatsService._internal();
   factory StatsService() => _instance;
   StatsService._internal();
 
-  Future<File> get _localFile async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/stats.json');
-  }
+  static const String _key = 'game_stats';
 
   Future<Map<String, dynamic>?> load() async {
     try {
-      final file = await _localFile;
-      if (!await file.exists()) return null;
-      final contents = await file.readAsString();
-      if (contents.isEmpty) return null;
+      final prefs = await SharedPreferences.getInstance();
+      final contents = prefs.getString(_key);
+      if (contents == null || contents.isEmpty) return null;
       return jsonDecode(contents) as Map<String, dynamic>;
     } catch (e) {
       DebugLogger.error('Failed to load stats.', e);
@@ -2025,8 +2019,8 @@ class StatsService {
 
   Future<void> save(Map<String, dynamic> json) async {
     try {
-      final file = await _localFile;
-      await file.writeAsString(jsonEncode(json));
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, jsonEncode(json));
     } catch (e) {
       DebugLogger.error('Failed to save stats.', e);
     }

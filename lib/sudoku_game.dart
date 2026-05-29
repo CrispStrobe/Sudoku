@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -124,15 +125,18 @@ class SmartHint {
 }
 
 // ---------------------------------------------------------------------------
-// Background generation (runs in an isolate via `compute`)
+// Background generation (runs in a dedicated, killable isolate)
 // ---------------------------------------------------------------------------
 
-SudokuGame _generateSudokuInBackground(Map<String, dynamic> params) {
-  return SudokuGame.generate(
-    params['difficulty'] as SudokuDifficulty,
-    params['gridSize'] as GridSize,
-    params['gridShape'] as GridShape,
+/// Isolate entry point. `args` is `[SendPort, difficulty, gridSize, gridShape]`.
+void _generateIsolateEntry(List<dynamic> args) {
+  final sendPort = args[0] as SendPort;
+  final game = SudokuGame.generate(
+    args[1] as SudokuDifficulty,
+    args[2] as GridSize,
+    args[3] as GridShape,
   );
+  sendPort.send(game);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,22 +171,61 @@ class SudokuGame {
     return game;
   }
 
-  /// Asynchronous generation in a background isolate, with a hard timeout so a
-  /// pathological shape can never freeze the UI.
-  ///
-  /// Note: on timeout the background isolate is abandoned (Flutter's [compute]
-  /// offers no cancellation); callers should retry sparingly.
+  /// Asynchronous generation in a dedicated background isolate with a hard
+  /// timeout. Unlike `compute`, the worker isolate is **killed** on timeout or
+  /// error, so a pathological shape can neither freeze the UI nor leak a
+  /// runaway isolate.
   static Future<SudokuGame> create(
     SudokuDifficulty difficulty,
     GridSize gridSize,
     GridShape gridShape, {
     Duration timeout = const Duration(seconds: 5),
-  }) {
-    return compute(_generateSudokuInBackground, {
-      'difficulty': difficulty,
-      'gridSize': gridSize,
-      'gridShape': gridShape,
-    }).timeout(timeout);
+  }) async {
+    final resultPort = ReceivePort();
+    final errorPort = ReceivePort();
+    final completer = Completer<SudokuGame>();
+    Timer? timer;
+    Isolate? isolate;
+
+    void cleanup() {
+      timer?.cancel();
+      resultPort.close();
+      errorPort.close();
+      isolate?.kill(priority: Isolate.immediate);
+    }
+
+    resultPort.listen((message) {
+      if (!completer.isCompleted) completer.complete(message as SudokuGame);
+      cleanup();
+    });
+    errorPort.listen((dynamic error) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('Generation failed: $error'));
+      }
+      cleanup();
+    });
+
+    try {
+      isolate = await Isolate.spawn(
+        _generateIsolateEntry,
+        [resultPort.sendPort, difficulty, gridSize, gridShape],
+        onError: errorPort.sendPort,
+        errorsAreFatal: true,
+      );
+    } catch (e) {
+      cleanup();
+      rethrow;
+    }
+
+    timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(TimeoutException(
+            'Puzzle generation exceeded ${timeout.inSeconds}s.'));
+        cleanup(); // kills the isolate — true cancellation
+      }
+    });
+
+    return completer.future;
   }
 
   /// Build a playable puzzle from a cached, fully-solved blueprint by digging a
