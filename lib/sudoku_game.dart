@@ -1,0 +1,683 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:json_annotation/json_annotation.dart';
+
+part 'sudoku_game.g.dart';
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum GridSize { small, medium, large, standard, big, mega }
+
+enum SudokuDifficulty { easy, medium, hard, expert }
+
+enum GridShape { classic, jigsaw }
+
+enum GameMode { classic }
+
+enum HintType { showPossible, giveAnswer, nakedSingle, hiddenSingle, conflict }
+
+/// Side length (NxN) for a given [GridSize].
+int gridDimensionFor(GridSize size) {
+  switch (size) {
+    case GridSize.small:
+      return 4;
+    case GridSize.medium:
+      return 6;
+    case GridSize.large:
+      return 8;
+    case GridSize.standard:
+      return 9;
+    case GridSize.big:
+      return 10;
+    case GridSize.mega:
+      return 12;
+  }
+}
+
+/// Region shape `[rows, cols]` used for the *classic* box layout of a grid.
+List<int> boxDimensionsFor(int gridDim) {
+  switch (gridDim) {
+    case 4:
+      return [2, 2];
+    case 6:
+      return [2, 3];
+    case 8:
+      return [2, 4];
+    case 9:
+      return [3, 3];
+    case 10:
+      return [2, 5];
+    case 12:
+      return [3, 4];
+    default:
+      return [2, 2];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Logging (debug builds only)
+// ---------------------------------------------------------------------------
+
+class DebugLogger {
+  static void log(String message) {
+    if (kDebugMode) debugPrint('[SUDOKU] $message');
+  }
+
+  static void error(String message, [Object? error, StackTrace? stackTrace]) {
+    if (kDebugMode) {
+      debugPrint('[SUDOKU ERROR] $message');
+      if (error != null) debugPrint('  $error');
+      if (stackTrace != null) debugPrint('  $stackTrace');
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Serializable puzzle blueprint
+// ---------------------------------------------------------------------------
+
+@JsonSerializable()
+class PuzzleBlueprint {
+  final List<List<int>> solutionGrid;
+  final List<List<int>> regions;
+  final GridSize gridSize;
+  final GridShape gridShape;
+
+  PuzzleBlueprint({
+    required this.solutionGrid,
+    required this.regions,
+    required this.gridSize,
+    required this.gridShape,
+  });
+
+  factory PuzzleBlueprint.fromJson(Map<String, dynamic> json) =>
+      _$PuzzleBlueprintFromJson(json);
+
+  Map<String, dynamic> toJson() => _$PuzzleBlueprintToJson(this);
+}
+
+// ---------------------------------------------------------------------------
+// Smart hint
+// ---------------------------------------------------------------------------
+
+class SmartHint {
+  final HintType type;
+  final String title;
+  final String description;
+  final int penalty;
+
+  /// Solution payload: an `int` for single-answer hints, a `List<int>` for
+  /// "show possible numbers", or `null` for informational hints.
+  final Object? data;
+
+  SmartHint({
+    required this.type,
+    required this.title,
+    required this.description,
+    required this.penalty,
+    this.data,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Background generation (runs in an isolate via `compute`)
+// ---------------------------------------------------------------------------
+
+SudokuGame _generateSudokuInBackground(Map<String, dynamic> params) {
+  return SudokuGame.generate(
+    params['difficulty'] as SudokuDifficulty,
+    params['gridSize'] as GridSize,
+    params['gridShape'] as GridShape,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The Sudoku engine — pure Dart, no Flutter widget dependencies.
+// ---------------------------------------------------------------------------
+
+class SudokuGame {
+  late List<List<int>> grid;
+  late List<List<bool>> isOriginal;
+  late List<List<int>> solution;
+  late List<List<int>> regions;
+  late int gridDim;
+  final SudokuDifficulty difficulty;
+
+  final math.Random _rng;
+
+  /// How long hole-digging may spend trying to preserve a unique solution.
+  static const Duration _digBudget = Duration(milliseconds: 2500);
+
+  SudokuGame._(this.difficulty, {math.Random? rng})
+      : _rng = rng ?? math.Random();
+
+  /// Synchronous generation. Pass [seed] for deterministic output (tests).
+  factory SudokuGame.generate(
+    SudokuDifficulty difficulty,
+    GridSize gridSize,
+    GridShape gridShape, {
+    int? seed,
+  }) {
+    final game = SudokuGame._(difficulty, rng: seed == null ? null : math.Random(seed));
+    game._build(gridSize, gridShape);
+    return game;
+  }
+
+  /// Asynchronous generation in a background isolate, with a hard timeout so a
+  /// pathological shape can never freeze the UI.
+  ///
+  /// Note: on timeout the background isolate is abandoned (Flutter's [compute]
+  /// offers no cancellation); callers should retry sparingly.
+  static Future<SudokuGame> create(
+    SudokuDifficulty difficulty,
+    GridSize gridSize,
+    GridShape gridShape, {
+    Duration timeout = const Duration(seconds: 5),
+  }) {
+    return compute(_generateSudokuInBackground, {
+      'difficulty': difficulty,
+      'gridSize': gridSize,
+      'gridShape': gridShape,
+    }).timeout(timeout);
+  }
+
+  /// Build a playable puzzle from a cached, fully-solved blueprint by digging a
+  /// fresh set of holes (so a cached solution feels new each play).
+  factory SudokuGame.fromBlueprint(
+    PuzzleBlueprint blueprint,
+    SudokuDifficulty difficulty, {
+    math.Random? rng,
+  }) {
+    final game = SudokuGame._(difficulty, rng: rng);
+    game.gridDim = gridDimensionFor(blueprint.gridSize);
+    game.solution =
+        blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
+    game.grid = blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
+    game.regions = blueprint.regions.map((row) => List<int>.from(row)).toList();
+    game.isOriginal =
+        List.generate(game.gridDim, (_) => List.filled(game.gridDim, false));
+    game._puzzlify();
+    return game;
+  }
+
+  // --- Construction ------------------------------------------------------
+
+  void _build(GridSize gridSize, GridShape gridShape) {
+    gridDim = gridDimensionFor(gridSize);
+    grid = List.generate(gridDim, (_) => List.filled(gridDim, 0));
+    solution = List.generate(gridDim, (_) => List.filled(gridDim, 0));
+    isOriginal = List.generate(gridDim, (_) => List.filled(gridDim, false));
+    regions = List.generate(gridDim, (_) => List.filled(gridDim, 0));
+
+    // A single set of jigsaw regions can be unsolvable, so retry with fresh
+    // region shapes a few times before giving up. Classic boxes always solve,
+    // so one attempt suffices there.
+    final maxAttempts = gridShape == GridShape.jigsaw ? 25 : 3;
+    var solved = false;
+    for (var attempt = 0; attempt < maxAttempts && !solved; attempt++) {
+      _buildRegions(gridShape);
+      for (var r = 0; r < gridDim; r++) {
+        for (var c = 0; c < gridDim; c++) {
+          grid[r][c] = 0;
+        }
+      }
+      solved = _fillComplete();
+    }
+    if (!solved) {
+      throw StateError('Failed to generate a complete $gridDim×$gridDim grid.');
+    }
+
+    _puzzlify();
+  }
+
+  // --- Region layout -----------------------------------------------------
+
+  void _buildRegions(GridShape shape) {
+    _buildBoxRegions();
+    if (shape == GridShape.jigsaw) {
+      // Mutate the box layout into irregular-but-connected regions via
+      // boundary swaps. Large grids get fewer swaps so the solver stays fast.
+      final swapBudget = gridDim >= 10 ? (gridDim == 12 ? 4 : gridDim) : 1 << 30;
+      var swaps = 0;
+      for (var a = 0; a < gridDim && swaps < swapBudget; a++) {
+        for (var b = a + 1; b < gridDim && swaps < swapBudget; b++) {
+          swaps += _swapBoundary(a, b, gridDim >= 10 ? 1 : 3);
+        }
+      }
+      DebugLogger.log('Jigsaw regions built with $swaps swaps.');
+    }
+  }
+
+  void _buildBoxRegions() {
+    final box = boxDimensionsFor(gridDim);
+    final rowsPerBox = box[0];
+    final colsPerBox = box[1];
+    final boxesPerRow = gridDim ~/ colsPerBox;
+    for (var row = 0; row < gridDim; row++) {
+      for (var col = 0; col < gridDim; col++) {
+        regions[row][col] = (row ~/ rowsPerBox) * boxesPerRow + (col ~/ colsPerBox);
+      }
+    }
+  }
+
+  /// Swap up to [maxSwaps] boundary cells between regions [a] and [b], keeping
+  /// both regions connected. Returns the number of successful swaps.
+  int _swapBoundary(int a, int b, int maxSwaps) {
+    final boundaryA = <List<int>>[];
+    final boundaryB = <List<int>>[];
+    for (var row = 0; row < gridDim; row++) {
+      for (var col = 0; col < gridDim; col++) {
+        if (regions[row][col] == a && _isAdjacentToRegion(row, col, b)) {
+          boundaryA.add([row, col]);
+        } else if (regions[row][col] == b && _isAdjacentToRegion(row, col, a)) {
+          boundaryB.add([row, col]);
+        }
+      }
+    }
+    if (boundaryA.isEmpty || boundaryB.isEmpty) return 0;
+
+    boundaryA.shuffle(_rng);
+    boundaryB.shuffle(_rng);
+    final count = math.min(maxSwaps, math.min(boundaryA.length, boundaryB.length));
+    var done = 0;
+    for (var i = 0; i < count; i++) {
+      final ca = boundaryA[i];
+      final cb = boundaryB[i];
+      if (_canSwap(ca[0], ca[1], a, cb[0], cb[1], b)) {
+        regions[ca[0]][ca[1]] = b;
+        regions[cb[0]][cb[1]] = a;
+        done++;
+      }
+    }
+    return done;
+  }
+
+  bool _isAdjacentToRegion(int row, int col, int region) {
+    for (final d in const [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      final r = row + d[0];
+      final c = col + d[1];
+      if (r >= 0 && r < gridDim && c >= 0 && c < gridDim && regions[r][c] == region) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _canSwap(int rA, int cA, int regA, int rB, int cB, int regB) {
+    regions[rA][cA] = regB;
+    regions[rB][cB] = regA;
+    final ok = _isRegionConnected(regA) && _isRegionConnected(regB);
+    regions[rA][cA] = regA;
+    regions[rB][cB] = regB;
+    return ok;
+  }
+
+  bool _isRegionConnected(int region) {
+    final cells = <List<int>>[];
+    for (var row = 0; row < gridDim; row++) {
+      for (var col = 0; col < gridDim; col++) {
+        if (regions[row][col] == region) cells.add([row, col]);
+      }
+    }
+    if (cells.length <= 1) return cells.isNotEmpty;
+
+    final visited = <String>{'${cells[0][0]},${cells[0][1]}'};
+    final queue = <List<int>>[cells[0]];
+    while (queue.isNotEmpty) {
+      final cur = queue.removeLast();
+      for (final d in const [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        final r = cur[0] + d[0];
+        final c = cur[1] + d[1];
+        final key = '$r,$c';
+        if (r >= 0 && r < gridDim && c >= 0 && c < gridDim &&
+            regions[r][c] == region && !visited.contains(key)) {
+          visited.add(key);
+          queue.add([r, c]);
+        }
+      }
+    }
+    return visited.length == cells.length;
+  }
+
+  // --- Complete-grid solver (MRV backtracking) ---------------------------
+
+  bool _fillComplete() {
+    // Limit total backtracking steps so a bad jigsaw shape fails fast (and the
+    // caller retries with fresh regions) instead of exploring forever.
+    final maxSteps = gridDim <= 9 ? 200000 : 400000;
+    return _fill(_StepCounter(maxSteps));
+  }
+
+  bool _fill(_StepCounter steps) {
+    if (steps.exceeded) return false;
+    steps.value++;
+
+    final cell = _mostConstrainedEmptyCell(grid);
+    if (cell == null) return true; // full
+
+    final row = cell[0];
+    final col = cell[1];
+    final numbers = List.generate(gridDim, (i) => i + 1)..shuffle(_rng);
+    for (final num in numbers) {
+      if (_isSafe(grid, row, col, num)) {
+        grid[row][col] = num;
+        if (_fill(steps)) return true;
+        grid[row][col] = 0;
+      }
+    }
+    return false;
+  }
+
+  List<int>? _mostConstrainedEmptyCell(List<List<int>> g) {
+    var best = gridDim + 1;
+    List<int>? bestCell;
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (g[r][c] != 0) continue;
+        var options = 0;
+        for (var num = 1; num <= gridDim; num++) {
+          if (_isSafe(g, r, c, num)) options++;
+        }
+        if (options == 0) return [r, c]; // dead end — fail fast
+        if (options < best) {
+          best = options;
+          bestCell = [r, c];
+        }
+      }
+    }
+    return bestCell;
+  }
+
+  /// True if [num] can legally occupy (row,col) in grid [g] given current fills.
+  bool _isSafe(List<List<int>> g, int row, int col, int num) {
+    for (var i = 0; i < gridDim; i++) {
+      if (g[row][i] == num) return false;
+      if (g[i][col] == num) return false;
+    }
+    final region = regions[row][col];
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (regions[r][c] == region && g[r][c] == num) return false;
+      }
+    }
+    return true;
+  }
+
+  // --- Hole digging that preserves a unique solution ---------------------
+
+  void _puzzlify() {
+    // Snapshot the full grid as the canonical solution.
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        solution[r][c] = grid[r][c];
+      }
+    }
+
+    _digHoles(_cellsToRemove(difficulty));
+
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        isOriginal[r][c] = grid[r][c] != 0;
+      }
+    }
+  }
+
+  int _cellsToRemove(SudokuDifficulty difficulty) {
+    final total = gridDim * gridDim;
+    switch (difficulty) {
+      case SudokuDifficulty.easy:
+        return (total * 0.4).round();
+      case SudokuDifficulty.medium:
+        return (total * 0.5).round();
+      case SudokuDifficulty.hard:
+        return (total * 0.6).round();
+      case SudokuDifficulty.expert:
+        return (total * 0.7).round();
+    }
+  }
+
+  /// Remove up to [target] cells while keeping the solution unique. Bounded by
+  /// [_digBudget] so large/expert boards never hang.
+  void _digHoles(int target) {
+    final positions = <List<int>>[];
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        positions.add([r, c]);
+      }
+    }
+    positions.shuffle(_rng);
+
+    final stopwatch = Stopwatch()..start();
+    var removed = 0;
+    for (final pos in positions) {
+      if (removed >= target || stopwatch.elapsed > _digBudget) break;
+      final r = pos[0];
+      final c = pos[1];
+      final backup = grid[r][c];
+      if (backup == 0) continue;
+
+      grid[r][c] = 0;
+      if (_hasUniqueSolution()) {
+        removed++;
+      } else {
+        grid[r][c] = backup; // keep this clue
+      }
+    }
+    DebugLogger.log('Dug $removed/$target holes in ${stopwatch.elapsedMilliseconds}ms.');
+  }
+
+  /// True iff the current [grid] (with holes) has exactly one completion.
+  bool _hasUniqueSolution() {
+    final work = grid.map((row) => List<int>.from(row)).toList();
+    return _countSolutions(work, 0, 2) == 1;
+  }
+
+  int _countSolutions(List<List<int>> g, int found, int limit) {
+    final cell = _mostConstrainedEmptyCell(g);
+    if (cell == null) return found + 1; // a complete solution
+    final row = cell[0];
+    final col = cell[1];
+    for (var num = 1; num <= gridDim; num++) {
+      if (_isSafe(g, row, col, num)) {
+        g[row][col] = num;
+        found = _countSolutions(g, found, limit);
+        g[row][col] = 0;
+        if (found >= limit) return found; // early-out: not unique
+      }
+    }
+    return found;
+  }
+
+  // --- Gameplay API ------------------------------------------------------
+
+  /// True if placing [num] at (row,col) breaks no row/column/region rule.
+  /// Original (given) cells can never be changed.
+  bool isValidMove(int row, int col, int num) {
+    if (isOriginal[row][col]) return false;
+    for (var i = 0; i < gridDim; i++) {
+      if (i != col && grid[row][i] == num) return false;
+      if (i != row && grid[i][col] == num) return false;
+    }
+    final region = regions[row][col];
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if ((r != row || c != col) &&
+            regions[r][c] == region &&
+            grid[r][c] == num) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  void setCell(int row, int col, int value) {
+    if (!isOriginal[row][col]) grid[row][col] = value;
+  }
+
+  void clearCell(int row, int col) {
+    if (!isOriginal[row][col]) grid[row][col] = 0;
+  }
+
+  /// Board is full (no validity guarantee).
+  bool isCompleted() {
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (grid[r][c] == 0) return false;
+      }
+    }
+    return true;
+  }
+
+  /// Board is full **and** every row/column/region is conflict-free. This is
+  /// the real win condition — a board filled via the "give answer" hint (which
+  /// bypasses [isValidMove]) is only a win when it is genuinely consistent.
+  bool isSolved() {
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        final v = grid[r][c];
+        if (v == 0) return false;
+        for (var i = 0; i < gridDim; i++) {
+          if (i != c && grid[r][i] == v) return false;
+          if (i != r && grid[i][c] == v) return false;
+        }
+        final region = regions[r][c];
+        for (var rr = 0; rr < gridDim; rr++) {
+          for (var cc = 0; cc < gridDim; cc++) {
+            if ((rr != r || cc != c) &&
+                regions[rr][cc] == region &&
+                grid[rr][cc] == v) {
+              return false;
+            }
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  // --- Hints -------------------------------------------------------------
+
+  List<SmartHint> getSmartHints(int row, int col) {
+    if (isOriginal[row][col] || grid[row][col] != 0) {
+      return [
+        SmartHint(
+          type: HintType.conflict,
+          title: 'Cell Occupied',
+          description:
+              'This cell is already filled or is part of the original puzzle.',
+          penalty: 0,
+        ),
+      ];
+    }
+
+    final possible = possibleNumbers(row, col);
+    if (possible.isEmpty) {
+      return [
+        SmartHint(
+          type: HintType.conflict,
+          title: 'Conflict Detected',
+          description:
+              'No number can legally go here. Check the row, column, or region '
+              'for a mistake.',
+          penalty: 0,
+        ),
+      ];
+    }
+
+    final hints = <SmartHint>[];
+    if (possible.length == 1) {
+      hints.add(SmartHint(
+        type: HintType.nakedSingle,
+        title: 'Only Choice (Naked Single)',
+        description: 'There is only one number that can fit in this cell.',
+        penalty: 25,
+        data: possible.first,
+      ));
+      return hints;
+    }
+
+    for (final num in possible) {
+      if (_isHiddenSingle(row, col, num)) {
+        hints.add(SmartHint(
+          type: HintType.hiddenSingle,
+          title: 'Hidden Single',
+          description:
+              'This is the only cell in its row, column, or region where this '
+              'number can go.',
+          penalty: 30,
+          data: num,
+        ));
+        break;
+      }
+    }
+
+    hints.add(SmartHint(
+      type: HintType.showPossible,
+      title: 'Show Possible Numbers',
+      description: 'Reveals every number that can legally go here.',
+      penalty: 15,
+      data: possible,
+    ));
+    hints.add(SmartHint(
+      type: HintType.giveAnswer,
+      title: 'Give Answer',
+      description: 'Fills in the correct number.',
+      penalty: 50,
+      data: solution[row][col],
+    ));
+    return hints;
+  }
+
+  List<int> possibleNumbers(int row, int col) {
+    final possible = <int>[];
+    for (var num = 1; num <= gridDim; num++) {
+      if (isValidMove(row, col, num)) possible.add(num);
+    }
+    return possible;
+  }
+
+  /// True if [num] can go in exactly one empty cell of (row,col)'s row, OR its
+  /// column, OR its region.
+  bool _isHiddenSingle(int row, int col, int num) {
+    // Row
+    var rowCount = 0;
+    for (var c = 0; c < gridDim; c++) {
+      if (grid[row][c] == 0 && isValidMove(row, c, num)) rowCount++;
+    }
+    if (rowCount == 1) return true;
+
+    // Column
+    var colCount = 0;
+    for (var r = 0; r < gridDim; r++) {
+      if (grid[r][col] == 0 && isValidMove(r, col, num)) colCount++;
+    }
+    if (colCount == 1) return true;
+
+    // Region
+    final region = regions[row][col];
+    var regionCount = 0;
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (regions[r][c] == region &&
+            grid[r][c] == 0 &&
+            isValidMove(r, c, num)) {
+          regionCount++;
+        }
+      }
+    }
+    return regionCount == 1;
+  }
+}
+
+/// Mutable step budget for the backtracking solver.
+class _StepCounter {
+  _StepCounter(this.max);
+  final int max;
+  int value = 0;
+  bool get exceeded => value > max;
+}

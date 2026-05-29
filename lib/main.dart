@@ -1,41 +1,23 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'dart:math' as math;
 import 'dart:async';
-import 'package:json_annotation/json_annotation.dart';
-
-// for saving and loading puzzles...
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
-// to load puzzles...
-part 'main.g.dart';
+import 'sudoku_game.dart';
 
-void main() async { // Make main async
-  WidgetsFlutterBinding.ensureInitialized(); // Add this line
-  await PuzzleCache().initialize(); // Initialize the cache
-  runApp(SudokuApp());
-}
-
-@JsonSerializable()
-class PuzzleBlueprint {
-  final List<List<int>> solutionGrid;
-  final List<List<int>> regions;
-  final GridSize gridSize;
-  final GridShape gridShape;
-
-  PuzzleBlueprint({
-    required this.solutionGrid,
-    required this.regions,
-    required this.gridSize,
-    required this.gridShape,
-  });
-  factory PuzzleBlueprint.fromJson(Map<String, dynamic> json) => _$PuzzleBlueprintFromJson(json);
-  Map<String, dynamic> toJson() => _$PuzzleBlueprintToJson(this);
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await PuzzleCache().initialize();
+  runApp(const SudokuApp());
 }
 
 class SudokuApp extends StatelessWidget {
+  const SudokuApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -52,17 +34,15 @@ class SudokuApp extends StatelessWidget {
           ),
         ),
       ),
-      home: HomeScreen(),
+      home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-enum GridSize { small, medium, large, standard, big, mega }
-enum SudokuDifficulty { easy, medium, hard, expert }
-enum GridShape { classic, jigsaw }
-enum GameMode { classic }
-enum HintType { showPossible, giveAnswer, nakedSingle, hiddenSingle, conflict }
+// ---------------------------------------------------------------------------
+// Themes / stats / achievements
+// ---------------------------------------------------------------------------
 
 class EnvironmentalTheme {
   final String name;
@@ -72,8 +52,8 @@ class EnvironmentalTheme {
   final Color cellHighlight;
   final List<String> particleEmojis;
   final String description;
-  
-  EnvironmentalTheme({
+
+  const EnvironmentalTheme({
     required this.name,
     required this.gradient,
     required this.primary,
@@ -87,22 +67,22 @@ class EnvironmentalTheme {
 class GameStats {
   static int totalPuzzlesSolved = 0;
   static int totalHintsUsed = 0;
-  static Duration bestTime = Duration(hours: 99);
+  static Duration bestTime = const Duration(hours: 99);
   static int currentStreak = 0;
   static Set<String> unlockedAchievements = {};
-  
-  static bool debugMode = true; // Set to false for production
+
+  /// Admin panel + all-themes-unlocked only in debug builds.
+  static const bool debugMode = kDebugMode;
 
   static bool useSavedPuzzles = true;
-  
-  // Modify the themes initialization
-  static Set<String> unlockedThemes = debugMode 
-    ? {'Ocean', 'Forest', 'Space', 'Fire', 'Ice'} // All themes unlocked in debug
-    : {'Ocean'}; // Only Ocean in production
-  
+
+  static Set<String> unlockedThemes = debugMode
+      ? {'Ocean', 'Forest', 'Space', 'Fire', 'Ice'}
+      : {'Ocean'};
+
   static String currentTheme = 'Ocean';
-  
-  static Map<String, EnvironmentalTheme> themes = {
+
+  static const Map<String, EnvironmentalTheme> themes = {
     'Ocean': EnvironmentalTheme(
       name: 'Ocean',
       gradient: [Color(0xFF0066CC), Color(0xFF003D7A), Color(0xFF001A33)],
@@ -149,6 +129,8 @@ class GameStats {
       description: 'Frozen tundra',
     ),
   };
+
+  static EnvironmentalTheme get current => themes[currentTheme]!;
 }
 
 class Achievement {
@@ -158,8 +140,8 @@ class Achievement {
   final String icon;
   final bool Function() isUnlocked;
   final String? rewardTheme;
-  
-  Achievement({
+
+  const Achievement({
     required this.id,
     required this.name,
     required this.description,
@@ -199,7 +181,8 @@ class AchievementSystem {
       name: 'Pure Logic',
       description: 'Complete a hard puzzle without hints',
       icon: '🧠',
-      isUnlocked: () => GameStats.unlockedAchievements.contains('no_hints_hard'),
+      isUnlocked: () =>
+          GameStats.unlockedAchievements.contains('no_hints_hard'),
       rewardTheme: 'Fire',
     ),
     Achievement(
@@ -211,10 +194,11 @@ class AchievementSystem {
       rewardTheme: 'Ice',
     ),
   ];
-  
+
   static void checkAchievements() {
-    for (var achievement in achievements) {
-      if (!GameStats.unlockedAchievements.contains(achievement.id) && achievement.isUnlocked()) {
+    for (final achievement in achievements) {
+      if (!GameStats.unlockedAchievements.contains(achievement.id) &&
+          achievement.isUnlocked()) {
         GameStats.unlockedAchievements.add(achievement.id);
         if (achievement.rewardTheme != null) {
           GameStats.unlockedThemes.add(achievement.rewardTheme!);
@@ -224,17 +208,9 @@ class AchievementSystem {
   }
 }
 
-class DebugLogger {
-  static void log(String message) {
-    print('[SUDOKU DEBUG] $message');
-  }
-  
-  static void error(String message, [dynamic error, StackTrace? stackTrace]) {
-    print('[SUDOKU ERROR] $message');
-    if (error != null) print('Error: $error');
-    if (stackTrace != null) print('Stack: $stackTrace');
-  }
-}
+// ---------------------------------------------------------------------------
+// Particles (isolated layer — see ParticleLayer)
+// ---------------------------------------------------------------------------
 
 class Particle {
   double x, y;
@@ -242,7 +218,7 @@ class Particle {
   String emoji;
   double life;
   double maxLife;
-  
+
   Particle({
     required this.x,
     required this.y,
@@ -251,54 +227,173 @@ class Particle {
     required this.emoji,
     required this.maxLife,
   }) : life = maxLife;
-  
+
   void update() {
     x += vx;
     y += vy;
     life -= 1.0;
     vy += 0.1; // gravity
   }
-  
+
   bool get isDead => life <= 0;
   double get opacity => life / maxLife;
 }
 
-class HomeScreen extends StatefulWidget {
+/// A self-contained particle overlay. It owns its own animation controller and
+/// only ticks (and rebuilds) while particles are alive, so it never forces the
+/// rest of the screen to rebuild at 60fps.
+class ParticleLayer extends StatefulWidget {
+  const ParticleLayer({super.key});
+
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<ParticleLayer> createState() => ParticleLayerState();
+}
+
+class ParticleLayerState extends State<ParticleLayer>
+    with SingleTickerProviderStateMixin {
+  final List<Particle> _particles = [];
+  final math.Random _random = math.Random();
+  late final AnimationController _controller;
+  Timer? _spawnTimer;
+  Size _size = Size.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 16),
+      vsync: this,
+    )..addListener(_tick);
+    _spawnTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) _spawnAmbient();
+    });
+  }
+
+  void _ensureRunning() {
+    if (!_controller.isAnimating) _controller.repeat();
+  }
+
+  void _tick() {
+    if (_particles.isEmpty) {
+      _controller.stop();
+      return;
+    }
+    setState(() {
+      _particles.removeWhere((p) => p.isDead);
+      for (final p in _particles) {
+        p.update();
+      }
+    });
+    if (_particles.isEmpty) _controller.stop();
+  }
+
+  void _spawnAmbient() {
+    if (_size == Size.zero) return;
+    final emojis = GameStats.current.particleEmojis;
+    _particles.add(Particle(
+      x: _random.nextDouble() * _size.width,
+      y: _size.height,
+      vx: (_random.nextDouble() - 0.5) * 2,
+      vy: -_random.nextDouble() * 3 - 1,
+      emoji: emojis[_random.nextInt(emojis.length)],
+      maxLife: 180.0,
+    ));
+    _ensureRunning();
+  }
+
+  /// Celebratory burst from the centre of the layer.
+  void burst() {
+    if (_size == Size.zero) return;
+    final emojis = GameStats.current.particleEmojis;
+    for (var i = 0; i < 20; i++) {
+      _particles.add(Particle(
+        x: _size.width / 2,
+        y: _size.height / 2,
+        vx: (_random.nextDouble() - 0.5) * 8,
+        vy: -_random.nextDouble() * 6 - 2,
+        emoji: emojis[_random.nextInt(emojis.length)],
+        maxLife: 120.0,
+      ));
+    }
+    _ensureRunning();
+  }
+
+  @override
+  void dispose() {
+    _spawnTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _size = constraints.biggest;
+        return IgnorePointer(
+          child: RepaintBoundary(
+            child: Stack(
+              children: [
+                for (final p in _particles)
+                  Positioned(
+                    left: p.x,
+                    top: p.y,
+                    child: Opacity(
+                      opacity: (p.opacity * 0.7).clamp(0.0, 1.0),
+                      child: Text(p.emoji, style: const TextStyle(fontSize: 20)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Home
+// ---------------------------------------------------------------------------
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
-    final currentScheme = GameStats.themes[GameStats.currentTheme]!;
-    
+    final scheme = GameStats.current;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: currentScheme.gradient,
+            colors: scheme.gradient,
           ),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
             child: Padding(
-              padding: EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // Header
                   Container(
-                    padding: EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                      border:
+                          Border.all(color: Colors.white.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       children: [
-                        Text(
+                        const Text(
                           'SUDOKU\nMASTER',
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -309,47 +404,38 @@ class _HomeScreenState extends State<HomeScreen> {
                             height: 1.2,
                           ),
                         ),
-                        SizedBox(height: 10),
+                        const SizedBox(height: 10),
                         Text(
-                          'Puzzles Solved: ${GameStats.totalPuzzlesSolved} | Streak: ${GameStats.currentStreak}',
-                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                          'Puzzles Solved: ${GameStats.totalPuzzlesSolved} | '
+                          'Streak: ${GameStats.currentStreak}',
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 14),
                         ),
-                        SizedBox(height: 5),
+                        const SizedBox(height: 5),
                         Text(
-                          currentScheme.description,
-                          style: TextStyle(color: Colors.white60, fontSize: 12),
+                          scheme.description,
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 12),
                         ),
                       ],
                     ),
                   ),
-                  
-                  SizedBox(height: 30),
-                  
-                  // Quick Actions
+                  const SizedBox(height: 30),
                   Row(
                     children: [
                       Expanded(
                         child: _buildQuickButton(
-                          'Themes',
-                          Icons.palette,
-                          () => _showThemes(),
-                        ),
+                            'Themes', Icons.palette, _showThemes),
                       ),
-                      SizedBox(width: 10),
+                      const SizedBox(width: 10),
                       Expanded(
-                        child: _buildQuickButton(
-                          'Achievements',
-                          Icons.emoji_events,
-                          () => _showAchievements(),
-                        ),
+                        child: _buildQuickButton('Achievements',
+                            Icons.emoji_events, _showAchievements),
                       ),
                     ],
                   ),
-                  
-                  SizedBox(height: 30),
-                  
-                  // Game Modes
-                  Text(
+                  const SizedBox(height: 30),
+                  const Text(
                     'GAME MODES',
                     style: TextStyle(
                       color: Colors.white,
@@ -358,24 +444,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       letterSpacing: 2,
                     ),
                   ),
-                  SizedBox(height: 20),
-                  
-                  _buildModeButton('🎯 CLASSIC MODE', 'Traditional Sudoku', Colors.indigo.shade800, () => _showClassicOptions()),
-                  
-                  SizedBox(height: 30),
-                  
-                  // Jigsaw Mode
-                  Container(
+                  const SizedBox(height: 20),
+                  _buildModeButton('🎯 CLASSIC MODE', 'Traditional Sudoku',
+                      Colors.indigo.shade800, _showClassicOptions),
+                  const SizedBox(height: 30),
+                  SizedBox(
                     width: double.infinity,
                     height: 60,
                     child: ElevatedButton(
-                      onPressed: () => _showJigsawOptions(),
+                      onPressed: _showJigsawOptions,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange.shade800,
                         foregroundColor: Colors.white,
                         elevation: 12,
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.extension, size: 24),
@@ -392,22 +475,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-
-                  SizedBox(height: 30),
-
+                  const SizedBox(height: 30),
                   if (GameStats.debugMode)
                     ElevatedButton.icon(
-                      icon: Icon(Icons.admin_panel_settings),
-                      label: Text('Admin Panel'),
+                      icon: const Icon(Icons.admin_panel_settings),
+                      label: const Text('Admin Panel'),
                       onPressed: _navigateToAdmin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.grey.shade700,
                         foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 12, horizontal: 20),
                       ),
                     ),
-
-
                 ],
               ),
             ),
@@ -421,23 +501,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white.withOpacity(0.2),
+        backgroundColor: Colors.white.withValues(alpha: 0.2),
         foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(vertical: 15),
+        padding: const EdgeInsets.symmetric(vertical: 15),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 24),
-          SizedBox(height: 5),
-          Text(label, style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 5),
+          Text(label, style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
   }
 
-  Widget _buildModeButton(String title, String subtitle, Color color, VoidCallback onPressed) {
-    return Container(
+  Widget _buildModeButton(
+      String title, String subtitle, Color color, VoidCallback onPressed) {
+    return SizedBox(
       width: double.infinity,
       height: 70,
       child: ElevatedButton(
@@ -446,26 +527,23 @@ class _HomeScreenState extends State<HomeScreen> {
           backgroundColor: color,
           foregroundColor: Colors.white,
           elevation: 12,
-          shadowColor: color.withOpacity(0.5),
+          shadowColor: color.withValues(alpha: 0.5),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               title,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1,
               ),
             ),
-            SizedBox(height: 2),
+            const SizedBox(height: 2),
             Text(
               subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.white70,
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
         ),
@@ -476,7 +554,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _navigateToAdmin() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => AdminScreen()),
+      MaterialPageRoute(builder: (context) => const AdminScreen()),
     );
   }
 
@@ -487,19 +565,17 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.8,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Classic Sudoku',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 20),
+            const Text('Classic Sudoku',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
@@ -507,12 +583,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisSpacing: 15,
                 mainAxisSpacing: 15,
                 children: [
-                  _buildGridSizeCard(GridSize.small, '4×4', 'SMALL', Colors.green.shade500),
-                  _buildGridSizeCard(GridSize.medium, '6×6', 'MEDIUM', Colors.blue.shade400),
-                  _buildGridSizeCard(GridSize.large, '8×8', 'LARGE', Colors.orange.shade400),
-                  _buildGridSizeCard(GridSize.standard, '9×9', 'CLASSIC', Colors.red.shade400),
-                  _buildGridSizeCard(GridSize.big, '10×10', 'BIG', Colors.purple.shade400),
-                  _buildGridSizeCard(GridSize.mega, '12×12', 'MEGA', Colors.red.shade600),
+                  _buildGridSizeCard(
+                      GridSize.small, '4×4', 'SMALL', Colors.green.shade500),
+                  _buildGridSizeCard(
+                      GridSize.medium, '6×6', 'MEDIUM', Colors.blue.shade400),
+                  _buildGridSizeCard(
+                      GridSize.large, '8×8', 'LARGE', Colors.orange.shade400),
+                  _buildGridSizeCard(
+                      GridSize.standard, '9×9', 'CLASSIC', Colors.red.shade400),
+                  _buildGridSizeCard(
+                      GridSize.big, '10×10', 'BIG', Colors.purple.shade400),
+                  _buildGridSizeCard(
+                      GridSize.mega, '12×12', 'MEGA', Colors.red.shade600),
                 ],
               ),
             ),
@@ -522,7 +604,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildGridSizeCard(GridSize size, String sizeLabel, String difficulty, Color color) {
+  Widget _buildGridSizeCard(
+      GridSize size, String sizeLabel, String difficulty, Color color) {
     return GestureDetector(
       onTap: () {
         Navigator.pop(context);
@@ -534,125 +617,122 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.3),
+              color: color.withValues(alpha: 0.3),
               blurRadius: 8,
-              offset: Offset(0, 4),
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              sizeLabel,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(height: 5),
-            Text(
-              difficulty,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            Text(sizeLabel,
+                style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
+            const SizedBox(height: 5),
+            Text(difficulty,
+                style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
       ),
     );
   }
 
-  void _showDifficultySelection(GridSize gridSize, GameMode gameMode, {GridShape gridShape = GridShape.classic}) {
-    DebugLogger.log('Showing difficulty selection for ${gridSize.name} ${gridShape.name}');
-    
+  void _showDifficultySelection(GridSize gridSize, GameMode gameMode,
+      {GridShape gridShape = GridShape.classic}) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Select Difficulty',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
+            const Text('Select Difficulty',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             if (gridShape == GridShape.jigsaw)
               Container(
-                margin: EdgeInsets.only(top: 10),
-                padding: EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   'Jigsaw mode: Regions have irregular shapes!',
-                  style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                  style:
+                      TextStyle(color: Colors.orange.shade700, fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
               ),
-            SizedBox(height: 20),
-            ...[
-              _buildDifficultyOption('EASY', Colors.green, SudokuDifficulty.easy, gridSize, gameMode, gridShape),
-              _buildDifficultyOption('MEDIUM', Colors.orange, SudokuDifficulty.medium, gridSize, gameMode, gridShape),
-              _buildDifficultyOption('HARD', Colors.red, SudokuDifficulty.hard, gridSize, gameMode, gridShape),
-              _buildDifficultyOption('EXPERT', Colors.purple, SudokuDifficulty.expert, gridSize, gameMode, gridShape),
-            ],
+            const SizedBox(height: 20),
+            _buildDifficultyOption('EASY', Colors.green,
+                SudokuDifficulty.easy, gridSize, gameMode, gridShape),
+            _buildDifficultyOption('MEDIUM', Colors.orange,
+                SudokuDifficulty.medium, gridSize, gameMode, gridShape),
+            _buildDifficultyOption('HARD', Colors.red, SudokuDifficulty.hard,
+                gridSize, gameMode, gridShape),
+            _buildDifficultyOption('EXPERT', Colors.purple,
+                SudokuDifficulty.expert, gridSize, gameMode, gridShape),
           ],
         ),
       ),
     );
   }
 
-
-  Widget _buildDifficultyOption(String label, Color color, SudokuDifficulty difficulty, GridSize gridSize, GameMode gameMode, GridShape gridShape) {
+  Widget _buildDifficultyOption(String label, Color color,
+      SudokuDifficulty difficulty, GridSize gridSize, GameMode gameMode,
+      GridShape gridShape) {
     return Container(
       width: double.infinity,
-      margin: EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 10),
       child: ElevatedButton(
         onPressed: () {
-          DebugLogger.log('Selected: ${gridSize.name} ${difficulty.name} ${gridShape.name}');
           Navigator.pop(context);
           _startGame(difficulty, gridSize, gridShape, gameMode);
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
-          padding: EdgeInsets.symmetric(vertical: 15),
+          padding: const EdgeInsets.symmetric(vertical: 15),
         ),
-        child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        child: Text(label,
+            style:
+                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  void _startGame(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape, GameMode gameMode) {
-    try {
-      DebugLogger.log('Starting game: ${gridSize.name} ${difficulty.name} ${gridShape.name} ${gameMode.name}');
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => GameScreen(
-            difficulty: difficulty,
-            gridSize: gridSize,
-            gridShape: gridShape,
-            gameMode: gameMode,
-          ),
+  void _startGame(SudokuDifficulty difficulty, GridSize gridSize,
+      GridShape gridShape, GameMode gameMode) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GameScreen(
+          difficulty: difficulty,
+          gridSize: gridSize,
+          gridShape: gridShape,
+          gameMode: gameMode,
         ),
-      );
-    } catch (e, stackTrace) {
-      DebugLogger.error('Failed to start game', e, stackTrace);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to start game. Please try again.')),
-      );
-    }
+      ),
+    ).then((_) {
+      if (mounted) setState(() {}); // refresh stats shown on home
+    });
   }
 
   void _showJigsawOptions() {
@@ -662,37 +742,23 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.7,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text('🧩 Jigsaw Sudoku',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
             Text(
-              '🧩 Jigsaw Sudoku',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Irregular shaped regions instead of squares! Each size has unique region shapes.',
+              'Irregular shaped regions instead of squares! Each size has '
+              'unique region shapes.',
               style: TextStyle(color: Colors.grey.shade600),
             ),
-            if (GameStats.debugMode)
-              Container(
-                margin: EdgeInsets.symmetric(vertical: 10),
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'DEBUG MODE: All sizes available & verbose logging enabled',
-                  style: TextStyle(color: Colors.orange.shade800, fontSize: 12),
-                ),
-              ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
@@ -700,12 +766,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
                 children: [
-                  _buildJigsawOption('4×4 Jigsaw', GridSize.small, 'Mini Challenge'),
-                  _buildJigsawOption('6×6 Jigsaw', GridSize.medium, 'Quick Puzzle'),
-                  _buildJigsawOption('8×8 Jigsaw', GridSize.large, 'Brain Teaser'),
-                  _buildJigsawOption('9×9 Jigsaw', GridSize.standard, 'Classic Twist'),
-                  _buildJigsawOption('10×10 Jigsaw', GridSize.big, 'Big Challenge'),
-                  _buildJigsawOption('12×12 Jigsaw', GridSize.mega, 'Ultimate Test'),
+                  _buildJigsawOption(
+                      '4×4 Jigsaw', GridSize.small, 'Mini Challenge'),
+                  _buildJigsawOption(
+                      '6×6 Jigsaw', GridSize.medium, 'Quick Puzzle'),
+                  _buildJigsawOption(
+                      '8×8 Jigsaw', GridSize.large, 'Brain Teaser'),
+                  _buildJigsawOption(
+                      '9×9 Jigsaw', GridSize.standard, 'Classic Twist'),
+                  _buildJigsawOption(
+                      '10×10 Jigsaw', GridSize.big, 'Big Challenge'),
+                  _buildJigsawOption(
+                      '12×12 Jigsaw', GridSize.mega, 'Ultimate Test'),
                 ],
               ),
             ),
@@ -719,7 +791,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: () {
         Navigator.pop(context);
-        _showDifficultySelection(gridSize, GameMode.classic, gridShape: GridShape.jigsaw);
+        _showDifficultySelection(gridSize, GameMode.classic,
+            gridShape: GridShape.jigsaw);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -729,34 +802,26 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.orange.withOpacity(0.3),
+              color: Colors.orange.withValues(alpha: 0.3),
               blurRadius: 8,
-              offset: Offset(0, 4),
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Padding(
-          padding: EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.white70,
-                ),
-                textAlign: TextAlign.center,
-              ),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white)),
+              const SizedBox(height: 4),
+              Text(subtitle,
+                  style: const TextStyle(fontSize: 10, color: Colors.white70),
+                  textAlign: TextAlign.center),
             ],
           ),
         ),
@@ -771,22 +836,21 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.7,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Environmental Themes',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 20),
+            const Text('Environmental Themes',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
             Expanded(
               child: GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 1,
                   childAspectRatio: 4,
                   mainAxisSpacing: 10,
@@ -794,21 +858,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemCount: GameStats.themes.length,
                 itemBuilder: (context, index) {
                   final theme = GameStats.themes.values.elementAt(index);
-                  final isUnlocked = GameStats.unlockedThemes.contains(theme.name);
+                  final isUnlocked =
+                      GameStats.unlockedThemes.contains(theme.name);
                   final isSelected = GameStats.currentTheme == theme.name;
-                  
+
                   return GestureDetector(
-                    onTap: isUnlocked ? () {
-                      setState(() {
-                        GameStats.currentTheme = theme.name;
-                      });
-                      Navigator.pop(context);
-                    } : null,
+                    onTap: isUnlocked
+                        ? () {
+                            setState(() {
+                              GameStats.currentTheme = theme.name;
+                            });
+                            Navigator.pop(context);
+                          }
+                        : null,
                     child: Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(colors: theme.gradient),
                         borderRadius: BorderRadius.circular(15),
-                        border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
+                        border: isSelected
+                            ? Border.all(color: Colors.white, width: 3)
+                            : null,
                       ),
                       child: Stack(
                         children: [
@@ -818,26 +887,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Expanded(
                                   flex: 2,
                                   child: Padding(
-                                    padding: EdgeInsets.all(16),
+                                    padding: const EdgeInsets.all(16),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
-                                        Text(
-                                          theme.name,
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                        Text(
-                                          theme.description,
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
+                                        Text(theme.name,
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18)),
+                                        Text(theme.description,
+                                            style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12)),
                                       ],
                                     ),
                                   ),
@@ -847,7 +912,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Center(
                                     child: Text(
                                       theme.particleEmojis.join(' '),
-                                      style: TextStyle(fontSize: 24),
+                                      style: const TextStyle(fontSize: 24),
                                     ),
                                   ),
                                 ),
@@ -860,8 +925,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.black54,
                                 borderRadius: BorderRadius.circular(15),
                               ),
-                              child: Center(
-                                child: Icon(Icons.lock, color: Colors.white, size: 32),
+                              child: const Center(
+                                child: Icon(Icons.lock,
+                                    color: Colors.white, size: 32),
                               ),
                             ),
                         ],
@@ -879,64 +945,56 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showAchievements() {
     AchievementSystem.checkAchievements();
-    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.8,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Achievements',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 20),
+            const Text('Achievements',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
             Expanded(
               child: ListView.builder(
                 itemCount: AchievementSystem.achievements.length,
                 itemBuilder: (context, index) {
-                  final achievement = AchievementSystem.achievements[index];
-                  final isUnlocked = GameStats.unlockedAchievements.contains(achievement.id);
-                  
+                  final achievement =
+                      AchievementSystem.achievements[index];
+                  final isUnlocked = GameStats.unlockedAchievements
+                      .contains(achievement.id);
+
                   return Card(
-                    margin: EdgeInsets.only(bottom: 10),
+                    margin: const EdgeInsets.only(bottom: 10),
                     child: ListTile(
-                      leading: Text(
-                        achievement.icon,
-                        style: TextStyle(fontSize: 30),
-                      ),
-                      title: Text(
-                        achievement.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isUnlocked ? Colors.black : Colors.grey,
-                        ),
-                      ),
+                      leading: Text(achievement.icon,
+                          style: const TextStyle(fontSize: 30)),
+                      title: Text(achievement.name,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  isUnlocked ? Colors.black : Colors.grey)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(achievement.description),
                           if (achievement.rewardTheme != null)
-                            Text(
-                              'Reward: ${achievement.rewardTheme} theme',
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                            Text('Reward: ${achievement.rewardTheme} theme',
+                                style: const TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.w500)),
                         ],
                       ),
-                      trailing: isUnlocked 
-                          ? Icon(Icons.check_circle, color: Colors.green)
-                          : Icon(Icons.lock, color: Colors.grey),
+                      trailing: isUnlocked
+                          ? const Icon(Icons.check_circle, color: Colors.green)
+                          : const Icon(Icons.lock, color: Colors.grey),
                     ),
                   );
                 },
@@ -949,13 +1007,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Game screen
+// ---------------------------------------------------------------------------
+
 class GameScreen extends StatefulWidget {
   final SudokuDifficulty difficulty;
   final GridSize gridSize;
   final GridShape gridShape;
   final GameMode gameMode;
 
-  GameScreen({
+  const GameScreen({
+    super.key,
     required this.difficulty,
     required this.gridSize,
     required this.gridShape,
@@ -963,364 +1026,187 @@ class GameScreen extends StatefulWidget {
   });
 
   @override
-  _GameScreenState createState() => _GameScreenState();
+  State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  SudokuGame? game; // Primary game - nullable until initialized
+class _GameScreenState extends State<GameScreen>
+    with TickerProviderStateMixin {
+  SudokuGame? game;
   int? selectedRow;
   int? selectedCol;
+
   late AnimationController _pulseController;
   late AnimationController _shakeController;
   late AnimationController _scoreController;
-  late AnimationController _particleController;
   late Animation<double> _pulseAnimation;
   late Animation<double> _shakeAnimation;
   late Animation<Offset> _scoreAnimation;
-  List<Particle> particles = [];
+
+  final GlobalKey<ParticleLayerState> _particleKey =
+      GlobalKey<ParticleLayerState>();
+
   int hintsUsed = 0;
   int score = 1000;
   bool _showingScore = false;
 
   Timer? _nextGameTimer;
   Timer? _gameTimer;
-  Duration _elapsedTime = Duration.zero;
+  final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
   Duration _finalTime = Duration.zero;
-
   DateTime? _startTime;
 
-  String? _errorMessage; // For delayed error display
-  
+  String? _errorMessage;
+
   @override
   void initState() {
     super.initState();
-    DebugLogger.log('Initializing game screen');
     _initializeAnimations();
-    _startParticleSystem();
-    // Delay game initialization to avoid ScaffoldMessenger issues
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeGame();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeGame());
+  }
+
+  void _initializeAnimations() {
+    _pulseController = AnimationController(
+        duration: const Duration(milliseconds: 600), vsync: this);
+    _shakeController = AnimationController(
+        duration: const Duration(milliseconds: 400), vsync: this);
+    _scoreController = AnimationController(
+        duration: const Duration(milliseconds: 2000), vsync: this);
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+    _shakeAnimation = Tween<double>(begin: 0, end: 10).animate(
+        CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn));
+    _scoreAnimation = Tween<Offset>(begin: Offset.zero, end: const Offset(0, -0.5))
+        .animate(CurvedAnimation(parent: _scoreController, curve: Curves.easeOut));
   }
 
   void _startGameTimer() {
-    _gameTimer?.cancel(); // Ensure any old timer is stopped
+    _gameTimer?.cancel();
     _startTime = DateTime.now();
-    _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _elapsedTime = DateTime.now().difference(_startTime!);
-        });
-      }
+    _elapsed.value = Duration.zero;
+    _gameTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _elapsed.value = DateTime.now().difference(_startTime!);
     });
   }
 
-  void _stopGameTimer() {
-    _gameTimer?.cancel();
-  }
+  void _stopGameTimer() => _gameTimer?.cancel();
 
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Show any delayed error messages here where context is safe
     if (_errorMessage != null && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(_errorMessage!)),
-          );
+        if (mounted && _errorMessage != null) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(_errorMessage!)));
           _errorMessage = null;
         }
       });
     }
   }
 
-  void _applyHint(SmartHint hint) {
-    setState(() {
-      score = math.max(0, score - hint.penalty);
-      hintsUsed++;
-      GameStats.totalHintsUsed++;
-
-      switch (hint.type) {
-        case HintType.showPossible:
-          final numbers = (hint.data as List<int>).join(', ');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Possible Numbers: $numbers')),
-          );
-          break;
-        case HintType.giveAnswer:
-        case HintType.nakedSingle:
-        case HintType.hiddenSingle:
-          // THE FIX IS HERE: We now correctly call the method on the 'game' object.
-          game!.setCell(selectedRow!, selectedCol!, hint.data as int);
-          break;
-        default:
-          break;
-      }
-    });
-
-    if (game!.isCompleted()) {
-      _completeGame();
-    }
-  }
-
-  void _showHintConfirmation(SmartHint hint) {
-    if (hint.penalty == 0) return; // Don't show confirmation for informational hints
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(hint.title),
-        content: Text('Are you sure you want to use this hint for a -${hint.penalty} score penalty?'),
-        actions: [
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          ElevatedButton(
-            child: const Text('Confirm'),
-            onPressed: () {
-              Navigator.pop(context); // Close the confirmation dialog
-              _applyHint(hint); // Apply the hint
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<SudokuGame> _generatePuzzleWithRetries({
-    required SudokuDifficulty difficulty,
-    required GridSize gridSize,
-    required GridShape gridShape,
-  }) async {
-    final totalTimeBudget = const Duration(seconds: 10);
-    final singleAttemptTimeout = const Duration(seconds: 3);
+  Future<SudokuGame> _generatePuzzleWithRetries() async {
+    const totalBudget = Duration(seconds: 10);
+    const maxAttempts = 3;
     final stopwatch = Stopwatch()..start();
-    int attempt = 0;
-
-    DebugLogger.log('--- STARTING ROBUST GENERATION with a ${totalTimeBudget.inSeconds}s total budget ---');
-
-    while (stopwatch.elapsed < totalTimeBudget) {
-      attempt++;
-      final timeRemaining = (totalTimeBudget - stopwatch.elapsed).inSeconds;
-      DebugLogger.log('--- Generation attempt $attempt. Time remaining: $timeRemaining seconds. ---');
-      
+    Object? lastError;
+    for (var attempt = 1;
+        attempt <= maxAttempts && stopwatch.elapsed < totalBudget;
+        attempt++) {
       try {
-        // Try to create a puzzle within the individual attempt timeout.
-        final game = await SudokuGame.create(difficulty, gridSize, gridShape)
-            .timeout(singleAttemptTimeout);
-        
-        stopwatch.stop();
-        DebugLogger.log('--- SUCCESS! Puzzle generated after ${stopwatch.elapsed.inSeconds}s on attempt $attempt. ---');
-        return game; // Success! Return the generated game.
+        return await SudokuGame.create(
+            widget.difficulty, widget.gridSize, widget.gridShape,
+            timeout: const Duration(seconds: 4));
       } catch (e) {
-        // This attempt failed (likely timed out). Log it and the loop will try again.
-        DebugLogger.log('Attempt $attempt failed. Trying again...');
+        lastError = e;
+        DebugLogger.log('Generation attempt $attempt failed; retrying.');
       }
     }
-
-    // If the while loop finishes, it means the total time budget was exceeded.
-    stopwatch.stop();
-    throw TimeoutException('Failed to generate a puzzle within the total ${totalTimeBudget.inSeconds}s budget.');
+    throw TimeoutException('Failed to generate a puzzle: $lastError');
   }
 
-  void _initializeGame() async {
+  Future<void> _initializeGame() async {
     try {
-      // Immediately show the loading indicator to the user for a responsive feel.
-      setState(() {
-        game = null;
-      });
+      setState(() => game = null);
 
-      // Step 1: Check the admin switch first. If it's on, try to load a puzzle.
+      SudokuGame? built;
       if (GameStats.useSavedPuzzles) {
-        final blueprint = PuzzleCache().getRandom(widget.gridSize, widget.gridShape);
+        final blueprint =
+            PuzzleCache().getRandom(widget.gridSize, widget.gridShape);
         if (blueprint != null) {
-          // If a blueprint was found in storage, create the game from it.
-          game = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
+          built = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
         }
       }
 
-      // Step 2: If we still don't have a game, generate one on the fly.
-      // This happens if the switch was off OR if the switch was on but no saved puzzle was found.
-      if (game == null) {
-        DebugLogger.log('No saved blueprint found or using on-the-fly mode. Generating new puzzle...');
-        game = await _generatePuzzleWithRetries(
-          difficulty: widget.difficulty,
-          gridSize: widget.gridSize,
-          gridShape: widget.gridShape,
-        );
-        
-        // Step 3: Automatically save the newly generated blueprint to permanent storage.
-        // This makes the app "self-healing"—the more you play, the bigger the cache gets.
-        final newBlueprint = PuzzleBlueprint(
-          solutionGrid: game!.solution,
-          regions: game!.regions,
-          gridSize: widget.gridSize,
-          gridShape: widget.gridShape,
-        );
-        await PuzzleCache().set(newBlueprint);
+      if (built == null) {
+        built = await _generatePuzzleWithRetries();
+        // Cache the freshly generated solution so future plays are instant.
+        if (GameStats.useSavedPuzzles) {
+          await PuzzleCache().set(PuzzleBlueprint(
+            solutionGrid: built.solution,
+            regions: built.regions,
+            gridSize: widget.gridSize,
+            gridShape: widget.gridShape,
+          ));
+        }
       }
 
-      // Step 4: Now that we are guaranteed to have a game, start the timer and update the UI.
-      _startGameTimer(); // Start our state-managed timer
+      game = built;
+      _startGameTimer();
       score = _calculateInitialScore();
-
-      if (mounted) {
-        setState(() {}); // This removes the loading indicator and shows the game board.
-        DebugLogger.log('Game initialized successfully with score: $score');
-      }
-    } catch (e, stackTrace) {
-      // This entire block is our final safety net. It only runs if on-the-fly generation fails completely.
-      DebugLogger.error('All generation attempts failed within the time budget.', e, stackTrace);
-      
+      if (mounted) setState(() {});
+    } catch (e, st) {
+      DebugLogger.error('Generation failed; falling back to classic.', e, st);
       try {
-        DebugLogger.log('Attempting fallback initialization to a standard puzzle.');
-        game = await SudokuGame.create(widget.difficulty, widget.gridSize, GridShape.classic);
-        _startGameTimer(); // Also start the timer in the fallback case
-      
+        game = await SudokuGame.create(
+            widget.difficulty, widget.gridSize, GridShape.classic);
+        _startGameTimer();
         score = _calculateInitialScore();
+        if (mounted) setState(() {});
+      } catch (e2, st2) {
+        DebugLogger.error('Fallback also failed.', e2, st2);
         if (mounted) {
-          setState(() {});
-          DebugLogger.log('Fallback initialization successful');
-        }
-      } catch (e2, stackTrace2) {
-        DebugLogger.error('FATAL: Fallback initialization also failed.', e2, stackTrace2);
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Failed to create puzzle. Please restart the app.';
-          });
+          setState(() =>
+              _errorMessage = 'Failed to create puzzle. Please restart.');
         }
       }
-    }
-  }
-
-  void _initializeAnimations() {
-    _pulseController = AnimationController(
-      duration: Duration(milliseconds: 600),
-      vsync: this,
-    );
-    
-    _shakeController = AnimationController(
-      duration: Duration(milliseconds: 400),
-      vsync: this,
-    );
-
-    _scoreController = AnimationController(
-      duration: Duration(milliseconds: 2000),
-      vsync: this,
-    );
-
-    _particleController = AnimationController(
-      duration: Duration(milliseconds: 16),
-      vsync: this,
-    )..repeat();
-    
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-    
-    _shakeAnimation = Tween<double>(begin: 0, end: 10).animate(
-      CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
-    );
-
-    _scoreAnimation = Tween<Offset>(
-      begin: Offset(0, 0),
-      end: Offset(0, -0.5),
-    ).animate(CurvedAnimation(parent: _scoreController, curve: Curves.easeOut));
-
-    _particleController.addListener(() {
-      setState(() {
-        particles.removeWhere((p) => p.isDead);
-        for (var particle in particles) {
-          particle.update();
-        }
-      });
-    });
-  }
-
-  void _startParticleSystem() {
-    Timer.periodic(Duration(milliseconds: 2000), (timer) {
-      if (mounted) {
-        _addRandomParticle();
-      } else {
-        timer.cancel();
-      }
-    });
-  }
-
-  void _addRandomParticle() {
-    final currentTheme = GameStats.themes[GameStats.currentTheme]!;
-    final random = math.Random();
-    
-    particles.add(Particle(
-      x: random.nextDouble() * MediaQuery.of(context).size.width,
-      y: MediaQuery.of(context).size.height,
-      vx: (random.nextDouble() - 0.5) * 2,
-      vy: -random.nextDouble() * 3 - 1,
-      emoji: currentTheme.particleEmojis[random.nextInt(currentTheme.particleEmojis.length)],
-      maxLife: 180.0,
-    ));
-  }
-
-  void _addCompletionParticles() {
-    final currentTheme = GameStats.themes[GameStats.currentTheme]!;
-    final random = math.Random();
-    
-    for (int i = 0; i < 20; i++) {
-      particles.add(Particle(
-        x: MediaQuery.of(context).size.width / 2,
-        y: MediaQuery.of(context).size.height / 2,
-        vx: (random.nextDouble() - 0.5) * 8,
-        vy: -random.nextDouble() * 6 - 2,
-        emoji: currentTheme.particleEmojis[random.nextInt(currentTheme.particleEmojis.length)],
-        maxLife: 120.0,
-      ));
     }
   }
 
   int _calculateInitialScore() {
-    int base = 500;
-    
-    // Grid size multiplier
-    switch (widget.gridSize) {
-      case GridSize.small: base += 200; break;
-      case GridSize.medium: base += 400; break;
-      case GridSize.large: base += 600; break;
-      case GridSize.standard: base += 800; break;
-      case GridSize.big: base += 1000; break;
-      case GridSize.mega: base += 1200; break;
-    }
-    
-    // Difficulty multiplier
-    switch (widget.difficulty) {
-      case SudokuDifficulty.easy: base += 100; break;
-      case SudokuDifficulty.medium: base += 300; break;
-      case SudokuDifficulty.hard: base += 500; break;
-      case SudokuDifficulty.expert: base += 800; break;
-    }
-    
-    // Mode bonuses
+    var base = 500;
+    base += switch (widget.gridSize) {
+      GridSize.small => 200,
+      GridSize.medium => 400,
+      GridSize.large => 600,
+      GridSize.standard => 800,
+      GridSize.big => 1000,
+      GridSize.mega => 1200,
+    };
+    base += switch (widget.difficulty) {
+      SudokuDifficulty.easy => 100,
+      SudokuDifficulty.medium => 300,
+      SudokuDifficulty.hard => 500,
+      SudokuDifficulty.expert => 800,
+    };
     if (widget.gridShape == GridShape.jigsaw) base += 200;
-    
     return base;
   }
 
   @override
   void dispose() {
-    _stopGameTimer(); // Stop the timer when the screen is destroyed
+    _stopGameTimer();
     _nextGameTimer?.cancel();
+    _elapsed.dispose();
     _pulseController.dispose();
     _shakeController.dispose();
     _scoreController.dispose();
-    _particleController.dispose();
     super.dispose();
   }
 
@@ -1343,38 +1229,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _placeNumberAt(int row, int col, int number) {
-    _placeNumber(row, col, number);
-  }
-
   void _placeNumber(int row, int col, int number) {
-    if (game == null) return;
-
-    if (game!.isValidMove(row, col, number)) {
-      setState(() {
-        game!.setCell(row, col, number);
-      });
-
-      if (_isGameCompleted()) {
-        _completeGame();
-      }
+    final g = game;
+    if (g == null) return;
+    if (g.isValidMove(row, col, number)) {
+      setState(() => g.setCell(row, col, number));
+      if (g.isSolved()) _completeGame();
     } else {
       _shakeController.forward().then((_) => _shakeController.reverse());
-      setState(() {
-        score = math.max(0, score - 25); // Penalty for wrong move
-      });
+      setState(() => score = math.max(0, score - 25));
     }
-  }
-
-  bool _isGameCompleted() {
-    return game?.isCompleted() ?? false;
   }
 
   void _clearCell() {
     if (selectedRow != null && selectedCol != null) {
-      setState(() {
-        game?.clearCell(selectedRow!, selectedCol!);
-      });
+      setState(() => game?.clearCell(selectedRow!, selectedCol!));
     }
   }
 
@@ -1382,15 +1251,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (selectedRow != null && selectedCol != null && game != null) {
       _showHintDialog();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Select a cell first!')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Select a cell first!')));
     }
   }
 
   void _showHintDialog() {
     final hints = game!.getSmartHints(selectedRow!, selectedCol!);
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1404,78 +1271,116 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: hints.map((hint) => Card(
-            child: ListTile(
-              title: Text(hint.title),
-              subtitle: Text(hint.description),
-              trailing: Text(
-                hint.penalty > 0 ? '-${hint.penalty}' : '',
-                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-              ),
-              onTap: () {
-                Navigator.pop(context); // Close this dialog
-                _showHintConfirmation(hint); // Open the confirmation dialog
-              },
-            ),
-          )).toList(),
+          children: hints
+              .map((hint) => Card(
+                    child: ListTile(
+                      title: Text(hint.title),
+                      subtitle: Text(hint.description),
+                      trailing: Text(
+                        hint.penalty > 0 ? '-${hint.penalty}' : '',
+                        style: const TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.bold),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showHintConfirmation(hint);
+                      },
+                    ),
+                  ))
+              .toList(),
         ),
       ),
     );
   }
 
-  void _completeGame() {
-    if (game == null) return;
+  void _showHintConfirmation(SmartHint hint) {
+    if (hint.penalty == 0) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(hint.title),
+        content: Text(
+            'Use this hint for a -${hint.penalty} score penalty?'),
+        actions: [
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          ElevatedButton(
+            child: const Text('Confirm'),
+            onPressed: () {
+              Navigator.pop(context);
+              _applyHint(hint);
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
-    _stopGameTimer(); // Stop the timer
-    // _soundService.playSound(SoundType.complete);
-    
-    final completionTime = _elapsedTime; // Rather use our state variable
-    // final completionTime = DateTime.now().difference(game!.startTime);
+  void _applyHint(SmartHint hint) {
+    final g = game;
+    if (g == null) return;
+    setState(() {
+      score = math.max(0, score - hint.penalty);
+      hintsUsed++;
+      GameStats.totalHintsUsed++;
+      switch (hint.type) {
+        case HintType.showPossible:
+          final numbers = (hint.data as List<int>).join(', ');
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Possible Numbers: $numbers')));
+          break;
+        case HintType.giveAnswer:
+        case HintType.nakedSingle:
+        case HintType.hiddenSingle:
+          g.setCell(selectedRow!, selectedCol!, hint.data as int);
+          break;
+        case HintType.conflict:
+          break;
+      }
+    });
+    if (g.isSolved()) _completeGame();
+  }
+
+  void _completeGame() {
+    final g = game;
+    if (g == null) return;
+    _stopGameTimer();
+
+    final completionTime = _elapsed.value;
     final timeBonus = math.max(0, 300 - completionTime.inSeconds ~/ 2);
     final finalScore = score + timeBonus;
-    
-    DebugLogger.log('Game completed! Score: $finalScore, Time: ${_formatDuration(completionTime)}');
-     
-    // Update statistics
+
     GameStats.totalPuzzlesSolved++;
     if (completionTime < GameStats.bestTime) {
       GameStats.bestTime = completionTime;
     }
     GameStats.currentStreak++;
-    
-    // Check for special achievements
     if (hintsUsed == 0 && widget.difficulty == SudokuDifficulty.hard) {
       GameStats.unlockedAchievements.add('no_hints_hard');
     }
-    
     AchievementSystem.checkAchievements();
-    
-    // Add completion particles
-    _addCompletionParticles();
-    
-    // Show floating score instead of modal
-    _showFloatingScore(finalScore, completionTime, timeBonus);
-    
-    // Auto-advance to next level after 3 seconds
-    _nextGameTimer = Timer(Duration(seconds: 3), () {
-      if (mounted) {
-        _startNextLevel();
-      }
+
+    _particleKey.currentState?.burst();
+    _showFloatingScore(finalScore, completionTime);
+
+    _nextGameTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) _startNextLevel();
     });
   }
 
-  void _showFloatingScore(int finalScore, Duration completionTime, int timeBonus) {
+  void _showFloatingScore(int finalScore, Duration completionTime) {
     setState(() {
       _showingScore = true;
-      _finalTime = completionTime; // Save the final time to our state variable
+      _finalTime = completionTime;
+      score = finalScore;
     });
-    
     _scoreController.forward().then((_) {
       Timer(const Duration(seconds: 2), () {
         if (mounted) {
-          setState(() {
-            _showingScore = false;
-          });
+          setState(() => _showingScore = false);
           _scoreController.reset();
         }
       });
@@ -1483,21 +1388,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _startNextLevel() {
-    DebugLogger.log('Starting next level');
-    try {
-      _initializeGame();
-      setState(() {
-        selectedRow = null;
-        selectedCol = null;
-        hintsUsed = 0;
-        _showingScore = false;
-        particles.clear();
-      });
-      _scoreController.reset();
-    } catch (e, stackTrace) {
-      DebugLogger.error('Failed to start next level', e, stackTrace);
-      _errorMessage = 'Failed to generate next puzzle. Please try again.';
-    }
+    _initializeGame();
+    setState(() {
+      selectedRow = null;
+      selectedCol = null;
+      hintsUsed = 0;
+      _showingScore = false;
+    });
+    _scoreController.reset();
   }
 
   void _goToMainMenu() {
@@ -1507,7 +1405,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading screen if game is not initialized yet
     if (game == null) {
       return Scaffold(
         body: Container(
@@ -1515,19 +1412,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: GameStats.themes[GameStats.currentTheme]!.gradient,
+              colors: GameStats.current.gradient,
             ),
           ),
-          child: Center(
+          child: const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CircularProgressIndicator(color: Colors.white),
                 SizedBox(height: 20),
-                Text(
-                  'Generating puzzle...',
-                  style: TextStyle(color: Colors.white, fontSize: 18),
-                ),
+                Text('Generating puzzle...',
+                    style: TextStyle(color: Colors.white, fontSize: 18)),
               ],
             ),
           ),
@@ -1537,48 +1432,41 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
-    final currentScheme = GameStats.themes[GameStats.currentTheme]!;
-    
+    final scheme = GameStats.current;
+
     return Scaffold(
       appBar: AppBar(
-        // title: Text('${widget.gridSize.name.toUpperCase()} ${widget.gameMode.name.toUpperCase()}'),
-        title: Text('${widget.gridSize.name.toUpperCase()} ${widget.gridShape.name.toUpperCase()}'),
-
-        backgroundColor: currentScheme.primary,
+        title: Text(
+            '${widget.gridSize.name.toUpperCase()} '
+            '${widget.gridShape.name.toUpperCase()}'),
+        backgroundColor: scheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          
           IconButton(
             onPressed: _goToMainMenu,
-            icon: Icon(Icons.home),
+            icon: const Icon(Icons.home),
             tooltip: 'Main Menu',
           ),
           Center(
             child: Padding(
-              padding: EdgeInsets.only(right: 8),
-              child: Text(
-                'Score: $score',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              padding: const EdgeInsets.only(right: 8),
+              child: Text('Score: $score',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ),
           Center(
             child: Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Text(
-                _formatDuration(_elapsedTime),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              padding: const EdgeInsets.only(right: 16),
+              child: ValueListenableBuilder<Duration>(
+                valueListenable: _elapsed,
+                builder: (context, value, _) => Text(
+                  _formatDuration(value),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
-              /* child: StreamBuilder<String>(
-                stream: game!.timeStream,
-                builder: (context, snapshot) {
-                  return Text(
-                    snapshot.data ?? '00:00',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  );
-                },
-              ), */
             ),
           ),
         ],
@@ -1588,137 +1476,65 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: currentScheme.gradient,
+            colors: scheme.gradient,
           ),
         ),
         child: SafeArea(
           child: Stack(
             children: [
-              // Particle background
-              ...particles.map((particle) => Positioned(
-                left: particle.x,
-                top: particle.y,
-                child: Opacity(
-                  opacity: particle.opacity * 0.7,
-                  child: Text(
-                    particle.emoji,
-                    style: TextStyle(fontSize: 20),
-                  ),
-                ),
-              )),
-              
+              Positioned.fill(child: ParticleLayer(key: _particleKey)),
               Padding(
                 padding: EdgeInsets.all(isTablet ? 24 : 16),
                 child: Column(
                   children: [
-                    
                     Expanded(
                       flex: isTablet ? 3 : 2,
                       child: Center(
                         child: AnimatedBuilder(
                           animation: _shakeAnimation,
-                          builder: (context, child) {
-                            return Transform.translate(
-                              offset: Offset(_shakeAnimation.value, 0),
-                              child: _buildSudokuGrid(isTablet, currentScheme),
-                            );
-                          },
+                          builder: (context, child) => Transform.translate(
+                            offset: Offset(_shakeAnimation.value, 0),
+                            child: child,
+                          ),
+                          child: _buildSudokuGrid(isTablet, scheme),
                         ),
                       ),
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: _showHint,
-                            icon: Icon(Icons.lightbulb),
-                            label: Text('Smart Hint'),
+                            icon: const Icon(Icons.lightbulb),
+                            label: const Text('Smart Hint'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.orange,
                               foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
                         ),
-                        SizedBox(width: 10),
+                        const SizedBox(width: 10),
                         ElevatedButton(
                           onPressed: _clearCell,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red,
                             foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 20),
                           ),
-                          child: Icon(Icons.clear),
+                          child: const Icon(Icons.clear),
                         ),
                       ],
                     ),
-                    SizedBox(height: 10),
-                    Expanded(
-                      flex: 1,
-                      child: _buildNumberPad(isTablet),
-                    ),
+                    const SizedBox(height: 10),
+                    Expanded(flex: 1, child: _buildNumberPad(isTablet)),
                   ],
                 ),
               ),
-              // Floating score display
-              if (_showingScore)
-                AnimatedBuilder(
-                  animation: _scoreAnimation,
-                  builder: (context, child) {
-                    return Transform.translate(
-                      offset: Offset(
-                        0,
-                        _scoreAnimation.value.dy * MediaQuery.of(context).size.height,
-                      ),
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '🎉 COMPLETED!',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: currentScheme.primary,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Score: $score', // This is the score *before* the time bonus
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                              // THE FIX IS HERE:
-                              Text(
-                                'Time: ${_formatDuration(_finalTime)}',
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                              
-                              const SizedBox(height: 10),
-                              Text(
-                                'Next puzzle in 3s...',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+              if (_showingScore) _buildFloatingScore(scheme),
             ],
           ),
         ),
@@ -1726,23 +1542,71 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSudokuGrid(bool isTablet, EnvironmentalTheme colorScheme) {
-    final gridDim = game!.gridDim;
+  Widget _buildFloatingScore(EnvironmentalTheme scheme) {
+    return AnimatedBuilder(
+      animation: _scoreAnimation,
+      builder: (context, child) => Transform.translate(
+        offset: Offset(
+            0, _scoreAnimation.value.dy * MediaQuery.of(context).size.height),
+        child: child,
+      ),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('🎉 COMPLETED!',
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: scheme.primary)),
+              const SizedBox(height: 10),
+              Text('Score: $score',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Time: ${_formatDuration(_finalTime)}',
+                  style: const TextStyle(fontSize: 16)),
+              const SizedBox(height: 10),
+              Text('Next puzzle in 3s...',
+                  style: TextStyle(color: Colors.grey.shade600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSudokuGrid(bool isTablet, EnvironmentalTheme scheme) {
+    final g = game!;
+    final gridDim = g.gridDim;
     final maxGridSize = isTablet ? 450.0 : 320.0;
-    final gridSize = math.min(maxGridSize, MediaQuery.of(context).size.width - 32);
-    final cellSize = gridSize / gridDim;
-    
+    final gridPixels =
+        math.min(maxGridSize, MediaQuery.of(context).size.width - 32);
+    final cellSize = gridPixels / gridDim;
+
     return Container(
-      width: gridSize,
-      height: gridSize,
+      width: gridPixels,
+      height: gridPixels,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 20,
-            offset: Offset(0, 10),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -1750,68 +1614,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(16),
         child: Stack(
           children: [
-            // Grid lines
             CustomPaint(
-              size: Size(gridSize, gridSize),
-              painter: SudokuGridPainter(game!.gridDim, game!.regions),
+              size: Size(gridPixels, gridPixels),
+              painter: SudokuGridPainter(g.gridDim, g.regions,
+                  jigsaw: widget.gridShape == GridShape.jigsaw),
             ),
-            // Cells
             for (int row = 0; row < gridDim; row++)
               for (int col = 0; col < gridDim; col++)
                 Positioned(
-                  left: (col * cellSize).toDouble(),
-                  top: (row * cellSize).toDouble(),
+                  left: col * cellSize,
+                  top: row * cellSize,
                   width: cellSize,
                   height: cellSize,
-                  child: AnimatedBuilder(
-                    animation: _pulseAnimation,
-                    builder: (context, child) {
-                      final isSelected = selectedRow == row && selectedCol == col;
-                      return Transform.scale(
-                        scale: isSelected ? _pulseAnimation.value : 1.0,
-                        child: DragTarget<int>(
-                          onAccept: (number) {
-                            _placeNumberAt(row, col, number);
-                          },
-                          onWillAccept: (number) => number != null,
-                          builder: (context, candidateData, rejectedData) {
-                            final isHovered = candidateData.isNotEmpty;
-                            return GestureDetector(
-                              onTap: () => _selectCell(row, col),
-                              child: Container(
-                                margin: EdgeInsets.all(0.5),
-                                decoration: BoxDecoration(
-                                  color: isHovered 
-                                      ? colorScheme.accent.withOpacity(0.7)
-                                      : _getCellColor(row, col, colorScheme),
-                                  border: Border.all(
-                                    color: isSelected 
-                                        ? colorScheme.primary
-                                        : (isHovered ? colorScheme.primary.withOpacity(0.5) : Colors.transparent),
-                                    width: isSelected ? 3 : (isHovered ? 2 : 0),
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    game!.grid[row][col] == 0 ? '' : '${game!.grid[row][col]}',
-                                    style: TextStyle(
-                                      fontSize: isTablet ? 28 : 20,
-                                      fontWeight: game!.isOriginal[row][col] 
-                                          ? FontWeight.bold 
-                                          : FontWeight.w500,
-                                      color: game!.isOriginal[row][col] 
-                                          ? Colors.black 
-                                          : colorScheme.primary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildCell(row, col, isTablet, scheme),
                 ),
           ],
         ),
@@ -1819,33 +1634,79 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Color _getCellColor(int row, int col, EnvironmentalTheme colorScheme) {
-    if (selectedRow == row && selectedCol == col) {
-      return colorScheme.accent;
+  Widget _buildCell(
+      int row, int col, bool isTablet, EnvironmentalTheme scheme) {
+    final g = game!;
+    final isSelected = selectedRow == row && selectedCol == col;
+
+    Widget cell = DragTarget<int>(
+      onAcceptWithDetails: (details) => _placeNumber(row, col, details.data),
+      onWillAcceptWithDetails: (_) => true,
+      builder: (context, candidateData, rejectedData) {
+        final isHovered = candidateData.isNotEmpty;
+        return GestureDetector(
+          onTap: () => _selectCell(row, col),
+          child: Container(
+            margin: const EdgeInsets.all(0.5),
+            decoration: BoxDecoration(
+              color: isHovered
+                  ? scheme.accent.withValues(alpha: 0.7)
+                  : _getCellColor(row, col, scheme),
+              border: Border.all(
+                color: isSelected
+                    ? scheme.primary
+                    : (isHovered
+                        ? scheme.primary.withValues(alpha: 0.5)
+                        : Colors.transparent),
+                width: isSelected ? 3 : (isHovered ? 2 : 0),
+              ),
+            ),
+            child: Center(
+              child: Text(
+                g.grid[row][col] == 0 ? '' : '${g.grid[row][col]}',
+                style: TextStyle(
+                  fontSize: isTablet ? 28 : 20,
+                  fontWeight:
+                      g.isOriginal[row][col] ? FontWeight.bold : FontWeight.w500,
+                  color: g.isOriginal[row][col] ? Colors.black : scheme.primary,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    // Only the selected cell pulses, so only it is wrapped in an
+    // AnimatedBuilder — the rest of the grid stays static.
+    if (isSelected) {
+      return AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) =>
+            Transform.scale(scale: _pulseAnimation.value, child: child),
+        child: cell,
+      );
     }
-    if (selectedRow == row || selectedCol == col) {
-      return Colors.grey.shade200;
-    }
-    
+    return cell;
+  }
+
+  Color _getCellColor(int row, int col, EnvironmentalTheme scheme) {
+    if (selectedRow == row && selectedCol == col) return scheme.accent;
+    if (selectedRow == row || selectedCol == col) return Colors.grey.shade200;
+
+    final regionId = game!.regions[row][col];
     if (widget.gridShape == GridShape.jigsaw) {
-      // Color jigsaw regions differently
-      final regionId = game!.regions[row][col];
-      final colors = [
-        Colors.grey.shade50,
-        Colors.blue.shade50,
-        Colors.green.shade50,
-        Colors.orange.shade50,
-        Colors.purple.shade50,
-        Colors.red.shade50,
+      const colors = [
+        Color(0xFFFAFAFA),
+        Color(0xFFE3F2FD),
+        Color(0xFFE8F5E9),
+        Color(0xFFFFF3E0),
+        Color(0xFFF3E5F5),
+        Color(0xFFFFEBEE),
       ];
       return colors[regionId % colors.length];
-    } else {
-      // Standard box coloring - use region ID for alternating colors
-      final regionId = game!.regions[row][col];
-      if (regionId % 2 == 0) {
-        return colorScheme.cellHighlight;
-      }
     }
+    if (regionId % 2 == 0) return scheme.cellHighlight;
     return Colors.white;
   }
 
@@ -1853,13 +1714,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final buttonSize = isTablet ? 50.0 : 40.0;
     final fontSize = isTablet ? 20.0 : 16.0;
     final maxNumber = game!.gridDim;
-    
+    final primary = GameStats.current.primary;
+
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: GridView.builder(
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -1881,60 +1743,47 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 8,
-                    offset: Offset(0, 4),
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
               child: Center(
-                child: Text(
-                  '$number',
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                    color: GameStats.themes[GameStats.currentTheme]!.primary,
-                  ),
-                ),
+                child: Text('$number',
+                    style: TextStyle(
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.bold,
+                        color: primary)),
               ),
             ),
-            childWhenDragging: Container(
-              child: ElevatedButton(
-                onPressed: null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white.withOpacity(0.5),
-                  foregroundColor: GameStats.themes[GameStats.currentTheme]!.primary.withOpacity(0.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 4,
-                  padding: EdgeInsets.zero,
-                ),
-                child: Text(
-                  '$number',
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+            childWhenDragging: ElevatedButton(
+              onPressed: null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white.withValues(alpha: 0.5),
+                foregroundColor: primary.withValues(alpha: 0.5),
+                shape:
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 4,
+                padding: EdgeInsets.zero,
               ),
+              child: Text('$number',
+                  style: TextStyle(
+                      fontSize: fontSize, fontWeight: FontWeight.bold)),
             ),
-            child: Container(
-              child: ElevatedButton(
-                onPressed: () => _inputNumber(number),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: GameStats.themes[GameStats.currentTheme]!.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 8,
-                  padding: EdgeInsets.zero,
-                ),
-                child: Text(
-                  '$number',
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+            child: ElevatedButton(
+              onPressed: () => _inputNumber(number),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: primary,
+                shape:
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 8,
+                padding: EdgeInsets.zero,
               ),
+              child: Text('$number',
+                  style: TextStyle(
+                      fontSize: fontSize, fontWeight: FontWeight.bold)),
             ),
           );
         },
@@ -1943,139 +1792,44 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 }
 
-class BoundaryCell {
-  final int row;
-  final int col;
-  final int currentRegion;
-  final int neighborRegion;
-  final List<int> direction;
-  
-  BoundaryCell({
-    required this.row,
-    required this.col,
-    required this.currentRegion,
-    required this.neighborRegion,
-    required this.direction,
-  });
-}
-
-class PuzzleCache {
-  static final PuzzleCache _instance = PuzzleCache._internal();
-  factory PuzzleCache() => _instance;
-  PuzzleCache._internal();
-
-  // The cache now groups blueprints by their key (e.g., "small-jigsaw")
-  final Map<String, List<PuzzleBlueprint>> _cache = {};
-  final StorageService _storage = StorageService();
-
-  // Load all saved blueprints from the file into memory when the app starts.
-  Future<void> initialize() async {
-    final blueprints = await _storage.loadBlueprints();
-    for (final bp in blueprints) {
-      final key = _getKey(bp.gridSize, bp.gridShape);
-      if (!_cache.containsKey(key)) {
-        _cache[key] = [];
-      }
-      _cache[key]!.add(bp);
-    }
-    DebugLogger.log("Puzzle cache initialized with ${_cache.length} blueprint types.");
-  }
-
-  String _getKey(GridSize size, GridShape shape) {
-    return '${size.name}-${shape.name}';
-  }
-
-  PuzzleBlueprint? getRandom(GridSize size, GridShape shape) {
-    final key = _getKey(size, shape);
-    if (_cache.containsKey(key) && _cache[key]!.isNotEmpty) {
-      DebugLogger.log('--- Blueprint for $key found in CACHE! Picking one at random. ---');
-      final list = _cache[key]!;
-      return list[math.Random().nextInt(list.length)];
-    }
-    return null;
-  }
-
-  Future<void> set(PuzzleBlueprint blueprint) async {
-    final key = _getKey(blueprint.gridSize, blueprint.gridShape);
-    if (!_cache.containsKey(key)) {
-      _cache[key] = [];
-    }
-    _cache[key]!.add(blueprint);
-    DebugLogger.log('--- Saving blueprint to memory and disk for $key. ---');
-    
-    // Save the entire collection of all blueprints to the file.
-    final allBlueprints = _cache.values.expand((list) => list).toList();
-    await _storage.saveBlueprints(allBlueprints);
-  }
-}
+// ---------------------------------------------------------------------------
+// Grid painter
+// ---------------------------------------------------------------------------
 
 class SudokuGridPainter extends CustomPainter {
   final int gridDim;
-  final List<List<int>>? regions;
-  
-  SudokuGridPainter(this.gridDim, [this.regions]);
+  final List<List<int>> regions;
+  final bool jigsaw;
+
+  SudokuGridPainter(this.gridDim, this.regions, {this.jigsaw = false});
 
   @override
   void paint(Canvas canvas, Size size) {
-    try {
-      final paint = Paint()
-        ..color = Colors.black
-        ..strokeWidth = 1;
-
-      final thickPaint = Paint()
-        ..color = Colors.black
-        ..strokeWidth = 3;
-
-      final cellSize = size.width / gridDim;
-
-      if (regions != null) {
-        // Draw jigsaw regions
-        _drawJigsawGrid(canvas, size, cellSize);
-      } else {
-        // Draw standard grid
-        _drawStandardGrid(canvas, size, cellSize);
-      }
-    } catch (e, stackTrace) {
-      DebugLogger.error('Error painting grid', e, stackTrace);
+    final cellSize = size.width / gridDim;
+    if (jigsaw) {
+      _drawJigsawGrid(canvas, size, cellSize);
+    } else {
+      _drawStandardGrid(canvas, size, cellSize);
     }
   }
 
   void _drawStandardGrid(Canvas canvas, Size size, double cellSize) {
-    final paint = Paint()..color = Colors.black..strokeWidth = 1;
-    final thickPaint = Paint()..color = Colors.black..strokeWidth = 3;
-    
-    // Get region dimensions based on grid size
-    List<int> regionSizes;
-    switch (gridDim) {
-      case 4: regionSizes = [2, 2]; break;
-      case 6: regionSizes = [2, 3]; break;
-      case 8: regionSizes = [2, 4]; break;
-      case 9: regionSizes = [3, 3]; break;
-      case 10: regionSizes = [2, 5]; break;
-      case 12: regionSizes = [3, 4]; break;
-      default: regionSizes = [2, 2]; break;
-    }
-    
-    final rowsPerRegion = regionSizes[0];
-    final colsPerRegion = regionSizes[1];
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 1;
+    final thickPaint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 3;
 
-    for (int i = 0; i <= gridDim; i++) {
-      final isThickHorizontal = i % rowsPerRegion == 0;
-      final isThickVertical = i % colsPerRegion == 0;
-      
-      // Vertical lines
-      canvas.drawLine(
-        Offset(i * cellSize, 0),
-        Offset(i * cellSize, size.height),
-        isThickVertical ? thickPaint : paint,
-      );
-      
-      // Horizontal lines
-      canvas.drawLine(
-        Offset(0, i * cellSize),
-        Offset(size.width, i * cellSize),
-        isThickHorizontal ? thickPaint : paint,
-      );
+    final box = boxDimensionsFor(gridDim);
+    final rowsPerBox = box[0];
+    final colsPerBox = box[1];
+
+    for (var i = 0; i <= gridDim; i++) {
+      canvas.drawLine(Offset(i * cellSize, 0), Offset(i * cellSize, size.height),
+          i % colsPerBox == 0 ? thickPaint : paint);
+      canvas.drawLine(Offset(0, i * cellSize), Offset(size.width, i * cellSize),
+          i % rowsPerBox == 0 ? thickPaint : paint);
     }
   }
 
@@ -2085,34 +1839,24 @@ class SudokuGridPainter extends CustomPainter {
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
-    // Draw region boundaries
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        final currentRegion = regions![row][col];
-        
-        // Check each direction and draw border if different region
+    for (var row = 0; row < gridDim; row++) {
+      for (var col = 0; col < gridDim; col++) {
+        final region = regions[row][col];
         final left = col * cellSize;
         final top = row * cellSize;
         final right = left + cellSize;
         final bottom = top + cellSize;
 
-        // Top border
-        if (row == 0 || regions![row - 1][col] != currentRegion) {
+        if (row == 0 || regions[row - 1][col] != region) {
           canvas.drawLine(Offset(left, top), Offset(right, top), paint);
         }
-        
-        // Bottom border
-        if (row == gridDim - 1 || regions![row + 1][col] != currentRegion) {
+        if (row == gridDim - 1 || regions[row + 1][col] != region) {
           canvas.drawLine(Offset(left, bottom), Offset(right, bottom), paint);
         }
-        
-        // Left border
-        if (col == 0 || regions![row][col - 1] != currentRegion) {
+        if (col == 0 || regions[row][col - 1] != region) {
           canvas.drawLine(Offset(left, top), Offset(left, bottom), paint);
         }
-        
-        // Right border
-        if (col == gridDim - 1 || regions![row][col + 1] != currentRegion) {
+        if (col == gridDim - 1 || regions[row][col + 1] != region) {
           canvas.drawLine(Offset(right, top), Offset(right, bottom), paint);
         }
       }
@@ -2120,1056 +1864,95 @@ class SudokuGridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
+  bool shouldRepaint(SudokuGridPainter oldDelegate) =>
+      oldDelegate.gridDim != gridDim ||
+      oldDelegate.jigsaw != jigsaw ||
+      !identical(oldDelegate.regions, regions);
 }
 
-class SmartHint {
-  final HintType type;
-  final String title;
-  final String description;
-  final int penalty;
-  final dynamic data; // To hold the solution data (e.g., list of numbers, single number)
+// ---------------------------------------------------------------------------
+// Puzzle cache + storage
+// ---------------------------------------------------------------------------
 
-  SmartHint({
-    required this.type,
-    required this.title,
-    required this.description,
-    required this.penalty,
-    this.data,
-  });
+class PuzzleCache {
+  static final PuzzleCache _instance = PuzzleCache._internal();
+  factory PuzzleCache() => _instance;
+  PuzzleCache._internal();
+
+  final Map<String, List<PuzzleBlueprint>> _cache = {};
+  final StorageService _storage = StorageService();
+  final math.Random _random = math.Random();
+
+  Future<void> initialize() async {
+    final blueprints = await _storage.loadBlueprints();
+    for (final bp in blueprints) {
+      _cache.putIfAbsent(_key(bp.gridSize, bp.gridShape), () => []).add(bp);
+    }
+    DebugLogger.log('Puzzle cache initialized: ${_cache.length} types.');
+  }
+
+  String _key(GridSize size, GridShape shape) => '${size.name}-${shape.name}';
+
+  PuzzleBlueprint? getRandom(GridSize size, GridShape shape) {
+    final list = _cache[_key(size, shape)];
+    if (list == null || list.isEmpty) return null;
+    return list[_random.nextInt(list.length)];
+  }
+
+  Future<void> set(PuzzleBlueprint blueprint) async {
+    _cache
+        .putIfAbsent(_key(blueprint.gridSize, blueprint.gridShape), () => [])
+        .add(blueprint);
+    await _storage.appendBlueprint(blueprint);
+  }
 }
 
-Future<SudokuGame> _generateSudokuInBackground(Map<String, dynamic> params) async {
-  final difficulty = params['difficulty'] as SudokuDifficulty;
-  final gridSize = params['gridSize'] as GridSize;
-  final gridShape = params['gridShape'] as GridShape;
+class StorageService {
+  static final StorageService _instance = StorageService._internal();
+  factory StorageService() => _instance;
+  StorageService._internal();
 
-  // This will run in a separate thread and can't hang the UI
-  return SudokuGame._(difficulty, gridSize, gridShape);
+  Future<File> get _localFile async {
+    final directory = await getApplicationDocumentsDirectory();
+    return File('${directory.path}/puzzles.json');
+  }
+
+  Future<List<PuzzleBlueprint>> loadBlueprints() async {
+    try {
+      final file = await _localFile;
+      if (!await file.exists()) return [];
+      final contents = await file.readAsString();
+      if (contents.isEmpty) return [];
+      final List<dynamic> jsonList = jsonDecode(contents);
+      return jsonList
+          .map((json) => PuzzleBlueprint.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      DebugLogger.error('Failed to load blueprints.', e);
+      return [];
+    }
+  }
+
+  Future<void> _saveBlueprints(List<PuzzleBlueprint> blueprints) async {
+    try {
+      final file = await _localFile;
+      await file
+          .writeAsString(jsonEncode(blueprints.map((bp) => bp.toJson()).toList()));
+    } catch (e) {
+      DebugLogger.error('Failed to save blueprints.', e);
+    }
+  }
+
+  Future<void> appendBlueprint(PuzzleBlueprint blueprint) async {
+    final existing = await loadBlueprints();
+    existing.add(blueprint);
+    await _saveBlueprints(existing);
+  }
 }
 
-class SudokuGame {
-  late List<List<int>> grid;
-  late List<List<bool>> isOriginal;
-  late List<List<int>> solution;
-  late List<List<int>> regions; // For jigsaw puzzles
-  late int gridDim;
-  final SudokuDifficulty difficulty;
-
-  SudokuGame.fromExisting(SudokuGame other) : difficulty = other.difficulty { // <-- Added initializer
-    gridDim = other.gridDim;
-    // This constructor is used when loading from the cache.
-    // We copy the SOLUTION, not the unsolved grid.
-    grid = other.solution.map((row) => List<int>.from(row)).toList();
-    isOriginal = List.generate(gridDim, (_) => List.filled(gridDim, false));
-    solution = other.solution.map((row) => List<int>.from(row)).toList();
-    regions = other.regions.map((row) => List<int>.from(row)).toList();
-
-    // IMPORTANT: We re-puzzlify the loaded solution. This makes the cached puzzle
-    // feel new each time by removing a different set of numbers.
-    _puzzlify();
-  }
-
-  SudokuGame.fromBlueprint(PuzzleBlueprint blueprint, this.difficulty) {
-    gridDim = blueprint.gridSize.index == 0 ? 4 : blueprint.gridSize.index == 1 ? 6 : blueprint.gridSize.index == 2 ? 8 : blueprint.gridSize.index == 3 ? 9 : blueprint.gridSize.index == 4 ? 10 : 12;
-    grid = blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
-    solution = blueprint.solutionGrid.map((row) => List<int>.from(row)).toList();
-    regions = blueprint.regions.map((row) => List<int>.from(row)).toList();
-    isOriginal = List.generate(gridDim, (_) => List.filled(gridDim, false));
-
-    _puzzlify(); // Turn the solved grid into a playable puzzle
-  }
-
-  void _puzzlify() {
-  DebugLogger.log('Puzzlifying grid: Saving solution and removing cells...');
-  
-  // Step 1: Save the complete grid as the solution.
-  for (int i = 0; i < gridDim; i++) {
-    for (int j = 0; j < gridDim; j++) {
-      solution[i][j] = grid[i][j];
-    }
-  }
-
-  // Step 2: Remove a number of cells based on the difficulty.
-    int cellsToRemove = _getCellsToRemove(difficulty);
-    _removeRandomCells(cellsToRemove);
-
-    // Step 3: Mark the remaining numbers as original (not editable by the player).
-    for (int i = 0; i < gridDim; i++) {
-      for (int j = 0; j < gridDim; j++) {
-        isOriginal[i][j] = grid[i][j] != 0;
-      }
-    }
-  }
-
-  // SudokuGame(SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) {
-  // we make that async
-  SudokuGame._(this.difficulty, GridSize gridSize, GridShape gridShape) {
-    try {
-      DebugLogger.log('Initializing sudoku game with ${gridSize.name} ${difficulty.name} ${gridShape.name}');
-      _initializeGrid(gridSize);
-      
-      if (gridShape == GridShape.jigsaw) {
-        _generateJigsawPuzzle();
-      } else {
-        _generatePuzzle();
-      }
-      
-      _puzzlify();
-      
-      DebugLogger.log('Sudoku game initialized successfully');
-    } catch (e, stackTrace) {
-      DebugLogger.error('Failed to initialize sudoku game', e, stackTrace);
-      rethrow;
-    }
-  }
-
-  static Future<SudokuGame> create(
-      SudokuDifficulty difficulty, GridSize gridSize, GridShape gridShape) async {
-    
-    final params = {
-      'difficulty': difficulty,
-      'gridSize': gridSize,
-      'gridShape': gridShape,
-    };
-
-    // Run the generation in an isolate with a 3-second timeout.
-    // If it hangs, it will throw an error instead of freezing the app.
-    return await compute(_generateSudokuInBackground, params)
-        .timeout(const Duration(seconds: 3));
-  }
-
-  void _initializeGrid(GridSize gridSize) {
-    switch (gridSize) {
-      case GridSize.small:
-        gridDim = 4;
-        break;
-      case GridSize.medium:
-        gridDim = 6;
-        break;
-      case GridSize.large:
-        gridDim = 8;
-        break;
-      case GridSize.standard:
-        gridDim = 9;
-        break;
-      case GridSize.big:
-        gridDim = 10;
-        break;
-      case GridSize.mega:
-        gridDim = 12;
-        break;
-    }
-    
-    DebugLogger.log('Grid dimension: $gridDim');
-    grid = List.generate(gridDim, (_) => List.filled(gridDim, 0));
-    isOriginal = List.generate(gridDim, (_) => List.filled(gridDim, false));
-    solution = List.generate(gridDim, (_) => List.filled(gridDim, 0));
-    regions = List.generate(gridDim, (_) => List.filled(gridDim, 0));
-  }
-
-  void _generatePuzzle() { // <-- Removed `difficulty` parameter
-    try {
-      DebugLogger.log('Generating ${difficulty.name} puzzle');
-      _initializeStandardRegions();
-      
-      int attempts = 0;
-      bool success = false;
-      while (attempts < 10 && !success) {
-        attempts++;
-        DebugLogger.log('Generation attempt $attempts');
-        
-        for (int i = 0; i < gridDim; i++) {
-          for (int j = 0; j < gridDim; j++) {
-            grid[i][j] = 0;
-          }
-        }
-        
-        success = _generateCompleteSudoku();
-        if (!success) {
-          DebugLogger.log('Attempt $attempts failed, retrying...');
-        }
-      }
-      
-      if (!success) {
-        throw Exception('Failed to generate complete sudoku after $attempts attempts');
-      }
-      
-      DebugLogger.log('Puzzle grid generated successfully');
-    } catch (e, stackTrace) {
-      DebugLogger.error('Failed to generate puzzle', e, stackTrace);
-      rethrow;
-    }
-  }
-
-  void _generateJigsawPuzzle() { // <-- Removed `difficulty` parameter
-    DebugLogger.log('--- STARTING JIGSAW PUZZLE GENERATION ($gridDim x $gridDim) ---');
-
-    if (gridDim >= 10) {
-      _generateSimplifiedJigsawRegions();
-    } else {
-      _generateJigsawRegions();
-    }
-
-    for (int i = 0; i < gridDim; i++) {
-      for (int j = 0; j < gridDim; j++) {
-        grid[i][j] = 0;
-      }
-    }
-    
-    DebugLogger.log('Starting solver...');
-    if (!_generateCompleteJigsawSudoku()) {
-      throw Exception('Solver failed to generate a puzzle for the given shape.');
-    }
-    
-    DebugLogger.log('--- Jigsaw Generation SUCCEEDED on this attempt! ---');
-  }
-
-  void _initializeStandardRegions() {
-    final regionSizes = _getRegionSize();
-    final rowsPerRegion = regionSizes[0];
-    final colsPerRegion = regionSizes[1];
-    
-    DebugLogger.log('Region size: ${rowsPerRegion}x${colsPerRegion}');
-    
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        final regionRow = row ~/ rowsPerRegion;
-        final regionCol = col ~/ colsPerRegion;
-        regions[row][col] = regionRow * (gridDim ~/ colsPerRegion) + regionCol;
-      }
-    }
-  }
-
-  List<int> _getRegionSize() {
-    // Returns [rows, cols] for each region
-    switch (gridDim) {
-      case 4: return [2, 2]; // 2x2 regions
-      case 6: return [2, 3]; // 2x3 regions  
-      case 8: return [2, 4]; // 2x4 regions
-      case 9: return [3, 3]; // 3x3 regions
-      case 10: return [2, 5]; // 2x5 regions
-      case 12: return [3, 4]; // 3x4 regions
-      default: return [2, 2];
-    }
-  }
-
-
-  bool _attemptJigsawGeneration() {
-    DebugLogger.log('Using controlled adjacent region swapping');
-    
-    // Start with standard regions
-    _initializeStandardRegions();
-    
-    math.Random random = math.Random();
-    int totalSwaps = 0;
-    
-    // For each pair of adjacent regions, perform controlled swaps
-    for (int regionA = 0; regionA < gridDim; regionA++) {
-      for (int regionB = regionA + 1; regionB < gridDim; regionB++) {
-        int swapsForThisPair = _performControlledSwaps(regionA, regionB, random);
-        totalSwaps += swapsForThisPair;
-      }
-    }
-    
-    DebugLogger.log('Completed $totalSwaps total controlled swaps');
-    return true; // Always succeeds since we start from valid state
-  }
-
-  int _performLimitedSwaps(int regionA, int regionB, math.Random random, int maxSwaps) {
-    // Same as _performControlledSwaps but limited to maxSwaps
-    List<List<int>> boundaryA = [];
-    List<List<int>> boundaryB = [];
-    
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        if (regions[row][col] == regionA) {
-          if (_isAdjacentToRegion(row, col, regionB)) {
-            boundaryA.add([row, col]);
-          }
-        } else if (regions[row][col] == regionB) {
-          if (_isAdjacentToRegion(row, col, regionA)) {
-            boundaryB.add([row, col]);
-          }
-        }
-      }
-    }
-    
-    if (boundaryA.isEmpty || boundaryB.isEmpty) return 0;
-    
-    int swapsToPerform = math.min(maxSwaps, math.min(boundaryA.length, boundaryB.length));
-    int successfulSwaps = 0;
-    
-    boundaryA.shuffle(random);
-    boundaryB.shuffle(random);
-    
-    for (int i = 0; i < swapsToPerform; i++) {
-      List<int> cellA = boundaryA[i];
-      List<int> cellB = boundaryB[i];
-      
-      if (_canSwapCells(cellA[0], cellA[1], regionA, cellB[0], cellB[1], regionB)) {
-        regions[cellA[0]][cellA[1]] = regionB;
-        regions[cellB[0]][cellB[1]] = regionA;
-        successfulSwaps++;
-      }
-    }
-    
-    return successfulSwaps;
-  }
-
-  int _performControlledSwaps(int regionA, int regionB, math.Random random) {
-    // Find boundary cells between these two specific regions
-    List<List<int>> boundaryA = []; // Cells in regionA adjacent to regionB
-    List<List<int>> boundaryB = []; // Cells in regionB adjacent to regionA
-    
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        if (regions[row][col] == regionA) {
-          if (_isAdjacentToRegion(row, col, regionB)) {
-            boundaryA.add([row, col]);
-          }
-        } else if (regions[row][col] == regionB) {
-          if (_isAdjacentToRegion(row, col, regionA)) {
-            boundaryB.add([row, col]);
-          }
-        }
-      }
-    }
-    
-    if (boundaryA.isEmpty || boundaryB.isEmpty) {
-      return 0; // These regions aren't adjacent
-    }
-    
-    DebugLogger.log('Region $regionA<->$regionB: ${boundaryA.length} and ${boundaryB.length} boundary cells');
-    
-    // Perform 1-3 swaps between these regions
-    int swapsToPerform = math.min(3, math.min(boundaryA.length, boundaryB.length));
-    int successfulSwaps = 0;
-    
-    for (int i = 0; i < swapsToPerform; i++) {
-      if (boundaryA.isEmpty || boundaryB.isEmpty) break;
-      
-      // Pick random cells from each boundary
-      boundaryA.shuffle(random);
-      boundaryB.shuffle(random);
-      
-      List<int> cellA = boundaryA[0];
-      List<int> cellB = boundaryB[0];
-      
-      if (_canSwapCells(cellA[0], cellA[1], regionA, cellB[0], cellB[1], regionB)) {
-        // Perform the swap
-        regions[cellA[0]][cellA[1]] = regionB;
-        regions[cellB[0]][cellB[1]] = regionA;
-        
-        successfulSwaps++;
-        DebugLogger.log('Swapped (${cellA[0]},${cellA[1]}) and (${cellB[0]},${cellB[1]}) between regions $regionA<->$regionB');
-        
-        // Update boundary lists
-        boundaryA.removeAt(0);
-        boundaryB.removeAt(0);
-      }
-    }
-    
-    return successfulSwaps;
-  }
-
-  bool _isAdjacentToRegion(int row, int col, int targetRegion) {
-    List<List<int>> directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-    
-    for (List<int> dir in directions) {
-      int newRow = row + dir[0];
-      int newCol = col + dir[1];
-      
-      if (newRow >= 0 && newRow < gridDim && 
-          newCol >= 0 && newCol < gridDim &&
-          regions[newRow][newCol] == targetRegion) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
-
-  bool _canSwapCells(int rowA, int colA, int regionA, int rowB, int colB, int regionB) {
-    // Temporarily perform the swap
-    regions[rowA][colA] = regionB;
-    regions[rowB][colB] = regionA;
-    
-    // Check if both regions remain connected
-    bool regionAConnected = _isRegionConnected(regionA);
-    bool regionBConnected = _isRegionConnected(regionB);
-    
-    // Revert the swap
-    regions[rowA][colA] = regionA;
-    regions[rowB][colB] = regionB;
-    
-    return regionAConnected && regionBConnected;
-  }
-
-  void _generateSimplifiedJigsawRegions() {
-    DebugLogger.log('Generating simplified jigsaw regions for large grid');
-    
-    _initializeStandardRegions();
-    
-    math.Random random = math.Random();
-    
-    // For the EXTREMELY complex 12x12 grid, we only do a few swaps
-    // to keep the regions simple and ensure the solver can finish in time.
-    int limitedSwaps = (gridDim == 12) ? 4 : gridDim; 
-    
-    int successfulSwaps = 0;
-    
-    for (int regionA = 0; regionA < gridDim && successfulSwaps < limitedSwaps; regionA++) {
-      for (int regionB = regionA + 1; regionB < gridDim && successfulSwaps < limitedSwaps; regionB++) {
-        int swaps = _performLimitedSwaps(regionA, regionB, random, 1);
-        successfulSwaps += swaps;
-      }
-    }
-    
-    DebugLogger.log('Simplified jigsaw: $successfulSwaps swaps completed');
-  }
-
-  void _generateJigsawRegions() {
-    DebugLogger.log('=== STARTING CONTROLLED ADJACENT SWAPPING ===');
-    
-    bool success = _attemptJigsawGeneration();
-    
-    if (!success) {
-      DebugLogger.log('Controlled swapping failed, using standard regions');
-      _initializeStandardRegions();
-    } else {
-      DebugLogger.log('=== JIGSAW GENERATION SUCCESSFUL ===');
-      _validateJigsawRegions();
-    }
-  }
-  
-  
-  bool _buildSingleRegion(int regionId, math.Random random) {
-    // Find all unassigned cells
-    List<List<int>> availableCells = [];
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        if (regions[row][col] == -1) {
-          availableCells.add([row, col]);
-        }
-      }
-    }
-    
-    DebugLogger.log('Building region $regionId: ${availableCells.length} cells available, need $gridDim');
-    
-    if (availableCells.length < gridDim) {
-      DebugLogger.log('ERROR: Not enough cells for region $regionId');
-      return false;
-    }
-    
-    // Try multiple seed positions
-    availableCells.shuffle(random);
-    int seedAttempts = math.min(15, availableCells.length);
-    
-    for (int attempt = 0; attempt < seedAttempts; attempt++) {
-      List<int> seedCell = availableCells[attempt];
-      DebugLogger.log('Region $regionId attempt ${attempt + 1}: trying seed (${seedCell[0]}, ${seedCell[1]})');
-      
-      if (_growRegionFromSeed(regionId, seedCell[0], seedCell[1], random)) {
-        DebugLogger.log('Region $regionId SUCCESS on attempt ${attempt + 1}');
-        return true;
-      }
-    }
-    
-    DebugLogger.log('Region $regionId FAILED after $seedAttempts attempts');
-    return false;
-  }
-
-  bool _growRegionFromSeed(int regionId, int seedRow, int seedCol, math.Random random) {
-    if (regions[seedRow][seedCol] != -1) return false;
-    
-    List<List<int>> regionCells = [[seedRow, seedCol]];
-    regions[seedRow][seedCol] = regionId;
-    
-    while (regionCells.length < gridDim) {
-      List<List<int>> candidates = [];
-      Set<String> checked = {};
-      
-      for (List<int> cell in regionCells) {
-        int row = cell[0];
-        int col = cell[1];
-        
-        List<List<int>> directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-        for (List<int> dir in directions) {
-          int newRow = row + dir[0];
-          int newCol = col + dir[1];
-          String key = '$newRow,$newCol';
-          
-          if (newRow >= 0 && newRow < gridDim && 
-              newCol >= 0 && newCol < gridDim &&
-              regions[newRow][newCol] == -1 &&
-              !checked.contains(key)) {
-            candidates.add([newRow, newCol]);
-            checked.add(key);
-          }
-        }
-      }
-      
-      if (candidates.isEmpty) {
-        DebugLogger.log('Region $regionId stuck at size ${regionCells.length}/$gridDim - no adjacent cells');
-        // Backtrack
-        for (List<int> cell in regionCells) {
-          regions[cell[0]][cell[1]] = -1;
-        }
-        return false;
-      }
-      
-      candidates.shuffle(random);
-      List<int> nextCell = candidates[0];
-      
-      regions[nextCell[0]][nextCell[1]] = regionId;
-      regionCells.add(nextCell);
-    }
-    
-    return true;
-  }
-  
-  bool _attemptDeadlockRecovery(List<List<List<int>>> regionCells, List<List<int>> availableCells, math.Random random) {
-    // Try to redistribute cells from oversized regions
-    for (int regionId = 0; regionId < gridDim; regionId++) {
-      if (regionCells[regionId].length > 1) {
-        // Find boundary cells that could be reassigned
-        List<List<int>> boundaryCells = [];
-        
-        for (List<int> cell in regionCells[regionId]) {
-          int row = cell[0];
-          int col = cell[1];
-          
-          // Check if this cell has unassigned neighbors
-          bool hasFreeNeighbor = false;
-          List<List<int>> directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-          
-          for (List<int> dir in directions) {
-            int newRow = row + dir[0];
-            int newCol = col + dir[1];
-            
-            if (newRow >= 0 && newRow < gridDim && 
-                newCol >= 0 && newCol < gridDim &&
-                regions[newRow][newCol] == -1) {
-              hasFreeNeighbor = true;
-              break;
-            }
-          }
-          
-          if (hasFreeNeighbor) {
-            boundaryCells.add([row, col]);
-          }
-        }
-        
-        if (boundaryCells.isNotEmpty) {
-          // Remove a boundary cell and make it available
-          boundaryCells.shuffle(random);
-          List<int> cellToRemove = boundaryCells[0];
-          int row = cellToRemove[0];
-          int col = cellToRemove[1];
-          
-          regions[row][col] = -1;
-          regionCells[regionId].removeWhere((cell) => cell[0] == row && cell[1] == col);
-          availableCells.add([row, col]);
-          
-          return true; // Recovery successful
-        }
-      }
-    }
-    
-    return false; // Recovery failed
-  }
-
-
-  void _clearRegions() {
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        regions[row][col] = -1;
-      }
-    }
-  }
-
-  void _validateJigsawRegions() {
-    DebugLogger.log('=== VALIDATING JIGSAW REGIONS ===');
-    
-    Map<int, int> regionSizes = {};
-    Map<int, List<String>> regionCells = {};
-    
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        int regionId = regions[row][col];
-        regionSizes[regionId] = (regionSizes[regionId] ?? 0) + 1;
-        
-        if (!regionCells.containsKey(regionId)) {
-          regionCells[regionId] = [];
-        }
-        regionCells[regionId]!.add('($row,$col)');
-      }
-    }
-    
-    bool valid = true;
-    
-    for (int regionId = 0; regionId < gridDim; regionId++) {
-      int size = regionSizes[regionId] ?? 0;
-      DebugLogger.log('Region $regionId: $size cells - ${regionCells[regionId]?.join(', ') ?? 'EMPTY'}');
-      
-      if (size != gridDim) {
-        DebugLogger.log('ERROR: Region $regionId has wrong size!');
-        valid = false;
-      }
-      
-      // Check connectivity
-      if (!_isRegionConnected(regionId)) {
-        DebugLogger.log('ERROR: Region $regionId is not connected!');
-        valid = false;
-      }
-    }
-    
-    if (valid) {
-      DebugLogger.log('All regions are valid and connected!');
-    } else {
-      DebugLogger.log('VALIDATION FAILED!');
-    }
-  }
-
-  bool _isRegionConnected(int regionId) {
-    List<List<int>> regionCells = [];
-    
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        if (regions[row][col] == regionId) {
-          regionCells.add([row, col]);
-        }
-      }
-    }
-    
-    if (regionCells.isEmpty) return false;
-    if (regionCells.length == 1) return true;
-    
-    // Use BFS to check connectivity
-    Set<String> visited = {};
-    List<List<int>> queue = [regionCells[0]];
-    visited.add('${regionCells[0][0]},${regionCells[0][1]}');
-    
-    while (queue.isNotEmpty) {
-      List<int> current = queue.removeAt(0);
-      int row = current[0];
-      int col = current[1];
-      
-      // Check 4 directions
-      List<List<int>> directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-      
-      for (List<int> dir in directions) {
-        int newRow = row + dir[0];
-        int newCol = col + dir[1];
-        String key = '$newRow,$newCol';
-        
-        if (newRow >= 0 && newRow < gridDim && 
-            newCol >= 0 && newCol < gridDim &&
-            regions[newRow][newCol] == regionId &&
-            !visited.contains(key)) {
-          
-          visited.add(key);
-          queue.add([newRow, newCol]);
-        }
-      }
-    }
-    
-    return visited.length == regionCells.length;
-  }
-
-  List<List<int>> _getAdjacentUnassignedCells(int regionId) {
-    List<List<int>> adjacent = [];
-    Set<String> checked = {};
-    
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        if (regions[row][col] == regionId) {
-          // Check all 4 directions
-          List<List<int>> directions = [
-            [-1, 0], [1, 0], [0, -1], [0, 1]
-          ];
-          
-          for (List<int> dir in directions) {
-            int newRow = row + dir[0];
-            int newCol = col + dir[1];
-            String key = '$newRow,$newCol';
-            
-            if (newRow >= 0 && newRow < gridDim && 
-                newCol >= 0 && newCol < gridDim &&
-                regions[newRow][newCol] == -1 &&
-                !checked.contains(key)) {
-              
-              adjacent.add([newRow, newCol]);
-              checked.add(key);
-            }
-          }
-        }
-      }
-    }
-    
-    return adjacent;
-  }
-
-  void _fillRegion(int startRow, int startCol, int regionId, List<List<bool>> visited, math.Random random) {
-    List<List<int>> stack = [[startRow, startCol]];
-    List<List<int>> regionCells = [];
-    
-    while (stack.isNotEmpty && regionCells.length < gridDim) {
-      final current = stack.removeLast();
-      final row = current[0];
-      final col = current[1];
-      
-      if (row >= 0 && row < gridDim && col >= 0 && col < gridDim && !visited[row][col]) {
-        visited[row][col] = true;
-        regions[row][col] = regionId;
-        regionCells.add([row, col]);
-        
-        // Add neighbors randomly
-        List<List<int>> neighbors = [
-          [row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]
-        ];
-        neighbors.shuffle(random);
-        
-        for (var neighbor in neighbors) {
-          if (regionCells.length < gridDim) {
-            stack.add(neighbor);
-          }
-        }
-      }
-    }
-  }
-
-  int _getCellsToRemove(SudokuDifficulty difficulty) {
-    final totalCells = gridDim * gridDim;
-    switch (difficulty) {
-      case SudokuDifficulty.easy:
-        return (totalCells * 0.4).round();
-      case SudokuDifficulty.medium:
-        return (totalCells * 0.5).round();
-      case SudokuDifficulty.hard:
-        return (totalCells * 0.6).round();
-      case SudokuDifficulty.expert:
-        return (totalCells * 0.7).round();
-    }
-  }
-
-  bool _generateCompleteSudoku() {
-    try {
-      return _fillGridWithBacktracking(0, 0);
-    } catch (e, stackTrace) {
-      DebugLogger.error('Failed to generate complete sudoku', e, stackTrace);
-      return false;
-    }
-  }
-
-  bool _fillGridWithBacktracking(int row, int col) {
-    if (row == gridDim) return true;
-    
-    int nextRow = col == gridDim - 1 ? row + 1 : row;
-    int nextCol = col == gridDim - 1 ? 0 : col + 1;
-    
-    List<int> numbers = List.generate(gridDim, (i) => i + 1);
-    numbers.shuffle(math.Random());
-    
-    for (int num in numbers) {
-      if (_isSafeForGeneration(row, col, num)) {
-        grid[row][col] = num;
-        if (_fillGridWithBacktracking(nextRow, nextCol)) return true;
-        grid[row][col] = 0;
-      }
-    }
-    return false;
-  }
-
-  bool _isSafeForGeneration(int row, int col, int num) {
-    // Check row
-    for (int c = 0; c < gridDim; c++) {
-      if (grid[row][c] == num) return false;
-    }
-    
-    // Check column
-    for (int r = 0; r < gridDim; r++) {
-      if (grid[r][col] == num) return false;
-    }
-    
-    // Check region
-    final currentRegion = regions[row][col];
-    for (int r = 0; r < gridDim; r++) {
-      for (int c = 0; c < gridDim; c++) {
-        if (regions[r][c] == currentRegion && grid[r][c] == num) {
-          return false;
-        }
-      }
-    }
-    
-    return true;
-  }
-
-  bool _generateCompleteJigsawSudoku() {
-    try {
-      // Add timeout for large grids
-      int maxAttempts = gridDim <= 9 ? 10000 : 5000;
-      
-      return _fillJigsawGridWithTimeout(maxAttempts, 0);
-    } catch (e, stackTrace) {
-      DebugLogger.error('Failed to generate complete jigsaw sudoku', e, stackTrace);
-      return false;
-    }
-  }
-
-  List<int>? _findMostConstrainedCell() {
-    int minPossibilities = gridDim + 1;
-    List<int>? bestCell;
-
-    for (int r = 0; r < gridDim; r++) {
-      for (int c = 0; c < gridDim; c++) {
-        if (grid[r][c] == 0) {
-          int possibilities = 0;
-          for (int num = 1; num <= gridDim; num++) {
-            if (_isJigsawSafe(r, c, num)) {
-              possibilities++;
-            }
-          }
-          if (possibilities < minPossibilities) {
-            minPossibilities = possibilities;
-            bestCell = [r, c];
-          }
-        }
-      }
-    }
-    return bestCell;
-  }
-
-  bool _fillJigsawGridWithTimeout(int maxAttempts, int attempts) {
-    // VERBOSE LOGGING: Show that the solver is still alive during deep recursion.
-    if (attempts > 0 && attempts % 1000 == 0) {
-      DebugLogger.log('... Solver deep in recursion: $attempts steps...');
-    }
-    
-    if (attempts >= maxAttempts) {
-      DebugLogger.log('Solver timeout after $attempts attempts. This puzzle shape is likely too complex.');
-      return false;
-    }
-
-    final cell = _findMostConstrainedCell();
-    
-    if (cell == null) return true; // Success, grid is full.
-
-    int row = cell[0];
-    int col = cell[1];
-
-    List<int> numbers = List.generate(gridDim, (i) => i + 1)..shuffle();
-
-    for (int num in numbers) {
-      if (_isJigsawSafe(row, col, num)) {
-        grid[row][col] = num;
-        if (_fillJigsawGridWithTimeout(maxAttempts, attempts + 1)) {
-          return true;
-        }
-        grid[row][col] = 0; // Backtrack
-      }
-    }
-    return false;
-  }
-
-  bool _fillJigsawGrid(int row, int col) {
-    if (row == gridDim) return true;
-    
-    int nextRow = col == gridDim - 1 ? row + 1 : row;
-    int nextCol = col == gridDim - 1 ? 0 : col + 1;
-    
-    List<int> numbers = List.generate(gridDim, (i) => i + 1);
-    numbers.shuffle(math.Random());
-    
-    for (int num in numbers) {
-      if (_isJigsawSafe(row, col, num)) {
-        grid[row][col] = num;
-        if (_fillJigsawGrid(nextRow, nextCol)) return true;
-        grid[row][col] = 0;
-      }
-    }
-    return false;
-  }
-
-  bool _isJigsawSafe(int row, int col, int num) {
-    // Check row
-    for (int c = 0; c < gridDim; c++) {
-      if (grid[row][c] == num) return false;
-    }
-    
-    // Check column
-    for (int r = 0; r < gridDim; r++) {
-      if (grid[r][col] == num) return false;
-    }
-    
-    // Check region
-    final currentRegion = regions[row][col];
-    for (int r = 0; r < gridDim; r++) {
-      for (int c = 0; c < gridDim; c++) {
-        if (regions[r][c] == currentRegion && grid[r][c] == num) {
-          return false;
-        }
-      }
-    }
-    
-    return true;
-  }
-
-  void _removeRandomCells(int cellsToRemove) {
-    math.Random random = math.Random();
-    int removed = 0;
-    
-    while (removed < cellsToRemove) {
-      int row = random.nextInt(gridDim);
-      int col = random.nextInt(gridDim);
-      
-      if (grid[row][col] != 0) {
-        grid[row][col] = 0;
-        removed++;
-      }
-    }
-  }
-
-  bool isValidMove(int row, int col, int num) {
-    if (isOriginal[row][col]) return false;
-    
-    // Check row
-    for (int c = 0; c < gridDim; c++) {
-      if (c != col && grid[row][c] == num) return false;
-    }
-    
-    // Check column
-    for (int r = 0; r < gridDim; r++) {
-      if (r != row && grid[r][col] == num) return false;
-    }
-    
-    // Check region (box or jigsaw)
-    final currentRegion = regions[row][col];
-    for (int r = 0; r < gridDim; r++) {
-      for (int c = 0; c < gridDim; c++) {
-        if ((r != row || c != col) && regions[r][c] == currentRegion && grid[r][c] == num) {
-          return false;
-        }
-      }
-    }
-    
-    return true;
-  }
-
-  List<SmartHint> getSmartHints(int row, int col) {
-    List<SmartHint> hints = [];
-    
-    if (isOriginal[row][col] || grid[row][col] != 0) {
-      hints.add(SmartHint(
-        type: HintType.conflict,
-        title: 'Cell Occupied',
-        description: 'This cell is already filled or is part of the original puzzle.',
-        penalty: 0,
-      ));
-      return hints;
-    }
-    
-    List<int> possibleNumbers = _getPossibleNumbers(row, col);
-    
-    if (possibleNumbers.isEmpty) {
-      hints.add(SmartHint(
-        type: HintType.conflict,
-        title: 'Conflict Detected',
-        description: 'No numbers can legally be placed in this cell. Check the row, column, or region for an error.',
-        penalty: 0,
-      ));
-    } else if (possibleNumbers.length == 1) {
-      hints.add(SmartHint(
-        type: HintType.nakedSingle,
-        title: 'Only Choice (Naked Single)',
-        description: 'There is only one possible number that can fit in this cell.',
-        penalty: 25,
-        data: possibleNumbers[0],
-      ));
-    } else {
-      // Check for a hidden single before offering other hints
-      for (int num in possibleNumbers) {
-        if (_isHiddenSingle(row, col, num)) {
-          hints.add(SmartHint(
-            type: HintType.hiddenSingle,
-            title: 'Hidden Single',
-            description: 'This is the only cell in its row, column, or region where a specific number can go.',
-            penalty: 30,
-            data: num,
-          ));
-          break; // A hidden single is a great hint, so we can stop here
-        }
-      }
-
-      hints.add(SmartHint(
-        type: HintType.showPossible,
-        title: 'Show Possible Numbers',
-        description: 'Reveals all numbers that can legally be placed in this cell.',
-        penalty: 15,
-        data: possibleNumbers, // Pack the answer into the data field
-      ));
-      
-      hints.add(SmartHint(
-        type: HintType.giveAnswer,
-        title: 'Give Answer',
-        description: 'Fills the correct number into the cell.',
-        penalty: 50,
-        data: solution[row][col], // Pack the answer into the data field
-      ));
-    }
-    
-    return hints;
-  }
-
-  List<int> _getPossibleNumbers(int row, int col) {
-    List<int> possible = [];
-    for (int num = 1; num <= gridDim; num++) {
-      if (isValidMove(row, col, num)) {
-        possible.add(num);
-      }
-    }
-    return possible;
-  }
-
-  bool _isHiddenSingle(int row, int col, int num) {
-    final currentRegion = regions[row][col];
-    
-    // Check if num can only go in this position in the region
-    int possiblePositions = 0;
-    for (int r = 0; r < gridDim; r++) {
-      for (int c = 0; c < gridDim; c++) {
-        if (regions[r][c] == currentRegion && grid[r][c] == 0 && isValidMove(r, c, num)) {
-          possiblePositions++;
-        }
-      }
-    }
-    
-    return possiblePositions == 1;
-  }
-
-  void setCell(int row, int col, int value) {
-    if (!isOriginal[row][col]) {
-      grid[row][col] = value;
-    }
-  }
-
-  void clearCell(int row, int col) {
-    if (!isOriginal[row][col]) {
-      grid[row][col] = 0;
-    }
-  }
-
-  bool isCompleted() {
-    for (int row = 0; row < gridDim; row++) {
-      for (int col = 0; col < gridDim; col++) {
-        if (grid[row][col] == 0) return false;
-      }
-    }
-    return true;
-  }
-
-}
+// ---------------------------------------------------------------------------
+// Admin (debug only): pre-generate puzzles into the cache
+// ---------------------------------------------------------------------------
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -3181,7 +1964,7 @@ class AdminScreen extends StatefulWidget {
 class _AdminScreenState extends State<AdminScreen> {
   bool _isGenerating = false;
   int _generatedCount = 0;
-  String _currentStatus = "Idle. Ready to generate puzzles for the cache.";
+  String _currentStatus = 'Idle. Ready to generate puzzles for the cache.';
 
   Future<void> _startGeneration() async {
     setState(() {
@@ -3190,56 +1973,40 @@ class _AdminScreenState extends State<AdminScreen> {
     });
 
     final random = math.Random();
-
-    // This is a continuous loop that runs until you press "Stop".
     while (_isGenerating) {
-      // We randomly pick a size and shape to generate in each iteration.
       final size = GridSize.values[random.nextInt(GridSize.values.length)];
       final shape = GridShape.values[random.nextInt(GridShape.values.length)];
-      
-      final key = PuzzleCache()._getKey(size, shape);
-
-      // We will always attempt to generate a new puzzle.
-      setState(() {
-        _currentStatus = "Generating new blueprint for: $key";
-      });
+      setState(() => _currentStatus =
+          'Generating new blueprint for: ${size.name}-${shape.name}');
 
       try {
-        SudokuGame? solvedGame = await SudokuGame.create(SudokuDifficulty.easy, size, shape)
-            .timeout(const Duration(seconds: 5));
-        
-        final blueprint = PuzzleBlueprint(
-          solutionGrid: solvedGame.solution,
-          regions: solvedGame.regions,
+        final solved = await SudokuGame.create(SudokuDifficulty.easy, size, shape,
+            timeout: const Duration(seconds: 5));
+        await PuzzleCache().set(PuzzleBlueprint(
+          solutionGrid: solved.solution,
+          regions: solved.regions,
           gridSize: size,
           gridShape: shape,
-        );
-
-        // The set() method adds the new blueprint to the existing list.
-        await PuzzleCache().set(blueprint);
-        
-        setState(() {
-          _generatedCount++;
-        });
-
+        ));
+        setState(() => _generatedCount++);
       } catch (e) {
-        DebugLogger.error("Admin generator timed out or failed for $key. It will be skipped for this round.");
+        DebugLogger.error('Admin generator skipped ${size.name}-${shape.name}.');
       }
-      
-      // Yield to the UI to keep the app responsive.
       await Future.delayed(const Duration(milliseconds: 100));
     }
 
     setState(() {
       _isGenerating = false;
-      _currentStatus = "Stopped. Generated $_generatedCount new blueprints.";
+      _currentStatus = 'Stopped. Generated $_generatedCount new blueprints.';
     });
   }
 
-  void _stopGeneration() {
-    setState(() {
-      _isGenerating = false;
-    });
+  void _stopGeneration() => setState(() => _isGenerating = false);
+
+  @override
+  void dispose() {
+    _isGenerating = false; // stop the loop if the screen is closed
+    super.dispose();
   }
 
   @override
@@ -3255,100 +2022,49 @@ class _AdminScreenState extends State<AdminScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Puzzle Cache Pre-Generator',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
+              const Text('Puzzle Cache Pre-Generator',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center),
               const SizedBox(height: 30),
-              const Text(
-                'Puzzles Generated in this Session:',
-                style: TextStyle(fontSize: 16),
-              ),
-              Text(
-                '$_generatedCount',
-                style: const TextStyle(fontSize: 52, fontWeight: FontWeight.bold, color: Colors.indigo),
-              ),
+              const Text('Puzzles Generated in this Session:',
+                  style: TextStyle(fontSize: 16)),
+              Text('$_generatedCount',
+                  style: const TextStyle(
+                      fontSize: 52,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo)),
               const SizedBox(height: 20),
-              const Text(
-                'Status:',
-                style: TextStyle(fontSize: 16),
-              ),
-              Text(
-                _currentStatus,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                textAlign: TextAlign.center,
-              ),
+              const Text('Status:', style: TextStyle(fontSize: 16)),
+              Text(_currentStatus,
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  textAlign: TextAlign.center),
               const SizedBox(height: 40),
               ElevatedButton(
                 onPressed: _isGenerating ? _stopGeneration : _startGeneration,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _isGenerating ? Colors.red : Colors.green,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 50, vertical: 15),
+                  textStyle: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                child: Text(_isGenerating ? 'Stop Generation' : 'Start Generation'),
+                child:
+                    Text(_isGenerating ? 'Stop Generation' : 'Start Generation'),
               ),
               const SizedBox(height: 40),
               SwitchListTile(
                 title: const Text('Load puzzles from storage'),
-                subtitle: const Text('If off, puzzles are always generated on-the-fly.'),
+                subtitle: const Text(
+                    'If off, puzzles are always generated on-the-fly.'),
                 value: GameStats.useSavedPuzzles,
-                onChanged: (bool value) {
-                  setState(() {
-                    GameStats.useSavedPuzzles = value;
-                  });
-                },
+                onChanged: (value) =>
+                    setState(() => GameStats.useSavedPuzzles = value),
               ),
             ],
           ),
         ),
       ),
     );
-  }
-}
-
-class StorageService {
-  static final StorageService _instance = StorageService._internal();
-  factory StorageService() => _instance;
-  StorageService._internal();
-
-  Future<String> get _localPath async {
-    final directory = await getApplicationDocumentsDirectory();
-    return directory.path;
-  }
-
-  Future<File> get _localFile async {
-    final path = await _localPath;
-    return File('$path/puzzles.json');
-  }
-
-  Future<List<PuzzleBlueprint>> loadBlueprints() async {
-    try {
-      final file = await _localFile;
-      if (!await file.exists()) {
-        DebugLogger.log("Puzzle file doesn't exist. Starting fresh.");
-        return [];
-      }
-
-      final contents = await file.readAsString();
-      final List<dynamic> jsonList = jsonDecode(contents);
-      return jsonList.map((json) => PuzzleBlueprint.fromJson(json)).toList();
-    } catch (e) {
-      DebugLogger.error("Failed to load blueprints from file.", e);
-      return []; // Return empty list on error
-    }
-  }
-
-  Future<void> saveBlueprints(List<PuzzleBlueprint> blueprints) async {
-    try {
-      final file = await _localFile;
-      final jsonList = blueprints.map((bp) => bp.toJson()).toList();
-      await file.writeAsString(jsonEncode(jsonList));
-      DebugLogger.log("Successfully saved ${blueprints.length} blueprints to disk.");
-    } catch (e) {
-      DebugLogger.error("Failed to save blueprints to file.", e);
-    }
   }
 }
