@@ -329,11 +329,23 @@ Two distinct problems behind the report:
   features (rating, hint, explain) disabled for Killer since the technique solver
   doesn't model cages. 10 engine tests + a board-generation widget test + the
   variant-selector test.
+- [x] **E22 — Release readiness (branding, About, licensing).** Productionised
+  for an app-store release as **CrispSudoku** (app title, MaterialApp title, home
+  header, Android label, iOS `CFBundleDisplayName`/`CFBundleName`, web manifest +
+  page title, and pubspec description all updated). Added an in-app **About**
+  screen (`lib/about_screen.dart`, matching the sibling CrispCalc / CrisperWeaver
+  pattern — version via `package_info_plus`, contact via `url_launcher`, and
+  Flutter's `showLicensePage`), reached from a Home footer link. Licensed under
+  **AGPL-3.0** (full `LICENSE`) with a `NOTICE` documenting the
+  sole-copyright-holder **App Store / Play additional permission** (so the binary,
+  including future IAP, ships under store terms while the source stays AGPL) and
+  preserving `dart_csp`'s MIT attribution. Covered by an About-screen widget test
+  (sections + license page) and a Home About-link test.
 
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **90 passing** (engine, persistence + bundled-DB, isolate,
+- `flutter test` → **92 passing** (engine, persistence + bundled-DB, isolate,
   notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
   streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
   completion-dialog, hint-exhaustion, daily-launch, stats-sheet and

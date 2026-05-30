@@ -1,4 +1,4 @@
-# Sudoku Master Pro
+# CrispSudoku
 
 A Flutter Sudoku game with classic, **jigsaw** (irregular-region), **Sudoku-X**
 (diagonal) and **Killer** (summed-cage) variants across six grid sizes (4×4, 6×6,
@@ -68,7 +68,7 @@ The **Admin** panel (debug builds only) pre-generates puzzles into the on-disk c
 ## Testing
 
 ```bash
-flutter test               # unit + widget tests (90)
+flutter test               # unit + widget tests (92)
 flutter analyze            # static analysis (expected: no issues)
 dart format .              # formatting (checked in CI)
 ```
@@ -114,4 +114,20 @@ https://sudoku-lac-five.vercel.app
 ```bash
 dart run build_runner build --delete-conflicting-outputs
 ```
+
+## About & licenses
+
+An in-app **About** screen (Home → *About & Licenses*) shows the version
+(`package_info_plus`), contact/legal info, and a **Open-source licenses** button
+that opens Flutter's `showLicensePage` listing every bundled dependency.
+
+## License
+
+CrispSudoku is free software licensed under the **GNU Affero General Public
+License v3.0 or later** (see [`LICENSE`](LICENSE)). As the sole copyright holder,
+the author additionally distributes official app-store binaries (Apple App Store
+/ Google Play), including any in-app purchases, under those stores' standard
+terms — see [`NOTICE`](NOTICE). Third-party components (notably the MIT-licensed
+[`dart_csp`](https://github.com/CrispStrobe/dart_csp) solver) retain their own
+licenses.
 </content>

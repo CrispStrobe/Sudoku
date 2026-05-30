@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:sudoku/about_screen.dart';
 import 'package:sudoku/main.dart';
 import 'package:sudoku/sudoku_game.dart';
 
@@ -8,7 +10,7 @@ void main() {
   testWidgets('Home screen renders title and game modes', (tester) async {
     await tester.pumpWidget(const SudokuApp());
 
-    expect(find.text('SUDOKU\nMASTER'), findsOneWidget);
+    expect(find.text('CRISP\nSUDOKU'), findsOneWidget);
     expect(find.text('🎯 CLASSIC MODE'), findsOneWidget);
     expect(find.text('🧩 JIGSAW MODE'), findsOneWidget);
     expect(find.text('Themes'), findsOneWidget);
@@ -116,6 +118,43 @@ void main() {
     );
 
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('About screen shows app info and opens the licenses page', (
+    tester,
+  ) async {
+    // Tall viewport so the whole (lazy) ListView renders its sections.
+    tester.view.physicalSize = const Size(1200, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    PackageInfo.setMockInitialValues(
+      appName: 'CrispSudoku',
+      packageName: 'be.crispstro.sudoku',
+      version: '1.0.0',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: AboutScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('CrispSudoku'), findsWidgets);
+    expect(find.text('Service provider'), findsOneWidget);
+    expect(find.text('License'), findsOneWidget);
+    expect(find.textContaining('AGPL-3.0'), findsWidgets);
+
+    // The open-source licenses button pushes Flutter's LicensePage.
+    await tester.tap(find.text('Open-source licenses'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LicensePage), findsOneWidget);
+  });
+
+  testWidgets('Home has an About & Licenses entry', (tester) async {
+    await tester.pumpWidget(const SudokuApp());
+    await tester.pumpAndSettle();
+    expect(find.text('About & Licenses'), findsOneWidget);
   });
 
   testWidgets('Themes sheet opens and lists themes', (tester) async {

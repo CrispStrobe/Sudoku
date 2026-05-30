@@ -1,5 +1,5 @@
 name: sudoku
-description: "A new Flutter project."
+description: "CrispSudoku — classic, jigsaw, Sudoku-X and Killer puzzles with a daily challenge, an explain-the-solve walkthrough, and smart hints."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -36,6 +36,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.5.5
+  package_info_plus: ^8.0.0 # app version shown on the About screen
+  url_launcher: ^6.2.0 # contact/license links on the About screen
   # Pure-Dart CSP solver (dart2js/wasm-safe ref) — used for the Killer-cage
   # variant, whose cage-sum arithmetic the bitmask engine can't express.
   dart_csp:

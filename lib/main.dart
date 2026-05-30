@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'about_screen.dart';
 import 'sudoku_game.dart';
 import 'technique_solver.dart';
 import 'variant_engine.dart';
@@ -24,7 +25,7 @@ class SudokuApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sudoku Master Pro',
+      title: 'CrispSudoku',
       theme: ThemeData(
         primarySwatch: Colors.indigo,
         fontFamily: 'Roboto',
@@ -502,7 +503,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       children: [
                         const Text(
-                          'SUDOKU\nMASTER',
+                          'CRISP\nSUDOKU',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 36,
@@ -649,6 +650,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AboutScreen()),
+                    ),
+                    icon: const Icon(Icons.info_outline, color: Colors.white70),
+                    label: const Text(
+                      'About & Licenses',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ),
                 ],
               ),
             ),

@@ -1,6 +1,6 @@
 {
-    "name": "sudoku",
-    "short_name": "sudoku",
+    "name": "CrispSudoku",
+    "short_name": "CrispSudoku",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

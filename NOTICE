@@ -1,0 +1,37 @@
+CrispSudoku
+Copyright (C) 2026 Christian Ströbele
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License, version 3 or (at your
+option) any later version. See the LICENSE file for the full text, or
+<https://www.gnu.org/licenses/agpl-3.0.html>.
+
+
+App Store / Google Play additional permission
+---------------------------------------------
+As the sole copyright holder of the original CrispSudoku source code, the
+author additionally distributes official binary builds of CrispSudoku through
+app stores (e.g. the Apple App Store and Google Play) under those stores'
+standard distribution terms and end-user license agreements, including for any
+in-app purchases.
+
+This dual availability is permitted because the author owns the copyright to
+all AGPL-3.0-licensed code in this project. It does not restrict the rights
+granted to you for the source code under the AGPL-3.0: you remain free to use,
+study, modify, and redistribute the source under that license.
+
+This permission applies only to binaries published by the copyright holder.
+Third parties redistributing this software remain bound by the AGPL-3.0.
+
+
+Third-party components
+----------------------
+- dart_csp — MIT License, Copyright (c) 2026 CrispStrobe
+  (https://github.com/CrispStrobe/dart_csp). The constraint solver powering the
+  Killer-cage variant. Its MIT notice (including attribution to the original
+  dartCSP author) is preserved per the MIT terms.
+- Flutter and the bundled Dart/Flutter packages (shared_preferences,
+  url_launcher, package_info_plus, json_annotation, cupertino_icons, and their
+  transitive dependencies) are distributed under permissive licenses
+  (BSD-3-Clause / MIT / Apache-2.0). The full set is viewable in-app via
+  About → Open-source licenses.
