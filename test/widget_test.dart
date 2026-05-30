@@ -424,6 +424,23 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('Explain mode walks through the solver steps', (tester) async {
+    await _bootCachedGame(tester, seed: 1234);
+
+    await tester.tap(find.byTooltip('Explain solve'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Explain the solve'), findsOneWidget);
+    expect(find.text('Start'), findsOneWidget);
+
+    // Step forward one deduction.
+    await tester.tap(find.byTooltip('Next'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('Step 1 /'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox()); // dispose both routes' timers
+  });
+
   testWidgets('Daily challenge launches a deterministic daily game', (
     tester,
   ) async {
