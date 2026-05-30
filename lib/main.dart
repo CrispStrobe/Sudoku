@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sudoku_game.dart';
+import 'technique_solver.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1477,6 +1478,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int mistakes = 0;
   bool _notesMode = false;
 
+  /// Difficulty of the current board as rated by the logical-technique solver
+  /// (distinct from the generation difficulty, which is hole-count based).
+  SudokuDifficulty? _logicRating;
+
+  /// Score cost of revealing the next logical step.
+  static const int _nextStepPenalty = 40;
+
   int get _maxMistakes => maxMistakesFor(widget.difficulty);
   int get _maxHints => maxHintsFor(widget.difficulty);
   int get _hintsRemaining => math.max(0, _maxHints - hintsUsed);
@@ -1620,6 +1628,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _startGameTimer();
       score = _calculateInitialScore();
       mistakes = 0;
+      _updateLogicRating();
       if (mounted) setState(() {});
     } catch (e, st) {
       DebugLogger.error('Generation failed; falling back to classic.', e, st);
@@ -1638,6 +1647,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _startGameTimer();
         score = _calculateInitialScore();
         mistakes = 0;
+        _updateLogicRating();
         if (mounted) setState(() {});
       } catch (e2, st2) {
         DebugLogger.error('Fallback also failed.', e2, st2);
@@ -1669,6 +1679,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (widget.gridShape == GridShape.jigsaw) base += 200;
     return base;
   }
+
+  /// Rate the current board by the hardest human technique it requires. Cheap
+  /// (a few ms); recomputed whenever a new board is built.
+  void _updateLogicRating() {
+    final g = game;
+    if (g == null) {
+      _logicRating = null;
+      return;
+    }
+    try {
+      _logicRating = TechniqueSolver(g.grid, g.regions).solve().rating;
+    } catch (_) {
+      _logicRating = null;
+    }
+  }
+
+  static String _ratingLabel(SudokuDifficulty d) =>
+      d.name[0].toUpperCase() + d.name.substring(1);
 
   @override
   void dispose() {
@@ -1749,17 +1777,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       );
       return;
     }
-    if (selectedRow != null && selectedCol != null && game != null) {
-      _showHintDialog();
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Select a cell first!')));
-    }
+    if (game != null) _showHintDialog();
   }
 
   void _showHintDialog() {
-    final hints = game!.getSmartHints(selectedRow!, selectedCol!);
+    // A board-wide "next logical step" (works with no cell selected), plus the
+    // per-cell smart hints when a cell is selected.
+    final perCell = (selectedRow != null && selectedCol != null)
+        ? game!.getSmartHints(selectedRow!, selectedCol!)
+        : <SmartHint>[];
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1771,11 +1797,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             Text('Smart Hints'),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: hints
-              .map(
-                (hint) => Card(
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Card(
+                color: GameStats.current.cellHighlight,
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.auto_awesome,
+                    color: Colors.deepPurple,
+                  ),
+                  title: const Text('Next logical step'),
+                  subtitle: const Text(
+                    'Find and explain the next deduction on the board.',
+                  ),
+                  trailing: const Text(
+                    '-$_nextStepPenalty',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showNextStepHint();
+                  },
+                ),
+              ),
+              for (final hint in perCell)
+                Card(
                   child: ListTile(
                     title: Text(hint.title),
                     subtitle: Text(hint.description),
@@ -1792,11 +1843,104 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     },
                   ),
                 ),
-              )
-              .toList(),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Compute the next logical deduction from the current board and present it.
+  void _showNextStepHint() {
+    final g = game;
+    if (g == null) return;
+    final step = TechniqueSolver(g.grid, g.regions).nextStep();
+    if (step == null) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text('No logical step found'),
+          content: const Text(
+            'No straightforward deduction is available from the current '
+            'board — it may need a more advanced technique or contain a '
+            'wrong entry. Try clearing any conflicts first.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    final isPlacement = step.value != null;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(_techniqueLabel(step.technique)),
+        content: Text(step.explanation),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _applyNextStep(step);
+            },
+            child: Text(
+              isPlacement ? 'Place it (-$_nextStepPenalty)' : 'Got it',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Charge a hint and apply [step] — placing its value (placement steps) or
+  /// just selecting the cell so the player can act on the explanation.
+  void _applyNextStep(SolveStep step) {
+    final g = game;
+    if (g == null) return;
+    setState(() {
+      hintsUsed++;
+      GameStats.totalHintsUsed++;
+      score = math.max(0, score - _nextStepPenalty);
+      selectedRow = step.cell[0];
+      selectedCol = step.cell[1];
+      if (step.value != null) {
+        g.setCell(step.cell[0], step.cell[1], step.value!);
+      }
+    });
+    if (g.isSolved()) _completeGame();
+  }
+
+  static String _techniqueLabel(Technique t) {
+    switch (t) {
+      case Technique.nakedSingle:
+        return 'Naked Single';
+      case Technique.hiddenSingle:
+        return 'Hidden Single';
+      case Technique.lockedCandidates:
+        return 'Locked Candidates';
+      case Technique.nakedPair:
+        return 'Naked Pair';
+      case Technique.nakedTriple:
+        return 'Naked Triple';
+      case Technique.hiddenPair:
+        return 'Hidden Pair';
+      case Technique.xWing:
+        return 'X-Wing';
+      case Technique.guess:
+        return 'Next Step';
+    }
   }
 
   void _showHintConfirmation(SmartHint hint) {
@@ -1902,6 +2046,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             Text('Time: ${_formatDuration(time)}  •  Bonus: +$timeBonus'),
+            if (_logicRating != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Logic rating: ${_ratingLabel(_logicRating!)}'),
+              ),
             if (widget.isDaily)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
@@ -2112,7 +2261,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 padding: EdgeInsets.all(isTablet ? 24 : 16),
                 child: Column(
                   children: [
-                    _buildMistakesIndicator(),
+                    _buildStatusStrip(),
                     const SizedBox(height: 8),
                     Expanded(
                       flex: isTablet ? 3 : 2,
@@ -2144,6 +2293,45 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   /// Slim "Mistakes ✕ ✕ ○ ○ ○ (n/max)" strip above the grid. The pips fill in
   /// as mistakes accrue and turn red on the final life so the lose condition is
   /// visible at a glance.
+  /// The status row above the grid: the logic-rating pill (when known) beside
+  /// the mistakes strip. Wrapped in a scaleDown FittedBox so both fit on a
+  /// narrow phone without overflowing.
+  Widget _buildStatusStrip() {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_logicRating != null) ...[
+            _buildLogicPill(),
+            const SizedBox(width: 8),
+          ],
+          _buildMistakesIndicator(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogicPill() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Text(
+          '🧠 ${_ratingLabel(_logicRating!)}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMistakesIndicator() {
     final atRisk = mistakes >= _maxMistakes - 1;
     final accent = atRisk ? Colors.red.shade300 : Colors.white;

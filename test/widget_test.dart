@@ -340,17 +340,31 @@ void main() {
     expect(maxHints, 1);
     expect(find.text('Hint ($maxHints)'), findsOneWidget);
 
-    // Select an empty cell and open the Smart Hints dialog.
-    final cell = _firstEmpty(g);
-    await tester.tapAt(_cellCenter(tester, cell[0], cell[1], g.gridDim));
+    // Select an empty cell with multiple candidates so the per-cell "Give
+    // Answer" hint is offered, then open the Smart Hints dialog.
+    int er = -1, ec = -1;
+    outer:
+    for (var r = 0; r < g.gridDim; r++) {
+      for (var c = 0; c < g.gridDim; c++) {
+        if (g.grid[r][c] == 0 && g.possibleNumbers(r, c).length > 1) {
+          er = r;
+          ec = c;
+          break outer;
+        }
+      }
+    }
+    expect(er, isNot(-1));
+    await tester.tapAt(_cellCenter(tester, er, ec, g.gridDim));
     await tester.pump(const Duration(milliseconds: 700));
     // The hint button is an ElevatedButton.icon (a private subtype), so tap its
     // label text rather than matching the button by exact type.
     await tester.tap(find.text('Hint ($maxHints)'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Pick a (penalty-bearing) hint, then confirm it.
-    await tester.tap(find.byType(ListTile).last);
+    // Use the always-present "Give Answer" hint (scroll it into view in the
+    // now-scrollable dialog), then confirm.
+    await tester.ensureVisible(find.text('Give Answer'));
+    await tester.tap(find.text('Give Answer'));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.widgetWithText(ElevatedButton, 'Confirm'));
     await tester.pump(const Duration(milliseconds: 300));
@@ -365,6 +379,47 @@ void main() {
       ),
     );
     expect(button.enabled, isFalse, reason: 'no hints left → disabled');
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Logic rating pill renders once the board is rated', (
+    tester,
+  ) async {
+    await _bootCachedGame(tester, seed: 1234);
+    // The 🧠 pill carries the technique-solver's difficulty rating.
+    expect(find.textContaining('🧠'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Next logical step hint places a correct deduction', (
+    tester,
+  ) async {
+    final hintsBefore = GameStats.totalHintsUsed;
+    addTearDown(() => GameStats.totalHintsUsed = hintsBefore);
+
+    final state = await _bootCachedGame(tester, seed: 1234);
+    final g = state.game as SudokuGame;
+
+    // Open hints with no cell selected — the next-step hint is board-wide.
+    await tester.tap(find.textContaining('Hint ('));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Next logical step'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // A fresh easy board always has a single, so the step is a placement.
+    final placeIt = find.textContaining('Place it');
+    expect(placeIt, findsOneWidget);
+    await tester.tap(placeIt);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(state.hintsUsed as int, 1, reason: 'the step costs one hint');
+    final r = state.selectedRow as int, c = state.selectedCol as int;
+    expect(
+      g.grid[r][c],
+      g.solution[r][c],
+      reason: 'a logical deduction always matches the unique solution',
+    );
 
     await tester.pumpWidget(const SizedBox());
   });
