@@ -256,6 +256,19 @@ Two distinct problems behind the report:
   and this screen (`_formatDuration` delegates to it). Covered by a widget test
   that seeds stats and asserts the computed win rate.
 
+- [x] **E17 — Dependency audit.** Brought every direct and dev dependency to its
+  latest resolvable version. `flutter pub upgrade` bumped 27 packages within the
+  existing constraints (cupertino_icons 1.0.9, json_annotation 4.12.0,
+  build_runner 2.15.0, json_serializable 6.14.0, + transitive patches), then two
+  constraint edits: `json_annotation` `^4.9.0` → `^4.12.0` (matches what
+  json_serializable 6.14 emits, clearing a build_runner warning) and
+  `flutter_lints` `^5.0.0` → `^6.0.0`. The lint bump added `unnecessary_underscores`,
+  fixed by collapsing a `(_, __)` callback to `(_, _)`. Regenerated `.g.dart`
+  (byte-identical), `flutter analyze` clean, 60 tests green, web build succeeds.
+  The remaining "outdated" packages are all transitive and pinned by the Flutter
+  SDK (analyzer, meta, vector_math, material_color_utilities, …) — not bumpable
+  without a Flutter SDK upgrade, which is out of scope.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
