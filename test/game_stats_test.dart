@@ -70,6 +70,45 @@ void main() {
     expect(GameStats.unlockedThemes, isNot(contains('NotARealTheme')));
   });
 
+  group('streak_master achievement vs the lose path', () {
+    test('unlocks once the streak reaches 5 (and grants its reward theme)', () {
+      GameStats.unlockedAchievements = {};
+      GameStats.unlockedThemes = {'Ocean'};
+      GameStats.currentStreak = 4;
+      AchievementSystem.checkAchievements();
+      expect(GameStats.unlockedAchievements, isNot(contains('streak_master')));
+
+      GameStats.currentStreak = 5;
+      AchievementSystem.checkAchievements();
+      expect(GameStats.unlockedAchievements, contains('streak_master'));
+      expect(GameStats.unlockedThemes, contains('Ice'));
+    });
+
+    test('stays earned after a loss resets the streak (latched)', () {
+      GameStats.unlockedAchievements = {};
+      GameStats.unlockedThemes = {'Ocean'};
+      GameStats.currentStreak = 6;
+      AchievementSystem.checkAchievements();
+      expect(GameStats.unlockedAchievements, contains('streak_master'));
+
+      // A loss breaks the streak; the achievement must not be revoked.
+      GameStats.currentStreak = 0;
+      AchievementSystem.checkAchievements();
+      expect(
+        GameStats.unlockedAchievements,
+        contains('streak_master'),
+        reason: 'achievements are one-time unlocks, never revoked',
+      );
+    });
+
+    test('a sub-threshold streak does not unlock it', () {
+      GameStats.unlockedAchievements = {};
+      GameStats.currentStreak = 0;
+      AchievementSystem.checkAchievements();
+      expect(GameStats.unlockedAchievements, isNot(contains('streak_master')));
+    });
+  });
+
   test('currentTheme is only applied when that theme is unlocked', () {
     GameStats.currentTheme = 'Ocean';
     // Ocean is always unlocked, so this applies.

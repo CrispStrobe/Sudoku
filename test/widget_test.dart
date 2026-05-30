@@ -44,86 +44,25 @@ void main() {
   testWidgets('Live game: play a cached 4×4 puzzle and place a number', (
     tester,
   ) async {
-    // Use a realistic portrait phone surface (default test surface is a short
-    // 800×600 landscape that crams the board + number pad).
-    tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 3.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    // Seed the puzzle cache with a deterministic 4×4 solution so the game
-    // builds synchronously (via fromBlueprint) — no background isolate.
-    // set() populates the in-memory cache before its disk write, so we don't
-    // await it (avoids blocking on path_provider, which is unavailable in the
-    // test host).
-    final seedGame = SudokuGame.generate(
-      SudokuDifficulty.easy,
-      GridSize.small,
-      GridShape.classic,
-      seed: 1234,
-    );
-    // ignore: unawaited_futures
-    PuzzleCache().set(
-      PuzzleBlueprint(
-        solutionGrid: seedGame.solution,
-        regions: seedGame.regions,
-        gridSize: GridSize.small,
-        gridShape: GridShape.classic,
-      ),
-    );
-
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: GameScreen(
-          difficulty: SudokuDifficulty.easy,
-          gridSize: GridSize.small,
-          gridShape: GridShape.classic,
-          gameMode: GameMode.classic,
-        ),
-      ),
-    );
-
-    // Pump until the post-frame initialization has built the game (bounded so a
-    // regression can never hang the suite).
-    dynamic state;
-    SudokuGame? game;
-    for (var i = 0; i < 40 && game == null; i++) {
-      await tester.pump(const Duration(milliseconds: 20));
-      state = tester.state(find.byType(GameScreen));
-      game = state.game as SudokuGame?;
-    }
-    expect(game, isNotNull, reason: 'game should initialize from cache');
-    final g = game!;
+    final state = await _bootCachedGame(tester, seed: 1234);
+    final g = state.game as SudokuGame;
 
     // The number pad for a 4×4 grid exposes buttons 1..4.
     expect(find.widgetWithText(ElevatedButton, '1'), findsWidgets);
     expect(find.text('Hint'), findsOneWidget);
 
-    // Tap the first empty cell, then a candidate number for it.
-    int er = -1, ec = -1;
-    outer:
-    for (var r = 0; r < g.gridDim; r++) {
-      for (var c = 0; c < g.gridDim; c++) {
-        if (g.grid[r][c] == 0) {
-          er = r;
-          ec = c;
-          break outer;
-        }
-      }
-    }
-    expect(er, isNot(-1));
+    // Tap the first empty cell, then its correct number.
+    final cell = _firstEmpty(g);
+    final er = cell[0], ec = cell[1];
     final answer = g.solution[er][ec];
 
-    // Tap the empty cell (GestureDetector inside the grid Stack).
     await tester.tapAt(_cellCenter(tester, er, ec, g.gridDim));
     await tester.pump(const Duration(milliseconds: 700)); // let pulse settle
     expect(state.selectedRow as int?, er, reason: 'cell tap should select row');
     expect(state.selectedCol as int?, ec, reason: 'cell tap should select col');
 
-    // Tap the number-pad button for the correct answer.
     await tester.tap(find.widgetWithText(ElevatedButton, '$answer').last);
     await tester.pump();
-
     expect(
       g.grid[er][ec],
       answer,
@@ -135,57 +74,94 @@ void main() {
     await tester.pump();
     expect(g.grid[er][ec], 0, reason: 'undo should revert the placement');
 
-    // Dispose to cancel timers/animations cleanly.
+    await tester.pumpWidget(const SizedBox()); // dispose timers/animations
+  });
+
+  testWidgets('Notes mode: tapping a number pencils a candidate, not a value', (
+    tester,
+  ) async {
+    final state = await _bootCachedGame(tester, seed: 1234);
+    final g = state.game as SudokuGame;
+
+    final cell = _firstEmpty(g);
+    final er = cell[0], ec = cell[1];
+
+    // Enable notes mode, then select the empty cell.
+    await tester.tap(find.byTooltip('Notes mode'));
+    await tester.pump();
+    await tester.tapAt(_cellCenter(tester, er, ec, g.gridDim));
+    await tester.pump(const Duration(milliseconds: 700));
+
+    // A number tap now adds a pencil mark instead of placing a value.
+    await tester.tap(find.widgetWithText(ElevatedButton, '3').last);
+    await tester.pump();
+
+    expect(g.grid[er][ec], 0, reason: 'notes mode must not place a value');
+    expect(
+      g.notes[er][ec],
+      contains(3),
+      reason: 'number becomes a pencil mark',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Completion: filling the last cell shows the win dialog', (
+    tester,
+  ) async {
+    // Completing mutates global stats; snapshot and restore.
+    final solved = GameStats.totalPuzzlesSolved;
+    final streak = GameStats.currentStreak;
+    final best = GameStats.bestTime;
+    final achievements = {...GameStats.unlockedAchievements};
+    final themes = {...GameStats.unlockedThemes};
+    addTearDown(() {
+      GameStats.totalPuzzlesSolved = solved;
+      GameStats.currentStreak = streak;
+      GameStats.bestTime = best;
+      GameStats.unlockedAchievements = achievements;
+      GameStats.unlockedThemes = themes;
+    });
+
+    final state = await _bootCachedGame(tester, seed: 1234);
+    final g = state.game as SudokuGame;
+
+    // Fill every empty cell but the last with its solution value via the
+    // engine, then place the final cell through the UI so the tap path
+    // (_placeValue → isSolved → completion dialog) is exercised.
+    final empties = <List<int>>[];
+    for (var r = 0; r < g.gridDim; r++) {
+      for (var c = 0; c < g.gridDim; c++) {
+        if (!g.isOriginal[r][c] && g.grid[r][c] == 0) empties.add([r, c]);
+      }
+    }
+    expect(empties.length, greaterThan(0));
+    for (var i = 0; i < empties.length - 1; i++) {
+      final cell = empties[i];
+      g.setCell(cell[0], cell[1], g.solution[cell[0]][cell[1]]);
+    }
+    final last = empties.last;
+    final answer = g.solution[last[0]][last[1]];
+
+    await tester.tapAt(_cellCenter(tester, last[0], last[1], g.gridDim));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.tap(find.widgetWithText(ElevatedButton, '$answer').last);
+    await tester.pump(const Duration(milliseconds: 700)); // dialog transition
+
+    expect(g.isSolved(), isTrue);
+    expect(find.text('🎉 Completed!'), findsOneWidget);
+
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('Lose path: hitting the mistake limit ends the run and resets '
       'the streak; Try Again replays the board', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 3.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    final seedGame = SudokuGame.generate(
-      SudokuDifficulty.easy,
-      GridSize.small,
-      GridShape.classic,
-      seed: 4321,
-    );
-    // ignore: unawaited_futures
-    PuzzleCache().set(
-      PuzzleBlueprint(
-        solutionGrid: seedGame.solution,
-        regions: seedGame.regions,
-        gridSize: GridSize.small,
-        gridShape: GridShape.classic,
-      ),
-    );
-
     // A non-zero streak that the loss must clear.
     GameStats.currentStreak = 3;
     addTearDown(() => GameStats.currentStreak = 0);
 
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: GameScreen(
-          difficulty: SudokuDifficulty.easy,
-          gridSize: GridSize.small,
-          gridShape: GridShape.classic,
-          gameMode: GameMode.classic,
-        ),
-      ),
-    );
-
-    dynamic state;
-    SudokuGame? game;
-    for (var i = 0; i < 40 && game == null; i++) {
-      await tester.pump(const Duration(milliseconds: 20));
-      state = tester.state(find.byType(GameScreen));
-      game = state.game as SudokuGame?;
-    }
-    expect(game, isNotNull);
-    final g = game!;
+    final state = await _bootCachedGame(tester, seed: 4321);
+    final g = state.game as SudokuGame;
 
     // The mistake budget is shown as "0/<max>" for easy (max = 5).
     final maxMistakes = maxMistakesFor(SudokuDifficulty.easy);
@@ -237,6 +213,74 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
   });
+}
+
+/// Seeds the puzzle cache with a deterministic [size] solution, mounts a
+/// [GameScreen], and pumps until its game has initialized from the cache (so
+/// no background isolate is needed). Returns the GameScreen State.
+Future<dynamic> _bootCachedGame(
+  WidgetTester tester, {
+  GridSize size = GridSize.small,
+  SudokuDifficulty difficulty = SudokuDifficulty.easy,
+  required int seed,
+}) async {
+  // Realistic portrait phone surface (the default 800×600 landscape crams the
+  // board + number pad).
+  tester.view.physicalSize = const Size(1080, 2400);
+  tester.view.devicePixelRatio = 3.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  final seedGame = SudokuGame.generate(
+    difficulty,
+    size,
+    GridShape.classic,
+    seed: seed,
+  );
+  // set() populates the in-memory cache before its disk write, so we don't
+  // await it (avoids blocking on path_provider, unavailable in the test host).
+  // ignore: unawaited_futures
+  PuzzleCache().set(
+    PuzzleBlueprint(
+      solutionGrid: seedGame.solution,
+      regions: seedGame.regions,
+      gridSize: size,
+      gridShape: GridShape.classic,
+    ),
+  );
+
+  await tester.pumpWidget(
+    MaterialApp(
+      home: GameScreen(
+        difficulty: difficulty,
+        gridSize: size,
+        gridShape: GridShape.classic,
+        gameMode: GameMode.classic,
+      ),
+    ),
+  );
+
+  // Pump until the post-frame initialization has built the game (bounded so a
+  // regression can never hang the suite).
+  dynamic state;
+  SudokuGame? game;
+  for (var i = 0; i < 40 && game == null; i++) {
+    await tester.pump(const Duration(milliseconds: 20));
+    state = tester.state(find.byType(GameScreen));
+    game = state.game as SudokuGame?;
+  }
+  expect(game, isNotNull, reason: 'game should initialize from cache');
+  return state;
+}
+
+/// First empty (player-editable) cell as `[row, col]`.
+List<int> _firstEmpty(SudokuGame g) {
+  for (var r = 0; r < g.gridDim; r++) {
+    for (var c = 0; c < g.gridDim; c++) {
+      if (g.grid[r][c] == 0) return [r, c];
+    }
+  }
+  throw StateError('no empty cell');
 }
 
 /// On-screen centre of cell (row,col) within the rendered Sudoku grid.

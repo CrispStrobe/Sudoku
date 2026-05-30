@@ -193,11 +193,23 @@ Two distinct problems behind the report:
   life. Covered by engine tests (`maxMistakesFor` ramp, `reset` semantics) and a
   widget test that drives a full loss + retry through the UI.
 
+- [x] **E11 — Widget-test hardening + streak-achievement follow-through.** Added
+  widget tests for the two UI paths previously only covered at the engine level:
+  **notes mode** (a number tap pencils a candidate instead of placing a value)
+  and the **completion dialog** (filling the final cell via the number pad raises
+  the win dialog). The cached-4×4 boot boilerplate the live/lose tests duplicated
+  is now a shared `_bootCachedGame` helper. Also locked in the achievement
+  behaviour now that streaks can reset: `streak_master` unlocks at streak ≥ 5
+  (granting the Ice theme) and **stays earned after a loss zeroes the streak**
+  (achievements are one-time unlocks, never revoked) —
+  `test/game_stats_test.dart`.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **44 passing** (engine, persistence + bundled-DB, isolate,
-  notes/undo/conflict, mistake-limit/reset, and widget/live tests).
+- `flutter test` → **49 passing** (engine, persistence + bundled-DB, isolate,
+  notes/undo/conflict, mistake-limit/reset, streak-achievement, and widget/live
+  tests incl. notes-mode and completion-dialog coverage).
 - Generation: all sizes sub-second except 12×12 (a few seconds); first play served
   instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app
@@ -206,8 +218,6 @@ Two distinct problems behind the report:
 
 - "Try Again" replays the same givens but the elapsed clock and score restart from
   scratch (no partial-credit for a near-finish); this is intentional.
-- Notes-mode toggle and the completion dialog are covered at the engine level and
-  via the live undo test, but not asserted individually in widget tests.
 - 12×12 generation is a few seconds; the bundled DB hides this on first play, and a
   fresh dig still runs (≤2.5 s) when a cached solution is reused.
 - `--wasm` is validated and available but the live deploy uses the JS/canvaskit
