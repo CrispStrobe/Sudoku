@@ -247,13 +247,23 @@ Two distinct problems behind the report:
   360×800; the daily-launch test also runs at phone size now (full home→9×9 flow
   is overflow-free).
 
+- [x] **E16 — Statistics screen.** A home "Stats" quick button opens a sheet
+  (mirroring Themes/Achievements) summarising the now-meaningful metrics: puzzles
+  solved, **win rate** (solved / (solved + lost)), current and longest streak,
+  games lost, best time, daily puzzles done, hints used, and achievements
+  unlocked / total. Best time shows "—" until a record exists; win rate "—" until
+  a game finishes. A top-level `formatClock` is now shared by the in-game timer
+  and this screen (`_formatDuration` delegates to it). Covered by a widget test
+  that seeds stats and asserts the computed win rate.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **59 passing** (engine, persistence + bundled-DB, isolate,
+- `flutter test` → **60 passing** (engine, persistence + bundled-DB, isolate,
   notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
   streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
-  completion-dialog, hint-exhaustion, daily-launch and narrow-phone-home coverage).
+  completion-dialog, hint-exhaustion, daily-launch, stats-sheet and
+  narrow-phone-home coverage).
 - Generation: all sizes sub-second except 12×12 (a few seconds); first play served
   instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app

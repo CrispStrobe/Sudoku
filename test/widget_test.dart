@@ -60,6 +60,34 @@ void main() {
     expect(find.text('Ocean'), findsWidgets);
   });
 
+  testWidgets('Stats sheet shows computed statistics', (tester) async {
+    final savedSolved = GameStats.totalPuzzlesSolved;
+    final savedLost = GameStats.gamesLost;
+    final savedLongest = GameStats.longestStreak;
+    final savedDaily = GameStats.dailyCompletedCount;
+    addTearDown(() {
+      GameStats.totalPuzzlesSolved = savedSolved;
+      GameStats.gamesLost = savedLost;
+      GameStats.longestStreak = savedLongest;
+      GameStats.dailyCompletedCount = savedDaily;
+    });
+    GameStats.totalPuzzlesSolved = 8;
+    GameStats.gamesLost = 2; // 8 / (8+2) = 80% win rate
+    GameStats.longestStreak = 6;
+    GameStats.dailyCompletedCount = 3;
+
+    await tester.pumpWidget(const SudokuApp());
+    await tester.tap(find.text('Stats'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Statistics'), findsOneWidget);
+    expect(find.text('Win rate'), findsOneWidget);
+    expect(find.text('80%'), findsOneWidget);
+    expect(find.text('Longest streak'), findsOneWidget);
+    expect(find.text('6'), findsWidgets);
+    expect(find.text('Daily puzzles done'), findsOneWidget);
+  });
+
   testWidgets('Live game: play a cached 4×4 puzzle and place a number', (
     tester,
   ) async {

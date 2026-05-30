@@ -453,6 +453,14 @@ const GridSize kDailyGridSize = GridSize.standard;
 const GridShape kDailyGridShape = GridShape.classic;
 const SudokuDifficulty kDailyDifficulty = SudokuDifficulty.medium;
 
+/// `MM:SS` clock formatting (minutes are not capped at 60), shared by the
+/// in-game timer and the stats screen.
+String formatClock(Duration d) {
+  final m = d.inMinutes.toString().padLeft(2, '0');
+  final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+  return '$m:$s';
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -536,6 +544,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 30),
                   Row(
                     children: [
+                      Expanded(
+                        child: _buildQuickButton(
+                          'Stats',
+                          Icons.bar_chart,
+                          _showStats,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: _buildQuickButton(
                           'Themes',
@@ -1308,6 +1324,106 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  void _showStats() {
+    final solved = GameStats.totalPuzzlesSolved;
+    final lost = GameStats.gamesLost;
+    final finished = solved + lost;
+    final winRate = finished == 0
+        ? '—'
+        : '${(solved * 100 / finished).round()}%';
+    final hasBest = GameStats.bestTime.inHours < 99;
+    final unlocked = GameStats.unlockedAchievements.length;
+    final totalAchievements = AchievementSystem.achievements.length;
+
+    final rows = <_Stat>[
+      _Stat(Icons.check_circle_outline, 'Puzzles solved', '$solved'),
+      _Stat(Icons.percent, 'Win rate', winRate),
+      _Stat(
+        Icons.local_fire_department,
+        'Current streak',
+        '${GameStats.currentStreak}',
+      ),
+      _Stat(
+        Icons.emoji_events_outlined,
+        'Longest streak',
+        '${GameStats.longestStreak}',
+      ),
+      _Stat(Icons.heart_broken_outlined, 'Games lost', '$lost'),
+      _Stat(
+        Icons.timer_outlined,
+        'Best time',
+        hasBest ? formatClock(GameStats.bestTime) : '—',
+      ),
+      _Stat(
+        Icons.calendar_today,
+        'Daily puzzles done',
+        '${GameStats.dailyCompletedCount}',
+      ),
+      _Stat(
+        Icons.lightbulb_outline,
+        'Hints used',
+        '${GameStats.totalHintsUsed}',
+      ),
+      _Stat(
+        Icons.military_tech_outlined,
+        'Achievements',
+        '$unlocked / $totalAchievements',
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Statistics',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView.separated(
+                itemCount: rows.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final stat = rows[index];
+                  return ListTile(
+                    leading: Icon(stat.icon, color: GameStats.current.primary),
+                    title: Text(stat.label),
+                    trailing: Text(
+                      stat.value,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One row in the statistics sheet.
+class _Stat {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _Stat(this.icon, this.label, this.value);
 }
 
 // ---------------------------------------------------------------------------
@@ -1407,11 +1523,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _stopGameTimer() => _gameTimer?.cancel();
 
-  String _formatDuration(Duration d) {
-    final m = d.inMinutes;
-    final s = d.inSeconds % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
+  String _formatDuration(Duration d) => formatClock(d);
 
   @override
   void didChangeDependencies() {
