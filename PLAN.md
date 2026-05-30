@@ -280,10 +280,29 @@ Two distinct problems behind the report:
   the highlighted cell. Added a drag-to-place widget test (the drop path had only
   tap coverage before).
 
+- [x] **E19 — Human-technique solver + three features built on it.** Added a
+  pure-Dart logical solver (`lib/technique_solver.dart`) that applies human
+  techniques easiest-first — naked/hidden singles, locked candidates
+  (pointing/claiming), naked/hidden pairs, naked triples, X-wing — over
+  rows/columns/`regions`, so it covers classic and jigsaw at any size. It returns
+  ordered, human-readable steps, the hardest technique needed, and a difficulty
+  rating. Three UI features consume it:
+  - **Logic difficulty rating** — each board is rated by the hardest technique it
+    requires (distinct from the hole-count generation difficulty); shown as a 🧠
+    pill above the grid and in the completion dialog.
+  - **"Next logical step" hint** — the Smart Hints dialog leads with a board-wide
+    deduction that explains the next move in plain language and (for placements)
+    applies it for a score cost. Hint dialog is now scrollable.
+  - **Explain-the-solve walkthrough** (`ExplainScreen`) — scrub/auto-play through
+    the full logical solve, each frame highlighting the cell + naming the
+    technique with its explanation.
+  Inspired by the `dart_csp` CSP library and `CrispCalc`'s Sudoku module. 10
+  engine tests + widget tests for the pill, next-step and explain flows.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **61 passing** (engine, persistence + bundled-DB, isolate,
+- `flutter test` → **74 passing** (engine, persistence + bundled-DB, isolate,
   notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
   streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
   completion-dialog, hint-exhaustion, daily-launch, stats-sheet and

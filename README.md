@@ -2,7 +2,9 @@
 
 A Flutter Sudoku game with classic and **jigsaw** (irregular-region) variants across
 six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12) and four difficulties. Features
-a **daily challenge** (same board for everyone each day), smart hints (a
+a **daily challenge** (same board for everyone each day), a **logic difficulty
+rating** and a step-by-step **"explain the solve"** walkthrough (both powered by a
+human-technique solver), smart hints (a board-wide **"next logical step"** plus a
 per-difficulty **hint budget**), pencil-mark **notes**, **undo**, live conflict
 highlighting, a **mistake limit** (lose path) that scales with difficulty, themes,
 achievements, a **statistics** screen, persisted stats, and a celebratory particle
@@ -17,6 +19,10 @@ layer.
   cache, on-disk storage of solved blueprints, and persisted player stats
   (`stats.json`: solved count, current/longest streak, games lost, daily-puzzle
   completion, best time, achievements, unlocked themes).
+- **`lib/technique_solver.dart`** — a pure-Dart human-technique logical solver
+  (naked/hidden singles, locked candidates, naked/hidden pairs/triples, X-wing)
+  over rows/columns/regions, so it works for classic and jigsaw. Powers the logic
+  difficulty rating, the "next logical step" hint, and the explain-the-solve mode.
 - **`lib/sudoku_game.g.dart`** — generated `json_serializable` code for
   `PuzzleBlueprint`. Regenerate with build_runner (below).
 
@@ -55,7 +61,7 @@ The **Admin** panel (debug builds only) pre-generates puzzles into the on-disk c
 ## Testing
 
 ```bash
-flutter test               # unit + widget tests (61)
+flutter test               # unit + widget tests (74)
 flutter analyze            # static analysis (expected: no issues)
 dart format .              # formatting (checked in CI)
 ```
@@ -72,9 +78,14 @@ CI (`.github/workflows/ci.yml`) runs format-check, `flutter analyze`, and
   loss, and daily-completion tracking.
 - `test/persistence_test.dart` — `shared_preferences`-backed puzzle cache and the
   bundled puzzle database.
+- `test/technique_solver_test.dart` — the human-technique solver: correctness
+  against generated classic/jigsaw solutions, `nextStep`, technique-isolation
+  cases, and the difficulty mapping.
 - `test/widget_test.dart` — widget/integration tests: home navigation, the
-  narrow-phone layout, the stats sheet, a live 4×4 play-through, and the
-  notes-mode, completion-dialog, hint-exhaustion, lose-path and daily-launch flows.
+  narrow-phone layout, the stats sheet, a live 4×4 play-through and drag-to-place,
+  the logic-rating pill, the next-logical-step hint, the explain walkthrough, and
+  the notes-mode, completion-dialog, hint-exhaustion, lose-path and daily-launch
+  flows.
 
 ## Deploying (Vercel)
 
