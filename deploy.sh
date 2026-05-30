@@ -72,7 +72,7 @@ cat > "$OUT/vercel.json" <<JSON
 JSON
 
 echo "==> linking Vercel project '$PROJECT'"
-vercel link --cwd "$OUT" --project "$PROJECT" --yes "${TOKEN_ARG[@]}"
+vercel link --cwd "$OUT" --project "$PROJECT" --yes ${TOKEN_ARG[@]+"${TOKEN_ARG[@]}"}
 
 echo "==> deploying"
-vercel deploy --cwd "$OUT" $PROD --yes "${TOKEN_ARG[@]}"
+vercel deploy --cwd "$OUT" $PROD --yes ${TOKEN_ARG[@]+"${TOKEN_ARG[@]}"}
