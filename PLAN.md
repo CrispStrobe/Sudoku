@@ -204,12 +204,24 @@ Two distinct problems behind the report:
   (achievements are one-time unlocks, never revoked) —
   `test/game_stats_test.dart`.
 
+- [x] **E12 — Best-streak & games-lost stats.** Completes the streak/lose-path
+  arc with the metrics the lose path makes meaningful. Added persisted
+  `GameStats.longestStreak` (bumped on every win, never reset by a loss) and
+  `gamesLost` (bumped on game over). `applyJson` enforces
+  `longestStreak >= currentStreak` even for saves predating the field. The home
+  screen now shows `Solved | Streak | Best`, plus a `Losses` line once any game
+  has been lost. A new reward-free **Marathon** achievement (🏅, longest streak
+  ≥ 10) gives the best-streak stat a goal. Covered in `game_stats_test.dart`
+  (round-trip, invariant, marathon-from-longest) and asserted in the completion
+  and lose widget tests (solved/longest increment on win, games-lost on loss).
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **49 passing** (engine, persistence + bundled-DB, isolate,
-  notes/undo/conflict, mistake-limit/reset, streak-achievement, and widget/live
-  tests incl. notes-mode and completion-dialog coverage).
+- `flutter test` → **51 passing** (engine, persistence + bundled-DB, isolate,
+  notes/undo/conflict, mistake-limit/reset, streak/longest/lost stats +
+  achievements, and widget/live tests incl. notes-mode and completion-dialog
+  coverage).
 - Generation: all sizes sub-second except 12×12 (a few seconds); first play served
   instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app

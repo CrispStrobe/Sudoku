@@ -70,6 +70,13 @@ class GameStats {
   static int totalHintsUsed = 0;
   static Duration bestTime = const Duration(hours: 99);
   static int currentStreak = 0;
+
+  /// Highest [currentStreak] ever reached (never reset by a loss).
+  static int longestStreak = 0;
+
+  /// Number of puzzles abandoned by hitting the mistake limit.
+  static int gamesLost = 0;
+
   static Set<String> unlockedAchievements = {};
 
   /// Admin panel + all-themes-unlocked only in debug builds.
@@ -142,6 +149,8 @@ class GameStats {
     'totalHintsUsed': totalHintsUsed,
     'bestTimeMs': bestTime.inMilliseconds,
     'currentStreak': currentStreak,
+    'longestStreak': longestStreak,
+    'gamesLost': gamesLost,
     'unlockedAchievements': unlockedAchievements.toList(),
     'unlockedThemes': unlockedThemes.toList(),
     'currentTheme': currentTheme,
@@ -157,6 +166,10 @@ class GameStats {
     final bestMs = (json['bestTimeMs'] as num?)?.toInt();
     if (bestMs != null) bestTime = Duration(milliseconds: bestMs);
     currentStreak = (json['currentStreak'] as num?)?.toInt() ?? currentStreak;
+    longestStreak = (json['longestStreak'] as num?)?.toInt() ?? longestStreak;
+    gamesLost = (json['gamesLost'] as num?)?.toInt() ?? gamesLost;
+    // Keep the invariant even for stats saved before these fields existed.
+    if (currentStreak > longestStreak) longestStreak = currentStreak;
 
     final achievements = (json['unlockedAchievements'] as List?)
         ?.cast<String>();
@@ -240,6 +253,13 @@ class AchievementSystem {
       icon: '🔥',
       isUnlocked: () => GameStats.currentStreak >= 5,
       rewardTheme: 'Ice',
+    ),
+    Achievement(
+      id: 'marathon',
+      name: 'Marathon',
+      description: 'Reach a 10-puzzle streak',
+      icon: '🏅',
+      isUnlocked: () => GameStats.longestStreak >= 10,
     ),
   ];
 
@@ -462,13 +482,24 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Puzzles Solved: ${GameStats.totalPuzzlesSolved} | '
-                          'Streak: ${GameStats.currentStreak}',
+                          'Solved: ${GameStats.totalPuzzlesSolved}  |  '
+                          'Streak: ${GameStats.currentStreak}  |  '
+                          'Best: ${GameStats.longestStreak}',
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
                           ),
                         ),
+                        if (GameStats.gamesLost > 0) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Losses: ${GameStats.gamesLost}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 5),
                         Text(
                           scheme.description,
@@ -1624,6 +1655,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       GameStats.bestTime = completionTime;
     }
     GameStats.currentStreak++;
+    if (GameStats.currentStreak > GameStats.longestStreak) {
+      GameStats.longestStreak = GameStats.currentStreak;
+    }
     if (hintsUsed == 0 && widget.difficulty == SudokuDifficulty.hard) {
       GameStats.unlockedAchievements.add('no_hints_hard');
     }
@@ -1682,7 +1716,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _gameOver() {
     _stopGameTimer();
     GameStats.currentStreak = 0;
-    GameStats.save(); // persist the broken streak
+    GameStats.gamesLost++;
+    GameStats.save(); // persist the broken streak + loss count
     _showGameOverDialog();
   }
 

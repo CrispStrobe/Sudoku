@@ -3,7 +3,7 @@ import 'package:sudoku/main.dart';
 
 void main() {
   // GameStats is global mutable state; snapshot and restore around each test.
-  late int solved, hints, streak;
+  late int solved, hints, streak, longest, lost;
   late Duration best;
   late Set<String> achievements, themes;
   late String theme;
@@ -12,6 +12,8 @@ void main() {
     solved = GameStats.totalPuzzlesSolved;
     hints = GameStats.totalHintsUsed;
     streak = GameStats.currentStreak;
+    longest = GameStats.longestStreak;
+    lost = GameStats.gamesLost;
     best = GameStats.bestTime;
     achievements = {...GameStats.unlockedAchievements};
     themes = {...GameStats.unlockedThemes};
@@ -22,6 +24,8 @@ void main() {
     GameStats.totalPuzzlesSolved = solved;
     GameStats.totalHintsUsed = hints;
     GameStats.currentStreak = streak;
+    GameStats.longestStreak = longest;
+    GameStats.gamesLost = lost;
     GameStats.bestTime = best;
     GameStats.unlockedAchievements = achievements;
     GameStats.unlockedThemes = themes;
@@ -32,6 +36,8 @@ void main() {
     GameStats.totalPuzzlesSolved = 12;
     GameStats.totalHintsUsed = 7;
     GameStats.currentStreak = 4;
+    GameStats.longestStreak = 9;
+    GameStats.gamesLost = 3;
     GameStats.bestTime = const Duration(minutes: 2, seconds: 30);
     GameStats.unlockedAchievements = {'first_solve', 'streak_master'};
 
@@ -41,6 +47,8 @@ void main() {
     GameStats.totalPuzzlesSolved = 0;
     GameStats.totalHintsUsed = 0;
     GameStats.currentStreak = 0;
+    GameStats.longestStreak = 0;
+    GameStats.gamesLost = 0;
     GameStats.bestTime = const Duration(hours: 99);
     GameStats.unlockedAchievements = {};
 
@@ -49,6 +57,8 @@ void main() {
     expect(GameStats.totalPuzzlesSolved, 12);
     expect(GameStats.totalHintsUsed, 7);
     expect(GameStats.currentStreak, 4);
+    expect(GameStats.longestStreak, 9);
+    expect(GameStats.gamesLost, 3);
     expect(GameStats.bestTime, const Duration(minutes: 2, seconds: 30));
     expect(
       GameStats.unlockedAchievements,
@@ -107,6 +117,31 @@ void main() {
       AchievementSystem.checkAchievements();
       expect(GameStats.unlockedAchievements, isNot(contains('streak_master')));
     });
+
+    test('marathon unlocks from the longest (not current) streak', () {
+      GameStats.unlockedAchievements = {};
+      GameStats.currentStreak = 0; // already broken by a loss
+      GameStats.longestStreak = 10;
+      AchievementSystem.checkAchievements();
+      expect(
+        GameStats.unlockedAchievements,
+        contains('marathon'),
+        reason: 'a past 10-streak still counts even after a reset',
+      );
+    });
+  });
+
+  test('applyJson restores the longestStreak >= currentStreak invariant', () {
+    GameStats.currentStreak = 0;
+    GameStats.longestStreak = 0;
+    // Older save predating longestStreak: only currentStreak present.
+    GameStats.applyJson({'currentStreak': 7});
+    expect(GameStats.currentStreak, 7);
+    expect(
+      GameStats.longestStreak,
+      greaterThanOrEqualTo(7),
+      reason: 'longest must never trail the current streak',
+    );
   });
 
   test('currentTheme is only applied when that theme is unlocked', () {

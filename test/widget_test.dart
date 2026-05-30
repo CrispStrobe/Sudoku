@@ -112,12 +112,14 @@ void main() {
     // Completing mutates global stats; snapshot and restore.
     final solved = GameStats.totalPuzzlesSolved;
     final streak = GameStats.currentStreak;
+    final longest = GameStats.longestStreak;
     final best = GameStats.bestTime;
     final achievements = {...GameStats.unlockedAchievements};
     final themes = {...GameStats.unlockedThemes};
     addTearDown(() {
       GameStats.totalPuzzlesSolved = solved;
       GameStats.currentStreak = streak;
+      GameStats.longestStreak = longest;
       GameStats.bestTime = best;
       GameStats.unlockedAchievements = achievements;
       GameStats.unlockedThemes = themes;
@@ -150,6 +152,16 @@ void main() {
 
     expect(g.isSolved(), isTrue);
     expect(find.text('🎉 Completed!'), findsOneWidget);
+    expect(
+      GameStats.totalPuzzlesSolved,
+      solved + 1,
+      reason: 'a win increments the solved count',
+    );
+    expect(
+      GameStats.longestStreak,
+      greaterThanOrEqualTo(GameStats.currentStreak),
+      reason: 'longest streak tracks the current streak',
+    );
 
     await tester.pumpWidget(const SizedBox());
   });
@@ -158,7 +170,11 @@ void main() {
       'the streak; Try Again replays the board', (tester) async {
     // A non-zero streak that the loss must clear.
     GameStats.currentStreak = 3;
-    addTearDown(() => GameStats.currentStreak = 0);
+    final lostBefore = GameStats.gamesLost;
+    addTearDown(() {
+      GameStats.currentStreak = 0;
+      GameStats.gamesLost = lostBefore;
+    });
 
     final state = await _bootCachedGame(tester, seed: 4321);
     final g = state.game as SudokuGame;
@@ -200,6 +216,11 @@ void main() {
     // Game Over dialog is up and the streak has been broken.
     expect(find.text('💥 Game Over'), findsOneWidget);
     expect(GameStats.currentStreak, 0, reason: 'streak resets on loss');
+    expect(
+      GameStats.gamesLost,
+      lostBefore + 1,
+      reason: 'a loss increments the games-lost count',
+    );
     expect(state.mistakes as int, maxMistakes);
 
     // Try Again replays the same board: dialog gone, mistakes back to 0,
