@@ -1,8 +1,8 @@
 # Sudoku Master Pro
 
-A Flutter Sudoku game with classic, **jigsaw** (irregular-region) and **Sudoku-X**
-(diagonal) variants across six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12) and
-four difficulties. Features
+A Flutter Sudoku game with classic, **jigsaw** (irregular-region), **Sudoku-X**
+(diagonal) and **Killer** (summed-cage) variants across six grid sizes (4×4, 6×6,
+8×8, 9×9, 10×10, 12×12) and four difficulties. Features
 a **daily challenge** (same board for everyone each day), a **logic difficulty
 rating** and a step-by-step **"explain the solve"** walkthrough (both powered by a
 human-technique solver), smart hints (a board-wide **"next logical step"** plus a
@@ -25,6 +25,11 @@ layer.
   over rows/columns/regions (plus diagonals for Sudoku-X), so it works for every
   variant. Powers the logic difficulty rating, the "next logical step" hint, and
   the explain-the-solve mode.
+- **`lib/variant_engine.dart`** — the **Killer** engine, built on the pure-Dart
+  `dart_csp` constraint solver: `KillerCage`/`KillerPuzzle`, cage validation, and
+  `VariantEngine.solveKiller`/`killerHasUniqueSolution`/`generateKiller`.
+  Generation reuses the bitmask engine for the base solution and only uses the CSP
+  solver for cage-sum uniqueness, so a 9×9 Killer generates in ~100ms.
 - **`lib/sudoku_game.g.dart`** — generated `json_serializable` code for
   `PuzzleBlueprint`. Regenerate with build_runner (below).
 
@@ -63,7 +68,7 @@ The **Admin** panel (debug builds only) pre-generates puzzles into the on-disk c
 ## Testing
 
 ```bash
-flutter test               # unit + widget tests (79)
+flutter test               # unit + widget tests (90)
 flutter analyze            # static analysis (expected: no issues)
 dart format .              # formatting (checked in CI)
 ```

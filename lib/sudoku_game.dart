@@ -17,8 +17,9 @@ enum SudokuDifficulty { easy, medium, hard, expert }
 enum GridShape { classic, jigsaw }
 
 /// Rule variant. `x` (Sudoku-X) additionally requires the two main diagonals to
-/// each contain 1..dim with no repeats.
-enum SudokuVariant { classic, x }
+/// each contain 1..dim with no repeats. `killer` partitions the grid into
+/// summed cages (handled outside the bitmask engine, in `variant_engine.dart`).
+enum SudokuVariant { classic, x, killer }
 
 enum GameMode { classic }
 
@@ -324,6 +325,32 @@ class SudokuGame {
       (_) => List.filled(game.gridDim, false),
     );
     game._puzzlify();
+    return game;
+  }
+
+  /// Build a playable game from an explicit board state (used for variants
+  /// generated outside the bitmask engine, e.g. Killer). [given] cells (value
+  /// != 0) become immutable originals; the rest are empty and editable.
+  factory SudokuGame.fromState({
+    required List<List<int>> givens,
+    required List<List<int>> solution,
+    required List<List<int>> regions,
+    required SudokuDifficulty difficulty,
+    SudokuVariant variant = SudokuVariant.classic,
+  }) {
+    final game = SudokuGame._(difficulty);
+    game.variant = variant;
+    game.gridDim = givens.length;
+    game.grid = givens.map((row) => List<int>.from(row)).toList();
+    game.solution = solution.map((row) => List<int>.from(row)).toList();
+    game.regions = regions.map((row) => List<int>.from(row)).toList();
+    game.isOriginal = givens
+        .map((row) => row.map((v) => v != 0).toList())
+        .toList();
+    game.notes = List.generate(
+      game.gridDim,
+      (_) => List.generate(game.gridDim, (_) => <int>{}),
+    );
     return game;
   }
 

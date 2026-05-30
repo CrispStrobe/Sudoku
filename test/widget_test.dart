@@ -52,7 +52,7 @@ void main() {
     expect(find.text('EXPERT'), findsOneWidget);
   });
 
-  testWidgets('Difficulty sheet offers a working Sudoku-X toggle', (
+  testWidgets('Difficulty sheet offers Classic / Sudoku-X / Killer variants', (
     tester,
   ) async {
     await tester.pumpWidget(const SudokuApp());
@@ -62,14 +62,60 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Select Difficulty'), findsOneWidget);
+    expect(find.text('Classic'), findsOneWidget);
     expect(find.textContaining('Sudoku-X'), findsOneWidget);
+    expect(find.textContaining('Killer'), findsOneWidget); // 4×4 ≤ 9 → offered
 
-    // The toggle flips on tap (we stop here rather than start a game, which
-    // would spawn a generation isolate in the test host).
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    // Selecting the Sudoku-X chip marks it selected and shows its note.
     await tester.tap(find.textContaining('Sudoku-X'));
     await tester.pump();
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    final chip = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, '⊗ Sudoku-X'),
+    );
+    expect(chip.selected, isTrue);
+    expect(find.textContaining('diagonals must also'), findsOneWidget);
+  });
+
+  testWidgets('Killer: a 4×4 board generates with a cage overlay', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: GameScreen(
+          difficulty: SudokuDifficulty.easy,
+          gridSize: GridSize.small,
+          gridShape: GridShape.classic,
+          gameMode: GameMode.classic,
+          variant: SudokuVariant.killer,
+        ),
+      ),
+    );
+
+    // Killer generation runs inline (dart_csp, ~100ms); pump until built.
+    dynamic state;
+    SudokuGame? game;
+    for (var i = 0; i < 200 && game == null; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      state = tester.state(find.byType(GameScreen));
+      game = state.game as SudokuGame?;
+    }
+    expect(game, isNotNull, reason: 'Killer board should generate');
+    expect((state.widget as GameScreen).isKiller, isTrue);
+
+    // The cage overlay is painted.
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter is KillerCagePainter,
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('Themes sheet opens and lists themes', (tester) async {

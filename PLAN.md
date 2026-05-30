@@ -313,10 +313,27 @@ Two distinct problems behind the report:
   tests verify X-unique generation + diagonal conflicts; solver tests verify X
   solving; a widget test covers the toggle.
 
+- [x] **E21 — Killer variant (summed cages).** Added Killer Sudoku, the one
+  variant that genuinely needs arithmetic constraints. Pulled in the pure-Dart
+  `dart_csp` solver (pinned, dart2js-safe — verified it compiles to JS and the web
+  build succeeds with it imported) and a self-contained `lib/variant_engine.dart`:
+  `KillerCage`/`KillerPuzzle`, cage validation, and solve/uniqueness/generate.
+  Generation reuses our bitmask engine for the base solution + box regions and only
+  uses dart_csp for the cage-sum uniqueness check, so a 9×9 Killer generates in
+  **~100ms** (not the ~30–60s a pure-CSP fill costs). A generic
+  `SudokuGame.fromState` factory makes the generated board playable, reusing all
+  existing gameplay (notes/undo/mistakes/win). UI: a Classic/Sudoku-X/Killer chip
+  selector in the difficulty sheet (Killer offered for sizes ≤ 9×9), a
+  `KillerCagePainter` overlay (dashed cage borders + sum labels), cage-aware
+  conflict highlighting / mistake counting / win condition, and the logic-based
+  features (rating, hint, explain) disabled for Killer since the technique solver
+  doesn't model cages. 10 engine tests + a board-generation widget test + the
+  variant-selector test.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **79 passing** (engine, persistence + bundled-DB, isolate,
+- `flutter test` → **90 passing** (engine, persistence + bundled-DB, isolate,
   notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
   streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
   completion-dialog, hint-exhaustion, daily-launch, stats-sheet and

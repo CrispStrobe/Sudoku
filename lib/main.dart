@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sudoku_game.dart';
 import 'technique_solver.dart';
+import 'variant_engine.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -862,7 +863,8 @@ class _HomeScreenState extends State<HomeScreen> {
     GameMode gameMode, {
     GridShape gridShape = GridShape.classic,
   }) {
-    var xVariant = false;
+    var variant = SudokuVariant.classic;
+    final killerAllowed = gridDimensionFor(gridSize) <= 9;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -903,17 +905,52 @@ class _HomeScreenState extends State<HomeScreen> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-              // Sudoku-X is offered on the regular box layout.
-              if (gridShape == GridShape.classic)
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('⊗ Sudoku-X (diagonals)'),
-                  subtitle: const Text(
-                    'Both main diagonals must also contain each number once.',
+              // Variants are offered on the regular box layout.
+              if (gridShape == GridShape.classic) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Variant',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700,
+                    ),
                   ),
-                  value: xVariant,
-                  onChanged: (v) => setSheetState(() => xVariant = v),
                 ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Classic'),
+                      selected: variant == SudokuVariant.classic,
+                      onSelected: (_) =>
+                          setSheetState(() => variant = SudokuVariant.classic),
+                    ),
+                    ChoiceChip(
+                      label: const Text('⊗ Sudoku-X'),
+                      selected: variant == SudokuVariant.x,
+                      onSelected: (_) =>
+                          setSheetState(() => variant = SudokuVariant.x),
+                    ),
+                    if (killerAllowed)
+                      ChoiceChip(
+                        label: const Text('🧮 Killer'),
+                        selected: variant == SudokuVariant.killer,
+                        onSelected: (_) =>
+                            setSheetState(() => variant = SudokuVariant.killer),
+                      ),
+                  ],
+                ),
+                if (variant == SudokuVariant.x)
+                  _variantNote('Both main diagonals must also contain 1–N.'),
+                if (variant == SudokuVariant.killer)
+                  _variantNote(
+                    'No givens — each dashed cage must sum to its number with '
+                    'no repeats.',
+                  ),
+              ],
               const SizedBox(height: 12),
               for (final opt in const [
                 ['EASY', SudokuDifficulty.easy],
@@ -928,7 +965,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   gridSize,
                   gameMode,
                   gridShape,
-                  xVariant ? SudokuVariant.x : SudokuVariant.classic,
+                  variant,
                 ),
             ],
           ),
@@ -943,6 +980,20 @@ class _HomeScreenState extends State<HomeScreen> {
     SudokuDifficulty.hard => Colors.red,
     SudokuDifficulty.expert => Colors.purple,
   };
+
+  Widget _variantNote(String text) => Container(
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: Colors.blue.shade50,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(color: Colors.blue.shade700, fontSize: 12),
+      textAlign: TextAlign.center,
+    ),
+  );
 
   Widget _buildDifficultyOption(
     String label,
@@ -1476,6 +1527,7 @@ class GameScreen extends StatefulWidget {
 
   bool get isDaily => dailyKey != null;
   bool get isDiagonal => variant == SudokuVariant.x;
+  bool get isKiller => variant == SudokuVariant.killer;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -1502,6 +1554,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   /// Difficulty of the current board as rated by the logical-technique solver
   /// (distinct from the generation difficulty, which is hole-count based).
   SudokuDifficulty? _logicRating;
+
+  /// Killer cages for the current board (empty unless the Killer variant).
+  List<KillerCage> _cages = const [];
 
   /// Score cost of revealing the next logical step.
   static const int _nextStepPenalty = 40;
@@ -1613,7 +1668,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       setState(() => game = null);
 
       SudokuGame? built;
-      if (widget.dailySeed != null) {
+      _cages = const [];
+      if (widget.isKiller) {
+        // Killer is generated outside the bitmask engine (cage sums need the
+        // CSP solver). Fast enough (~100ms) to run inline behind the spinner.
+        final puzzle = await VariantEngine.generateKiller(
+          gridSize: widget.gridSize,
+          difficulty: widget.difficulty,
+        );
+        _cages = puzzle.cages;
+        built = SudokuGame.fromState(
+          givens: puzzle.givens,
+          solution: puzzle.solution,
+          regions: puzzle.regions,
+          difficulty: widget.difficulty,
+          variant: SudokuVariant.killer,
+        );
+      } else if (widget.dailySeed != null) {
         // Deterministic, cache-free generation so the daily board is identical
         // for every player and every replay. 9×9 classic generates instantly.
         built = SudokuGame.generate(
@@ -1710,7 +1781,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   /// (a few ms); recomputed whenever a new board is built.
   void _updateLogicRating() {
     final g = game;
-    if (g == null) {
+    // The technique solver doesn't model cage sums, so it can't rate Killer.
+    if (g == null || widget.isKiller) {
       _logicRating = null;
       return;
     }
@@ -1766,7 +1838,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _placeValue(int row, int col, int number) {
     final g = game;
     if (g == null || g.isOriginal[row][col]) return;
-    final wasValid = g.isValidMove(row, col, number);
+    final wasValid =
+        g.isValidMove(row, col, number) &&
+        _killerPlacementValid(row, col, number);
     setState(() => g.setCell(row, col, number));
     if (!wasValid) {
       _shakeController.forward().then((_) => _shakeController.reverse());
@@ -1779,7 +1853,57 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         return;
       }
     }
-    if (g.isSolved()) _completeGame();
+    if (_isWon()) _completeGame();
+  }
+
+  /// The cage containing (row,col), or null (always null off the Killer variant).
+  KillerCage? _cageAt(int row, int col) {
+    for (final cage in _cages) {
+      if (cage.contains(row, col)) return cage;
+    }
+    return null;
+  }
+
+  /// True unless placing [number] would break (row,col)'s Killer cage (repeat
+  /// digit or sum overflow). Always true off the Killer variant.
+  bool _killerPlacementValid(int row, int col, int number) {
+    if (!widget.isKiller) return true;
+    final cage = _cageAt(row, col);
+    if (cage == null) return true;
+    final g = game!;
+    final seen = <int>{number};
+    var total = number, filled = 1;
+    for (final cell in cage.cells) {
+      if (cell[0] == row && cell[1] == col) continue;
+      final v = g.grid[cell[0]][cell[1]];
+      if (v == 0) continue;
+      filled++;
+      total += v;
+      if (!seen.add(v)) return false;
+    }
+    if (total > cage.sum) return false;
+    if (filled == cage.cells.length && total != cage.sum) return false;
+    return true;
+  }
+
+  /// Win condition: standard full-and-consistent, plus every cage satisfied
+  /// for Killer.
+  bool _isWon() {
+    final g = game;
+    if (g == null || !g.isSolved()) return false;
+    return !widget.isKiller || cagesSatisfied(_cages, g.grid);
+  }
+
+  /// Conflict highlight for a cell: standard conflicts, plus a Killer cage that
+  /// currently has a repeated digit or an over/wrong sum.
+  bool _cellConflict(int row, int col) {
+    final g = game!;
+    if (g.hasConflict(row, col)) return true;
+    if (widget.isKiller) {
+      final cage = _cageAt(row, col);
+      if (cage != null && cage.hasError(g.grid)) return true;
+    }
+    return false;
   }
 
   void _clearCell() {
@@ -1953,7 +2077,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         g.setCell(step.cell[0], step.cell[1], step.value!);
       }
     });
-    if (g.isSolved()) _completeGame();
+    if (_isWon()) _completeGame();
   }
 
   static String _techniqueLabel(Technique t) {
@@ -2025,7 +2149,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           break;
       }
     });
-    if (g.isSolved()) _completeGame();
+    if (_isWon()) _completeGame();
   }
 
   void _completeGame() {
@@ -2418,10 +2542,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       children: [
         Expanded(
           child: ElevatedButton.icon(
-            onPressed: _hintsRemaining > 0 ? _showHint : null,
+            // Logic hints don't model cage sums, so they're off for Killer.
+            onPressed: (!widget.isKiller && _hintsRemaining > 0)
+                ? _showHint
+                : null,
             icon: const Icon(Icons.lightbulb),
             label: Text(
-              _hintsRemaining > 0 ? 'Hint ($_hintsRemaining)' : 'No Hints',
+              widget.isKiller
+                  ? 'Hint'
+                  : (_hintsRemaining > 0
+                        ? 'Hint ($_hintsRemaining)'
+                        : 'No Hints'),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
@@ -2458,7 +2589,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _circleButton(
           icon: Icons.school,
           tooltip: 'Explain solve',
-          onPressed: game == null ? null : _openExplain,
+          onPressed: (game == null || widget.isKiller) ? null : _openExplain,
         ),
       ],
     );
@@ -2551,6 +2682,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   height: cellSize,
                   child: _buildCell(row, col, isTablet, scheme),
                 ),
+            if (widget.isKiller)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    size: Size(gridPixels, gridPixels),
+                    painter: KillerCagePainter(_cages, gridDim),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -2567,7 +2707,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final isSelected = selectedRow == row && selectedCol == col;
 
     final value = g.grid[row][col];
-    final conflict = g.hasConflict(row, col);
+    final conflict = _cellConflict(row, col);
 
     Widget cell = DragTarget<int>(
       onAcceptWithDetails: (details) => _placeValue(row, col, details.data),
@@ -3080,6 +3220,90 @@ class _ExplainGrid extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Grid painter
 // ---------------------------------------------------------------------------
+
+/// Draws Killer cages: a dashed inset border along each cage boundary and the
+/// cage sum in the top-left cell.
+class KillerCagePainter extends CustomPainter {
+  final List<KillerCage> cages;
+  final int gridDim;
+
+  KillerCagePainter(this.cages, this.gridDim);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cell = size.width / gridDim;
+    const inset = 4.0;
+    final paint = Paint()
+      ..color = Colors.black54
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    final cageOf = List.generate(gridDim, (_) => List.filled(gridDim, -1));
+    for (var i = 0; i < cages.length; i++) {
+      for (final c in cages[i].cells) {
+        cageOf[c[0]][c[1]] = i;
+      }
+    }
+    bool same(int r, int c, int idx) =>
+        r >= 0 && r < gridDim && c >= 0 && c < gridDim && cageOf[r][c] == idx;
+
+    for (var i = 0; i < cages.length; i++) {
+      for (final pos in cages[i].cells) {
+        final r = pos[0], c = pos[1];
+        final left = c * cell + inset;
+        final top = r * cell + inset;
+        final right = (c + 1) * cell - inset;
+        final bottom = (r + 1) * cell - inset;
+        if (!same(r - 1, c, i)) {
+          _dash(canvas, Offset(left, top), Offset(right, top), paint);
+        }
+        if (!same(r + 1, c, i)) {
+          _dash(canvas, Offset(left, bottom), Offset(right, bottom), paint);
+        }
+        if (!same(r, c - 1, i)) {
+          _dash(canvas, Offset(left, top), Offset(left, bottom), paint);
+        }
+        if (!same(r, c + 1, i)) {
+          _dash(canvas, Offset(right, top), Offset(right, bottom), paint);
+        }
+      }
+      final anchor = cages[i].labelCell;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '${cages[i].sum}',
+          style: TextStyle(
+            fontSize: cell * 0.24,
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(
+        canvas,
+        Offset(anchor[1] * cell + inset + 1, anchor[0] * cell + inset),
+      );
+    }
+  }
+
+  void _dash(Canvas canvas, Offset a, Offset b, Paint paint) {
+    const dash = 4.0, gap = 3.0;
+    final total = (b - a).distance;
+    if (total == 0) return;
+    final dir = (b - a) / total;
+    var d = 0.0;
+    while (d < total) {
+      final start = a + dir * d;
+      final end = a + dir * math.min(d + dash, total);
+      canvas.drawLine(start, end, paint);
+      d += dash + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant KillerCagePainter old) =>
+      old.cages != cages || old.gridDim != gridDim;
+}
 
 class SudokuGridPainter extends CustomPainter {
   final int gridDim;

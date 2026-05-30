@@ -22,7 +22,57 @@ class KillerCage {
   final List<List<int>> cells; // each [row, col]
   final int sum;
   const KillerCage({required this.cells, required this.sum});
+
+  bool contains(int row, int col) =>
+      cells.any((c) => c[0] == row && c[1] == col);
+
+  /// The cage's anchor cell (top-most, then left-most) — where the sum label
+  /// is drawn.
+  List<int> get labelCell {
+    var best = cells.first;
+    for (final c in cells) {
+      if (c[0] < best[0] || (c[0] == best[0] && c[1] < best[1])) best = c;
+    }
+    return best;
+  }
+
+  /// True if the cage is currently inconsistent given [grid]: a repeated digit
+  /// among its filled cells, its filled-cell sum already exceeds [sum], or it
+  /// is fully filled but does not total [sum].
+  bool hasError(List<List<int>> grid) {
+    final seen = <int>{};
+    var total = 0;
+    var filled = 0;
+    for (final cell in cells) {
+      final v = grid[cell[0]][cell[1]];
+      if (v == 0) continue;
+      filled++;
+      total += v;
+      if (!seen.add(v)) return true; // repeated digit
+    }
+    if (total > sum) return true;
+    if (filled == cells.length && total != sum) return true;
+    return false;
+  }
+
+  /// True when every cell is filled with distinct digits summing to [sum].
+  bool isSatisfied(List<List<int>> grid) {
+    final seen = <int>{};
+    var total = 0;
+    for (final cell in cells) {
+      final v = grid[cell[0]][cell[1]];
+      if (v == 0) return false;
+      if (!seen.add(v)) return false;
+      total += v;
+    }
+    return total == sum;
+  }
 }
+
+/// True if every cage in [cages] is satisfied for [grid] (used as the extra
+/// win condition for Killer, on top of the standard full-and-consistent check).
+bool cagesSatisfied(List<KillerCage> cages, List<List<int>> grid) =>
+    cages.every((cage) => cage.isSatisfied(grid));
 
 /// A generated Killer puzzle.
 class KillerPuzzle {
