@@ -1,0 +1,25 @@
+CrispSudoku is a polished, ad-free Sudoku game with real depth — four rule variants, six grid sizes, and a built-in tutor that explains how to solve every board.
+
+PLAY YOUR WAY
+• Four variants: Classic, Jigsaw (irregular regions), Sudoku-X (diagonals) and Killer (summed cages)
+• Six grid sizes: 4×4, 6×6, 8×8, 9×9, 10×10 and 12×12
+• Four difficulties, from Easy to Expert
+• A new Daily Challenge every day — the same board for everyone
+
+LEARN AS YOU PLAY
+• "Explain the solve" walks through any board step by step, naming each technique (naked singles, hidden singles, locked candidates, X-wing and more)
+• "Next logical step" hints tell you what to play next, and why
+• Every puzzle gets an honest difficulty rating based on the hardest technique it actually requires
+
+THOUGHTFUL TOUCHES
+• Pencil-mark notes, unlimited undo, and live conflict highlighting
+• A mistake limit that scales with difficulty
+• Per-difficulty hint budgets, so hints stay meaningful
+• Beautiful themes you unlock as you play
+• Achievements, streaks and detailed statistics
+
+PRIVATE BY DESIGN
+• 100% offline — no account, no ads, no tracking, no data collection
+• Every puzzle is guaranteed to have exactly one solution
+
+CrispSudoku is free software, open source under the GNU AGPL-3.0.

@@ -121,6 +121,15 @@ An in-app **About** screen (Home → *About & Licenses*) shows the version
 (`package_info_plus`), contact/legal info, and a **Open-source licenses** button
 that opens Flutter's `showLicensePage` listing every bundled dependency.
 
+## Store release
+
+App-store metadata is prepared under [`store/`](store/) (listing copy, privacy
+policy, data-safety answers, screenshot specs, Play graphics) with uploadable
+Fastlane text in `fastlane/metadata/`. The privacy policy is hosted at
+`/privacy.html`, and Apple's privacy manifest is at
+`ios/Runner/PrivacyInfo.xcprivacy`. See [`store/README.md`](store/README.md) for
+the submission checklist.
+
 ## License
 
 CrispSudoku is free software licensed under the **GNU Affero General Public

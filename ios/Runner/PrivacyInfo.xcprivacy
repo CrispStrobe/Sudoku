@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- CrispSudoku is fully on-device: no accounts, no ads, no analytics,
+         no third-party tracking SDKs, and no data ever leaves the device.
+         Games, statistics and settings are stored locally only. -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!-- No data is collected (in Apple's sense): nothing is transmitted off
+         device or linked to the user's identity. -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!-- Required-reason API declarations, per Apple's requirement
+         (https://developer.apple.com/documentation/bundleresources/privacy_manifest_files/describing_use_of_required_reason_api). -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <!-- shared_preferences persists local settings/stats via
+             NSUserDefaults. CA92.1 = "Access info from same app". -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+
+        <!-- Dart's Stopwatch uses mach_absolute_time to bound puzzle
+             generation and time gameplay; the values stay on device.
+             35F9.1 = "Display to user on-device only". -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>35F9.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

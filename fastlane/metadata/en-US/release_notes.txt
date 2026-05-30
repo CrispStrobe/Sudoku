@@ -1,0 +1,8 @@
+First release of CrispSudoku!
+
+• Four variants: Classic, Jigsaw, Sudoku-X and Killer
+• Six grid sizes (4×4 to 12×12) and four difficulties
+• Daily Challenge
+• Step-by-step "Explain the solve" tutor and "Next logical step" hints
+• Notes, undo, themes, achievements and statistics
+• 100% offline — no ads, no tracking

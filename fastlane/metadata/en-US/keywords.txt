@@ -1,0 +1,1 @@
+sudoku,killer sudoku,jigsaw,x-sudoku,puzzle,logic,brain,numbers,daily,offline,solver,hints,classic
