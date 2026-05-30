@@ -215,13 +215,23 @@ Two distinct problems behind the report:
   (round-trip, invariant, marathon-from-longest) and asserted in the completion
   and lose widget tests (solved/longest increment on win, games-lost on loss).
 
+- [x] **E13 — Per-difficulty hint budget.** Hints already cost score; now they
+  are also a finite resource, capped by `maxHintsFor` (easy 10, medium 6, hard 3,
+  expert 1 — always ≥ 1). Only penalty-bearing hints count; the free "cell
+  occupied" / "conflict" diagnostics do not. The Hint button shows the remaining
+  count (`Hint (n)`) and, when the budget is spent, switches to a disabled
+  `No Hints`; trying to hint with none left snackbars instead. The budget resets
+  per puzzle (new puzzle and "Try Again"). Covered by an engine ramp test and a
+  widget test that drives one real hint on an expert board (budget 1) and asserts
+  the button disables.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **51 passing** (engine, persistence + bundled-DB, isolate,
-  notes/undo/conflict, mistake-limit/reset, streak/longest/lost stats +
-  achievements, and widget/live tests incl. notes-mode and completion-dialog
-  coverage).
+- `flutter test` → **53 passing** (engine, persistence + bundled-DB, isolate,
+  notes/undo/conflict, mistake-limit/reset, hint-budget, streak/longest/lost
+  stats + achievements, and widget/live tests incl. notes-mode, completion-dialog
+  and hint-exhaustion coverage).
 - Generation: all sizes sub-second except 12×12 (a few seconds); first play served
   instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app

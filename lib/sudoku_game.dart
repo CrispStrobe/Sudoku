@@ -35,6 +35,22 @@ int maxMistakesFor(SudokuDifficulty difficulty) {
   }
 }
 
+/// How many (penalty-bearing) hints a player may use per puzzle. Scales with
+/// difficulty: easier puzzles are more generous. The free "cell occupied" /
+/// "conflict" diagnostics are not hints and do not count against this budget.
+int maxHintsFor(SudokuDifficulty difficulty) {
+  switch (difficulty) {
+    case SudokuDifficulty.easy:
+      return 10;
+    case SudokuDifficulty.medium:
+      return 6;
+    case SudokuDifficulty.hard:
+      return 3;
+    case SudokuDifficulty.expert:
+      return 1;
+  }
+}
+
 /// Side length (NxN) for a given [GridSize].
 int gridDimensionFor(GridSize size) {
   switch (size) {

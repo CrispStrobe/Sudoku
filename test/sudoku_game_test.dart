@@ -515,6 +515,22 @@ void main() {
       );
     });
 
+    test('maxHintsFor scales: easier is more generous, all positive', () {
+      expect(maxHintsFor(SudokuDifficulty.easy), 10);
+      expect(maxHintsFor(SudokuDifficulty.medium), 6);
+      expect(maxHintsFor(SudokuDifficulty.hard), 3);
+      expect(maxHintsFor(SudokuDifficulty.expert), 1);
+      // Non-increasing across the difficulty order, and never zero (every
+      // puzzle gets at least one hint).
+      var prev = 1 << 30;
+      for (final d in SudokuDifficulty.values) {
+        final v = maxHintsFor(d);
+        expect(v, greaterThan(0));
+        expect(v, lessThanOrEqualTo(prev));
+        prev = v;
+      }
+    });
+
     test('reset clears player entries, notes and history but keeps givens', () {
       final g = SudokuGame.generate(
         SudokuDifficulty.easy,

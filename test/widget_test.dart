@@ -49,7 +49,11 @@ void main() {
 
     // The number pad for a 4×4 grid exposes buttons 1..4.
     expect(find.widgetWithText(ElevatedButton, '1'), findsWidgets);
-    expect(find.text('Hint'), findsOneWidget);
+    // The hint button shows the remaining budget (easy → 10).
+    expect(
+      find.text('Hint (${maxHintsFor(SudokuDifficulty.easy)})'),
+      findsOneWidget,
+    );
 
     // Tap the first empty cell, then its correct number.
     final cell = _firstEmpty(g);
@@ -231,6 +235,54 @@ void main() {
     expect(find.text('💥 Game Over'), findsNothing);
     expect(state.mistakes as int, 0);
     expect(g.grid[er][ec], 0, reason: 'reset clears player entries');
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Hint limit: exhausting the budget disables the hint button', (
+    tester,
+  ) async {
+    // _applyHint bumps the global hint counter; snapshot and restore.
+    final hintsBefore = GameStats.totalHintsUsed;
+    addTearDown(() => GameStats.totalHintsUsed = hintsBefore);
+
+    // Expert has the tightest budget (1 hint), so a single use exhausts it.
+    final state = await _bootCachedGame(
+      tester,
+      difficulty: SudokuDifficulty.expert,
+      seed: 2468,
+    );
+    final g = state.game as SudokuGame;
+
+    final maxHints = maxHintsFor(SudokuDifficulty.expert);
+    expect(maxHints, 1);
+    expect(find.text('Hint ($maxHints)'), findsOneWidget);
+
+    // Select an empty cell and open the Smart Hints dialog.
+    final cell = _firstEmpty(g);
+    await tester.tapAt(_cellCenter(tester, cell[0], cell[1], g.gridDim));
+    await tester.pump(const Duration(milliseconds: 700));
+    // The hint button is an ElevatedButton.icon (a private subtype), so tap its
+    // label text rather than matching the button by exact type.
+    await tester.tap(find.text('Hint ($maxHints)'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Pick a (penalty-bearing) hint, then confirm it.
+    await tester.tap(find.byType(ListTile).last);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Confirm'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // The budget is spent: the button flips to a disabled "No Hints".
+    expect(state.hintsUsed as int, 1);
+    expect(find.text('No Hints'), findsOneWidget);
+    final button = tester.widget<ElevatedButton>(
+      find.ancestor(
+        of: find.text('No Hints'),
+        matching: find.bySubtype<ElevatedButton>(),
+      ),
+    );
+    expect(button.enabled, isFalse, reason: 'no hints left → disabled');
 
     await tester.pumpWidget(const SizedBox());
   });

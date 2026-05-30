@@ -2,9 +2,10 @@
 
 A Flutter Sudoku game with classic and **jigsaw** (irregular-region) variants across
 six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12) and four difficulties. Features
-smart hints, pencil-mark **notes**, **undo**, live conflict highlighting, a
-**mistake limit** (lose path) that scales with difficulty, themes, achievements,
-persisted stats, and a celebratory particle layer.
+smart hints (a per-difficulty **hint budget**), pencil-mark **notes**, **undo**,
+live conflict highlighting, a **mistake limit** (lose path) that scales with
+difficulty, themes, achievements, persisted stats, and a celebratory particle
+layer.
 
 ## Architecture
 

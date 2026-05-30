@@ -1282,6 +1282,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   bool _notesMode = false;
 
   int get _maxMistakes => maxMistakesFor(widget.difficulty);
+  int get _maxHints => maxHintsFor(widget.difficulty);
+  int get _hintsRemaining => math.max(0, _maxHints - hintsUsed);
 
   Timer? _gameTimer;
   final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
@@ -1540,6 +1542,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _toggleNotesMode() => setState(() => _notesMode = !_notesMode);
 
   void _showHint() {
+    if (_hintsRemaining == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hints left for this puzzle!')),
+      );
+      return;
+    }
     if (selectedRow != null && selectedCol != null && game != null) {
       _showHintDialog();
     } else {
@@ -1976,12 +1984,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       children: [
         Expanded(
           child: ElevatedButton.icon(
-            onPressed: _showHint,
+            onPressed: _hintsRemaining > 0 ? _showHint : null,
             icon: const Icon(Icons.lightbulb),
-            label: const Text('Hint'),
+            label: Text(
+              _hintsRemaining > 0 ? 'Hint ($_hintsRemaining)' : 'No Hints',
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.grey.shade400,
+              disabledForegroundColor: Colors.white70,
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
