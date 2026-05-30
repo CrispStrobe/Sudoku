@@ -6,7 +6,7 @@ _Last updated: 30 May 2026_
 runs entirely on your device and works fully offline.
 
 A hosted copy is served at
-**https://sudoku-lac-five.vercel.app/privacy.html** — use that URL in App Store
+**https://sudoku-lac-five.vercel.app/privacy** — use that URL in App Store
 Connect and the Google Play Console.
 
 ## Data we collect

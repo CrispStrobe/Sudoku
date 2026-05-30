@@ -1,1 +1,1 @@
-https://sudoku-lac-five.vercel.app/privacy.html
+https://sudoku-lac-five.vercel.app/privacy

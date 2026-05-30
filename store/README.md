@@ -20,7 +20,7 @@ Play**, ready to paste/upload.
 ## URLs
 - Support: `https://crispstro.be`
 - Marketing: `https://sudoku-lac-five.vercel.app`
-- Privacy policy: `https://sudoku-lac-five.vercel.app/privacy.html`
+- Privacy policy: `https://sudoku-lac-five.vercel.app/privacy`
   (source: `web/privacy.html` / `store/privacy-policy.md`)
 
 ## Where everything lives
