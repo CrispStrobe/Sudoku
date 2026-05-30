@@ -55,7 +55,7 @@ The **Admin** panel (debug builds only) pre-generates puzzles into the on-disk c
 ## Testing
 
 ```bash
-flutter test               # unit + widget tests (40)
+flutter test               # unit + widget tests (60)
 flutter analyze            # static analysis (expected: no issues)
 dart format .              # formatting (checked in CI)
 ```
@@ -65,9 +65,16 @@ CI (`.github/workflows/ci.yml`) runs format-check, `flutter analyze`, and
 
 - `test/sudoku_game_test.dart` — engine unit tests: valid solutions, region
   shape/connectivity, **unique-solution guarantee** (verified by an independent
-  solver), move validation, win conditions, hints, and blueprint JSON round-trips.
-- `test/widget_test.dart` — widget/integration tests: home navigation, difficulty
-  selection, and a live play-through that places a number on a cached 4×4 board.
+  solver), move validation, win conditions, hints, mistake-/hint-budget ramps,
+  board reset, **daily-puzzle determinism**, and blueprint JSON round-trips.
+- `test/game_stats_test.dart` — persisted-stats logic: JSON round-trip, the
+  `longestStreak ≥ currentStreak` invariant, streak/marathon achievements across a
+  loss, and daily-completion tracking.
+- `test/persistence_test.dart` — `shared_preferences`-backed puzzle cache and the
+  bundled puzzle database.
+- `test/widget_test.dart` — widget/integration tests: home navigation, the
+  narrow-phone layout, the stats sheet, a live 4×4 play-through, and the
+  notes-mode, completion-dialog, hint-exhaustion, lose-path and daily-launch flows.
 
 ## Deploying (Vercel)
 
