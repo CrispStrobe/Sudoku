@@ -237,13 +237,23 @@ Two distinct problems behind the report:
   same-seed reproducibility), stats round-trip/`isDailyDoneOn`, and a widget test
   that taps the home button and asserts a deterministic daily game mounts.
 
+- [x] **E15 — Narrow-phone home layout fix.** The home screen was only ever
+  rendered in tests on the default wide 800×600 surface, hiding two `RenderFlex`
+  overflows at a 360px portrait width: the Jigsaw button's icon+label `Row`
+  (pre-existing) and `_buildModeButton`'s `Column` (long labels, surfaced by the
+  Daily button's subtitle). Both now wrap their content in `FittedBox(scaleDown)`
+  (the mode button also stretches its column) so labels shrink to one line
+  instead of overflowing. Guarded by a new widget test that renders Home at
+  360×800; the daily-launch test also runs at phone size now (full home→9×9 flow
+  is overflow-free).
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **58 passing** (engine, persistence + bundled-DB, isolate,
+- `flutter test` → **59 passing** (engine, persistence + bundled-DB, isolate,
   notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
   streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
-  completion-dialog, hint-exhaustion and daily-launch coverage).
+  completion-dialog, hint-exhaustion, daily-launch and narrow-phone-home coverage).
 - Generation: all sizes sub-second except 12×12 (a few seconds); first play served
   instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app

@@ -15,6 +15,25 @@ void main() {
     expect(find.text('Achievements'), findsOneWidget);
   });
 
+  testWidgets('Home lays out without overflow on a narrow phone', (
+    tester,
+  ) async {
+    // The other home tests use the default wide 800×600 surface; pin a narrow
+    // portrait phone (360×800) to guard the mode buttons against the RenderFlex
+    // overflow long labels caused there (a thrown overflow fails the test).
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const SudokuApp());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('CLASSIC MODE'), findsOneWidget);
+    expect(find.textContaining('JIGSAW MODE'), findsOneWidget);
+    expect(find.textContaining('DAILY CHALLENGE'), findsOneWidget);
+  });
+
   testWidgets('Classic flow opens size and difficulty selection', (
     tester,
   ) async {
@@ -290,10 +309,8 @@ void main() {
   testWidgets('Daily challenge launches a deterministic daily game', (
     tester,
   ) async {
-    // A roomy tablet surface so the daily 9×9 board + 9-wide number pad lay out
-    // without overflow (this test cares about launch, not phone layout).
-    tester.view.physicalSize = const Size(2048, 2732);
-    tester.view.devicePixelRatio = 2.0;
+    tester.view.physicalSize = const Size(1080, 2400); // 360×800 logical phone
+    tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 

@@ -594,20 +594,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         foregroundColor: Colors.white,
                         elevation: 12,
                       ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.extension, size: 24),
-                          SizedBox(width: 10),
-                          Text(
-                            '🧩 JIGSAW MODE',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 2,
+                      // scaleDown keeps the icon + label on one line on narrow
+                      // phones instead of overflowing the row.
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.extension, size: 24),
+                            SizedBox(width: 10),
+                            Text(
+                              '🧩 JIGSAW MODE',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -675,21 +680,31 @@ class _HomeScreenState extends State<HomeScreen> {
           elevation: 12,
           shadowColor: color.withValues(alpha: 0.5),
         ),
+        // Stretch + scaleDown so long titles/subtitles shrink to fit a narrow
+        // phone on one line each, rather than wrapping and overflowing the
+        // fixed 70px height.
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                subtitle,
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
             ),
           ],
         ),
