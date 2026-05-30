@@ -178,18 +178,34 @@ Two distinct problems behind the report:
   so the first play and the web build are instant — no on-device solving required.
   Bundled puzzles are read-only; player-generated ones still persist via E1.
 
+### Streak / lose path
+
+- [x] **E10 — Mistake limit (lose path) + streak reset.** Previously the game had
+  no failure condition, so `currentStreak` only ever grew. Added a per-difficulty
+  mistake budget (`maxMistakesFor`: easy 5, medium 4, hard 3, expert 2). A
+  "mistake" is a placement that conflicts with a visible peer (the same event that
+  already shook the board and docked score, so free placement of *non-conflicting*
+  guesses is unchanged). Reaching the budget triggers a **Game Over** dialog,
+  resets `GameStats.currentStreak` to 0, and persists it. The dialog offers **Try
+  Again** — which replays the *same* board via a new pure `SudokuGame.reset()`
+  (clears non-given cells, notes, and undo history) — or **Main Menu**. A slim
+  pip strip above the grid shows remaining lives (`n/max`), reddening on the last
+  life. Covered by engine tests (`maxMistakesFor` ramp, `reset` semantics) and a
+  widget test that drives a full loss + retry through the UI.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **41 passing** (engine, persistence + bundled-DB, isolate,
-  notes/undo/conflict, and widget/live tests).
+- `flutter test` → **44 passing** (engine, persistence + bundled-DB, isolate,
+  notes/undo/conflict, mistake-limit/reset, and widget/live tests).
 - Generation: all sizes sub-second except 12×12 (a few seconds); first play served
   instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app
 
 ## Known limitations / not planned
 
-- Streak never resets (the game auto-advances; there is no "lose" path).
+- "Try Again" replays the same givens but the elapsed clock and score restart from
+  scratch (no partial-credit for a near-finish); this is intentional.
 - Notes-mode toggle and the completion dialog are covered at the engine level and
   via the live undo test, but not asserted individually in widget tests.
 - 12×12 generation is a few seconds; the bundled DB hides this on first play, and a

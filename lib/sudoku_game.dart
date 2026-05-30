@@ -20,6 +20,21 @@ enum GameMode { classic }
 
 enum HintType { showPossible, giveAnswer, nakedSingle, hiddenSingle, conflict }
 
+/// How many conflicting placements a player may make before the game is lost.
+/// Scales with difficulty: easier puzzles are more forgiving.
+int maxMistakesFor(SudokuDifficulty difficulty) {
+  switch (difficulty) {
+    case SudokuDifficulty.easy:
+      return 5;
+    case SudokuDifficulty.medium:
+      return 4;
+    case SudokuDifficulty.hard:
+      return 3;
+    case SudokuDifficulty.expert:
+      return 2;
+  }
+}
+
 /// Side length (NxN) for a given [GridSize].
 int gridDimensionFor(GridSize size) {
   switch (size) {
@@ -689,6 +704,22 @@ class SudokuGame {
   }
 
   void clearCell(int row, int col) => setCell(row, col, 0);
+
+  /// Restore the puzzle to its starting state: clear every non-given cell and
+  /// its notes, and drop the undo history. The givens, solution and region
+  /// layout are untouched, so this re-plays the *same* board (used by the
+  /// "Try Again" path after a game over).
+  void reset() {
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (!isOriginal[r][c]) {
+          grid[r][c] = 0;
+          notes[r][c].clear();
+        }
+      }
+    }
+    _history.clear();
+  }
 
   /// Toggle a pencil-mark. No-op on givens or cells already holding a value.
   void toggleNote(int row, int col, int value) {

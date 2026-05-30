@@ -496,6 +496,72 @@ void main() {
     });
   });
 
+  group('mistake limit & reset', () {
+    test('maxMistakesFor scales: easier is more forgiving', () {
+      expect(maxMistakesFor(SudokuDifficulty.easy), 5);
+      expect(maxMistakesFor(SudokuDifficulty.medium), 4);
+      expect(maxMistakesFor(SudokuDifficulty.hard), 3);
+      expect(maxMistakesFor(SudokuDifficulty.expert), 2);
+      // Monotonically non-increasing across difficulty order.
+      expect(
+        maxMistakesFor(SudokuDifficulty.easy) >=
+            maxMistakesFor(SudokuDifficulty.medium),
+        isTrue,
+      );
+      expect(
+        maxMistakesFor(SudokuDifficulty.hard) >=
+            maxMistakesFor(SudokuDifficulty.expert),
+        isTrue,
+      );
+    });
+
+    test('reset clears player entries, notes and history but keeps givens', () {
+      final g = SudokuGame.generate(
+        SudokuDifficulty.easy,
+        GridSize.standard,
+        GridShape.classic,
+        seed: 123,
+      );
+      // Snapshot the original givens.
+      final givens = [
+        for (var r = 0; r < 9; r++)
+          [for (var c = 0; c < 9; c++) g.isOriginal[r][c] ? g.grid[r][c] : 0],
+      ];
+
+      // Make some moves and a note on empty cells.
+      var moved = false, noted = false;
+      for (var r = 0; r < 9 && !(moved && noted); r++) {
+        for (var c = 0; c < 9; c++) {
+          if (!g.isOriginal[r][c] && g.grid[r][c] == 0) {
+            if (!moved) {
+              g.setCell(r, c, 1);
+              moved = true;
+            } else if (!noted) {
+              g.toggleNote(r, c, 2);
+              noted = true;
+              break;
+            }
+          }
+        }
+      }
+      expect(g.canUndo, isTrue);
+
+      g.reset();
+
+      expect(g.canUndo, isFalse, reason: 'history dropped');
+      for (var r = 0; r < 9; r++) {
+        for (var c = 0; c < 9; c++) {
+          expect(g.notes[r][c], isEmpty);
+          if (g.isOriginal[r][c]) {
+            expect(g.grid[r][c], givens[r][c], reason: 'given preserved');
+          } else {
+            expect(g.grid[r][c], 0, reason: 'player cell cleared');
+          }
+        }
+      }
+    });
+  });
+
   group('async create (isolate)', () {
     test('returns a valid, uniquely solvable puzzle', () async {
       final game = await SudokuGame.create(

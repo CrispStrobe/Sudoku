@@ -1247,7 +1247,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   int hintsUsed = 0;
   int score = 1000;
+  int mistakes = 0;
   bool _notesMode = false;
+
+  int get _maxMistakes => maxMistakesFor(widget.difficulty);
 
   Timer? _gameTimer;
   final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
@@ -1382,6 +1385,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       game = built;
       _startGameTimer();
       score = _calculateInitialScore();
+      mistakes = 0;
       if (mounted) setState(() {});
     } catch (e, st) {
       DebugLogger.error('Generation failed; falling back to classic.', e, st);
@@ -1399,6 +1403,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               );
         _startGameTimer();
         score = _calculateInitialScore();
+        mistakes = 0;
         if (mounted) setState(() {});
       } catch (e2, st2) {
         DebugLogger.error('Fallback also failed.', e2, st2);
@@ -1473,7 +1478,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     setState(() => g.setCell(row, col, number));
     if (!wasValid) {
       _shakeController.forward().then((_) => _shakeController.reverse());
-      setState(() => score = math.max(0, score - 25));
+      setState(() {
+        score = math.max(0, score - 25);
+        mistakes++;
+      });
+      if (mistakes >= _maxMistakes) {
+        _gameOver();
+        return;
+      }
     }
     if (g.isSolved()) _completeGame();
   }
@@ -1665,11 +1677,84 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// The player has used up their mistake allowance. End the run, break the
+  /// streak, and offer a retry of the same board or a return to the menu.
+  void _gameOver() {
+    _stopGameTimer();
+    GameStats.currentStreak = 0;
+    GameStats.save(); // persist the broken streak
+    _showGameOverDialog();
+  }
+
+  void _showGameOverDialog() {
+    final scheme = GameStats.current;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          '💥 Game Over',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'You reached $_maxMistakes mistakes.',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Your streak has been reset.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _goToMainMenu();
+            },
+            child: const Text('Main Menu'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _retrySamePuzzle();
+            },
+            child: const Text('Try Again'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Replay the current board from its givens (no new generation).
+  void _retrySamePuzzle() {
+    final g = game;
+    if (g == null) return;
+    setState(() {
+      g.reset();
+      selectedRow = null;
+      selectedCol = null;
+      hintsUsed = 0;
+      mistakes = 0;
+      _notesMode = false;
+      score = _calculateInitialScore();
+    });
+    _startGameTimer();
+  }
+
   void _startNextLevel() {
     setState(() {
       selectedRow = null;
       selectedCol = null;
       hintsUsed = 0;
+      mistakes = 0;
       _notesMode = false;
     });
     _initializeGame();
@@ -1772,6 +1857,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 padding: EdgeInsets.all(isTablet ? 24 : 16),
                 child: Column(
                   children: [
+                    _buildMistakesIndicator(),
+                    const SizedBox(height: 8),
                     Expanded(
                       flex: isTablet ? 3 : 2,
                       child: Center(
@@ -1794,6 +1881,56 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Slim "Mistakes ✕ ✕ ○ ○ ○ (n/max)" strip above the grid. The pips fill in
+  /// as mistakes accrue and turn red on the final life so the lose condition is
+  /// visible at a glance.
+  Widget _buildMistakesIndicator() {
+    final atRisk = mistakes >= _maxMistakes - 1;
+    final accent = atRisk ? Colors.red.shade300 : Colors.white;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Mistakes',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 10),
+            for (var i = 0; i < _maxMistakes; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Icon(
+                  i < mistakes ? Icons.close : Icons.radio_button_unchecked,
+                  size: 15,
+                  color: i < mistakes ? accent : Colors.white54,
+                ),
+              ),
+            const SizedBox(width: 8),
+            Text(
+              '$mistakes/$_maxMistakes',
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ),
       ),
     );
