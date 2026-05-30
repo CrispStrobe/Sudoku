@@ -269,10 +269,21 @@ Two distinct problems behind the report:
   SDK (analyzer, meta, vector_math, material_color_utilities, …) — not bumpable
   without a Flutter SDK upgrade, which is out of scope.
 
+- [x] **E18 — Drag feedback off-cursor.** When dragging a number from the pad to
+  the grid, the floating miniature tile lagged off to one side of the
+  finger/cursor even though the target cell highlighted correctly. Cause: the
+  `Draggable` used the default `childDragAnchorStrategy`, which offsets the
+  feedback by the grab point within the *number-pad cell* — and that cell is sized
+  independently of (and usually larger than) the fixed-size feedback, so the
+  offset pushed the tile off-cursor. Fixed with a `dragAnchorStrategy` that anchors
+  the feedback's centre on the pointer, so the tile tracks the finger and sits over
+  the highlighted cell. Added a drag-to-place widget test (the drop path had only
+  tap coverage before).
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **60 passing** (engine, persistence + bundled-DB, isolate,
+- `flutter test` → **61 passing** (engine, persistence + bundled-DB, isolate,
   notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
   streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
   completion-dialog, hint-exhaustion, daily-launch, stats-sheet and

@@ -2456,6 +2456,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           final number = index + 1;
           return Draggable<int>(
             data: number,
+            // Anchor the feedback's centre on the pointer so the floating tile
+            // stays under the finger/cursor (and thus over the highlighted
+            // target cell). The default childDragAnchorStrategy offsets it by
+            // the grab point within the number-pad cell, which is sized
+            // independently of the fixed-size feedback and pushed it off-cursor.
+            dragAnchorStrategy: (draggable, context, position) =>
+                Offset(buttonSize / 2, buttonSize / 2),
             feedback: Container(
               width: buttonSize,
               height: buttonSize,

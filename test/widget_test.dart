@@ -128,6 +128,41 @@ void main() {
     await tester.pumpWidget(const SizedBox()); // dispose timers/animations
   });
 
+  testWidgets('Drag a number from the pad onto a cell places it', (
+    tester,
+  ) async {
+    final state = await _bootCachedGame(tester, seed: 1234);
+    final g = state.game as SudokuGame;
+
+    final cell = _firstEmpty(g);
+    final er = cell[0], ec = cell[1];
+    final answer = g.solution[er][ec];
+
+    // The number pad exposes one Draggable<int> per number.
+    final draggable = find.byWidgetPredicate(
+      (w) => w is Draggable<int> && w.data == answer,
+    );
+    expect(draggable, findsOneWidget);
+
+    // Drag from the pad tile to the target cell and release.
+    final start = tester.getCenter(draggable);
+    final target = _cellCenter(tester, er, ec, g.gridDim);
+    final gesture = await tester.startGesture(start);
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveTo(target);
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.up();
+    await tester.pump();
+
+    expect(
+      g.grid[er][ec],
+      answer,
+      reason: 'dropping a number on a cell should place it',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('Notes mode: tapping a number pencils a candidate, not a value', (
     tester,
   ) async {
