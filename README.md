@@ -2,10 +2,10 @@
 
 A Flutter Sudoku game with classic and **jigsaw** (irregular-region) variants across
 six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12) and four difficulties. Features
-smart hints (a per-difficulty **hint budget**), pencil-mark **notes**, **undo**,
-live conflict highlighting, a **mistake limit** (lose path) that scales with
-difficulty, themes, achievements, persisted stats, and a celebratory particle
-layer.
+a **daily challenge** (same board for everyone each day), smart hints (a
+per-difficulty **hint budget**), pencil-mark **notes**, **undo**, live conflict
+highlighting, a **mistake limit** (lose path) that scales with difficulty, themes,
+achievements, persisted stats, and a celebratory particle layer.
 
 ## Architecture
 
@@ -14,8 +14,8 @@ layer.
   uniqueness-preserving hole digging, validation, hints). Fully unit-testable.
 - **`lib/main.dart`** — the UI: screens, theming, particle overlay, the puzzle
   cache, on-disk storage of solved blueprints, and persisted player stats
-  (`stats.json`: solved count, current/longest streak, games lost, best time,
-  achievements, unlocked themes).
+  (`stats.json`: solved count, current/longest streak, games lost, daily-puzzle
+  completion, best time, achievements, unlocked themes).
 - **`lib/sudoku_game.g.dart`** — generated `json_serializable` code for
   `PuzzleBlueprint`. Regenerate with build_runner (below).
 

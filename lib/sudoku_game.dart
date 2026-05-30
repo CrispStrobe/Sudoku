@@ -51,6 +51,17 @@ int maxHintsFor(SudokuDifficulty difficulty) {
   }
 }
 
+/// Deterministic RNG seed for the daily puzzle on [date]: every player gets the
+/// same board on a given calendar day. Only the date (not the time) matters.
+int dailySeed(DateTime date) => date.year * 10000 + date.month * 100 + date.day;
+
+/// Stable `YYYY-MM-DD` key for [date], used to record daily-puzzle completion.
+String dailyDateKey(DateTime date) {
+  final mm = date.month.toString().padLeft(2, '0');
+  final dd = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$mm-$dd';
+}
+
 /// Side length (NxN) for a given [GridSize].
 int gridDimensionFor(GridSize size) {
   switch (size) {

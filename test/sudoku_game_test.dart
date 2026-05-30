@@ -578,6 +578,43 @@ void main() {
     });
   });
 
+  group('daily puzzle', () {
+    test('dailySeed depends only on the calendar date, not the time', () {
+      final morning = DateTime(2026, 5, 30, 6, 15);
+      final night = DateTime(2026, 5, 30, 23, 59, 59);
+      expect(dailySeed(morning), dailySeed(night));
+      // Different days (and same day-of-month in another month) differ.
+      expect(
+        dailySeed(DateTime(2026, 5, 30)),
+        isNot(dailySeed(DateTime(2026, 5, 31))),
+      );
+      expect(
+        dailySeed(DateTime(2026, 5, 30)),
+        isNot(dailySeed(DateTime(2026, 6, 30))),
+      );
+    });
+
+    test('dailyDateKey is zero-padded YYYY-MM-DD', () {
+      expect(dailyDateKey(DateTime(2026, 5, 3)), '2026-05-03');
+      expect(dailyDateKey(DateTime(2026, 12, 25)), '2026-12-25');
+    });
+
+    test('the same daily seed reproduces an identical board', () {
+      final seed = dailySeed(DateTime(2026, 5, 30));
+      SudokuGame build() => SudokuGame.generate(
+        SudokuDifficulty.medium,
+        GridSize.standard,
+        GridShape.classic,
+        seed: seed,
+      );
+      final a = build();
+      final b = build();
+      expect(a.solution, b.solution, reason: 'solution is deterministic');
+      expect(a.regions, b.regions, reason: 'region layout is deterministic');
+      expect(a.grid, b.grid, reason: 'the dug givens are deterministic');
+    });
+  });
+
   group('async create (isolate)', () {
     test('returns a valid, uniquely solvable puzzle', () async {
       final game = await SudokuGame.create(

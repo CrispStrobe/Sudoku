@@ -225,13 +225,25 @@ Two distinct problems behind the report:
   widget test that drives one real hint on an expert board (budget 1) and asserts
   the button disables.
 
+- [x] **E14 — Daily challenge.** A once-a-day puzzle that is identical for every
+  player: a fixed 9×9 classic medium board seeded deterministically from the
+  calendar date (`dailySeed`/`dailyDateKey`, pure + tested). Generated cache-free
+  and isolate-free so it reproduces exactly (9×9 digging is well under the time
+  budget, so it never truncates non-deterministically). The home screen gets a
+  Daily Challenge button that flips to a green "Completed ✓" once the day's board
+  is solved; `GameStats` persists `lastDailyDate` + `dailyCompletedCount`. The
+  daily completion dialog drops "Next Puzzle" (one board per day) and "Try Again"
+  replays the same deterministic board. Covered by engine tests (seed/key,
+  same-seed reproducibility), stats round-trip/`isDailyDoneOn`, and a widget test
+  that taps the home button and asserts a deterministic daily game mounts.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **53 passing** (engine, persistence + bundled-DB, isolate,
-  notes/undo/conflict, mistake-limit/reset, hint-budget, streak/longest/lost
-  stats + achievements, and widget/live tests incl. notes-mode, completion-dialog
-  and hint-exhaustion coverage).
+- `flutter test` → **58 passing** (engine, persistence + bundled-DB, isolate,
+  notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
+  streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
+  completion-dialog, hint-exhaustion and daily-launch coverage).
 - Generation: all sizes sub-second except 12×12 (a few seconds); first play served
   instantly from the bundled DB.
 - Live at https://sudoku-lac-five.vercel.app

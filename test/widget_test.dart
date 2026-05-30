@@ -286,6 +286,53 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('Daily challenge launches a deterministic daily game', (
+    tester,
+  ) async {
+    // A roomy tablet surface so the daily 9×9 board + 9-wide number pad lay out
+    // without overflow (this test cares about launch, not phone layout).
+    tester.view.physicalSize = const Size(2048, 2732);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // Force "not done today" so the button label is stable.
+    final savedDaily = GameStats.lastDailyDate;
+    GameStats.lastDailyDate = null;
+    addTearDown(() => GameStats.lastDailyDate = savedDaily);
+
+    await tester.pumpWidget(const SudokuApp());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('DAILY CHALLENGE'), findsOneWidget);
+    await tester.tap(find.textContaining('DAILY CHALLENGE'));
+
+    // Navigation + deterministic generation. The game timer is periodic, so we
+    // can't pumpAndSettle; pump in bounded steps until the board is built.
+    dynamic state;
+    for (var i = 0; i < 80; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      final finder = find.byType(GameScreen);
+      if (finder.evaluate().isNotEmpty) {
+        state = tester.state(finder);
+        if (state.game != null) break;
+      }
+    }
+    expect(state, isNotNull, reason: 'daily GameScreen should mount');
+
+    final screen = state.widget as GameScreen;
+    expect(screen.isDaily, isTrue);
+    expect(screen.dailySeed, dailySeed(DateTime.now()));
+    expect(screen.gridSize, kDailyGridSize);
+    expect(
+      state.game,
+      isNotNull,
+      reason: 'daily board generated deterministically (no cache/isolate)',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+  });
 }
 
 /// Seeds the puzzle cache with a deterministic [size] solution, mounts a

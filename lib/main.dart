@@ -77,6 +77,16 @@ class GameStats {
   /// Number of puzzles abandoned by hitting the mistake limit.
   static int gamesLost = 0;
 
+  /// `YYYY-MM-DD` of the most recently completed daily puzzle (null if none).
+  static String? lastDailyDate;
+
+  /// How many distinct daily puzzles have been completed.
+  static int dailyCompletedCount = 0;
+
+  /// Whether the daily puzzle for [date] has already been completed.
+  static bool isDailyDoneOn(DateTime date) =>
+      lastDailyDate == dailyDateKey(date);
+
   static Set<String> unlockedAchievements = {};
 
   /// Admin panel + all-themes-unlocked only in debug builds.
@@ -151,6 +161,8 @@ class GameStats {
     'currentStreak': currentStreak,
     'longestStreak': longestStreak,
     'gamesLost': gamesLost,
+    'lastDailyDate': lastDailyDate,
+    'dailyCompletedCount': dailyCompletedCount,
     'unlockedAchievements': unlockedAchievements.toList(),
     'unlockedThemes': unlockedThemes.toList(),
     'currentTheme': currentTheme,
@@ -170,6 +182,10 @@ class GameStats {
     gamesLost = (json['gamesLost'] as num?)?.toInt() ?? gamesLost;
     // Keep the invariant even for stats saved before these fields existed.
     if (currentStreak > longestStreak) longestStreak = currentStreak;
+
+    lastDailyDate = json['lastDailyDate'] as String? ?? lastDailyDate;
+    dailyCompletedCount =
+        (json['dailyCompletedCount'] as num?)?.toInt() ?? dailyCompletedCount;
 
     final achievements = (json['unlockedAchievements'] as List?)
         ?.cast<String>();
@@ -431,6 +447,12 @@ class ParticleLayerState extends State<ParticleLayer>
 // Home
 // ---------------------------------------------------------------------------
 
+/// The daily challenge is a fixed shape/size/difficulty so every player's board
+/// for a given day is identical (only the date-derived seed varies).
+const GridSize kDailyGridSize = GridSize.standard;
+const GridShape kDailyGridShape = GridShape.classic;
+const SudokuDifficulty kDailyDifficulty = SudokuDifficulty.medium;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -530,6 +552,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 30),
+                  _buildModeButton(
+                    GameStats.isDailyDoneOn(DateTime.now())
+                        ? '📅 DAILY CHALLENGE ✓'
+                        : '📅 DAILY CHALLENGE',
+                    GameStats.isDailyDoneOn(DateTime.now())
+                        ? 'Completed — back tomorrow!'
+                        : "Today's 9×9 puzzle, same for everyone",
+                    GameStats.isDailyDoneOn(DateTime.now())
+                        ? Colors.green.shade700
+                        : Colors.teal.shade700,
+                    _startDaily,
                   ),
                   const SizedBox(height: 30),
                   const Text(
@@ -920,6 +955,25 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _startDaily() {
+    final now = DateTime.now();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GameScreen(
+          difficulty: kDailyDifficulty,
+          gridSize: kDailyGridSize,
+          gridShape: kDailyGridShape,
+          gameMode: GameMode.classic,
+          dailySeed: dailySeed(now),
+          dailyKey: dailyDateKey(now),
+        ),
+      ),
+    ).then((_) {
+      if (mounted) setState(() {}); // refresh daily/stats shown on home
+    });
+  }
+
   void _showJigsawOptions() {
     showModalBottomSheet(
       context: context,
@@ -1251,13 +1305,24 @@ class GameScreen extends StatefulWidget {
   final GridShape gridShape;
   final GameMode gameMode;
 
+  /// When set, the board is generated deterministically from this seed (the
+  /// daily puzzle) instead of pulled from the random cache/generator.
+  final int? dailySeed;
+
+  /// `YYYY-MM-DD` of the daily puzzle; non-null marks this as the daily run.
+  final String? dailyKey;
+
   const GameScreen({
     super.key,
     required this.difficulty,
     required this.gridSize,
     required this.gridShape,
     required this.gameMode,
+    this.dailySeed,
+    this.dailyKey,
   });
+
+  bool get isDaily => dailyKey != null;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -1390,7 +1455,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       setState(() => game = null);
 
       SudokuGame? built;
-      if (GameStats.useSavedPuzzles) {
+      if (widget.dailySeed != null) {
+        // Deterministic, cache-free generation so the daily board is identical
+        // for every player and every replay. 9×9 classic generates instantly.
+        built = SudokuGame.generate(
+          widget.difficulty,
+          widget.gridSize,
+          widget.gridShape,
+          seed: widget.dailySeed,
+        );
+      } else if (GameStats.useSavedPuzzles) {
         final blueprint = PuzzleCache().getRandom(
           widget.gridSize,
           widget.gridShape,
@@ -1669,6 +1743,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (hintsUsed == 0 && widget.difficulty == SudokuDifficulty.hard) {
       GameStats.unlockedAchievements.add('no_hints_hard');
     }
+    if (widget.isDaily && GameStats.lastDailyDate != widget.dailyKey) {
+      GameStats.lastDailyDate = widget.dailyKey;
+      GameStats.dailyCompletedCount++;
+    }
     AchievementSystem.checkAchievements();
     GameStats.save(); // persist solved count, streak, best time, unlocks
 
@@ -1685,7 +1763,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          '🎉 Completed!',
+          widget.isDaily ? '🎉 Daily Complete!' : '🎉 Completed!',
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
         ),
@@ -1697,6 +1775,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             Text('Time: ${_formatDuration(time)}  •  Bonus: +$timeBonus'),
+            if (widget.isDaily)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Come back tomorrow for a new daily!'),
+              ),
           ],
         ),
         actions: [
@@ -1707,13 +1790,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             },
             child: const Text('Main Menu'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              _startNextLevel();
-            },
-            child: const Text('Next Puzzle'),
-          ),
+          // The daily is one board per day — no "Next Puzzle".
+          if (!widget.isDaily)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _startNextLevel();
+              },
+              child: const Text('Next Puzzle'),
+            ),
         ],
       ),
     );

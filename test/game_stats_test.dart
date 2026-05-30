@@ -1,12 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sudoku/main.dart';
+import 'package:sudoku/sudoku_game.dart';
 
 void main() {
   // GameStats is global mutable state; snapshot and restore around each test.
-  late int solved, hints, streak, longest, lost;
+  late int solved, hints, streak, longest, lost, dailyCount;
   late Duration best;
   late Set<String> achievements, themes;
   late String theme;
+  late String? dailyDate;
 
   setUp(() {
     solved = GameStats.totalPuzzlesSolved;
@@ -14,6 +16,8 @@ void main() {
     streak = GameStats.currentStreak;
     longest = GameStats.longestStreak;
     lost = GameStats.gamesLost;
+    dailyCount = GameStats.dailyCompletedCount;
+    dailyDate = GameStats.lastDailyDate;
     best = GameStats.bestTime;
     achievements = {...GameStats.unlockedAchievements};
     themes = {...GameStats.unlockedThemes};
@@ -26,6 +30,8 @@ void main() {
     GameStats.currentStreak = streak;
     GameStats.longestStreak = longest;
     GameStats.gamesLost = lost;
+    GameStats.dailyCompletedCount = dailyCount;
+    GameStats.lastDailyDate = dailyDate;
     GameStats.bestTime = best;
     GameStats.unlockedAchievements = achievements;
     GameStats.unlockedThemes = themes;
@@ -64,6 +70,26 @@ void main() {
       GameStats.unlockedAchievements,
       containsAll(<String>['first_solve', 'streak_master']),
     );
+  });
+
+  test('daily fields round-trip and isDailyDoneOn matches the stored key', () {
+    GameStats.lastDailyDate = null;
+    GameStats.dailyCompletedCount = 0;
+    final day = DateTime(2026, 5, 30);
+    expect(GameStats.isDailyDoneOn(day), isFalse);
+
+    GameStats.lastDailyDate = dailyDateKey(day);
+    GameStats.dailyCompletedCount = 4;
+    expect(GameStats.isDailyDoneOn(day), isTrue);
+    expect(GameStats.isDailyDoneOn(DateTime(2026, 5, 31)), isFalse);
+
+    final json = GameStats.toJson();
+    GameStats.lastDailyDate = null;
+    GameStats.dailyCompletedCount = 0;
+    GameStats.applyJson(json);
+    expect(GameStats.lastDailyDate, dailyDateKey(day));
+    expect(GameStats.dailyCompletedCount, 4);
+    expect(GameStats.isDailyDoneOn(day), isTrue);
   });
 
   test('applyJson tolerates an empty map (keeps current values)', () {
