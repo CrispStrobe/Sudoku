@@ -161,6 +161,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.9"
+  dart_csp:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: "605ba00315a9f916a91b69b368240e66cab4b242"
+      resolved-ref: "605ba00315a9f916a91b69b368240e66cab4b242"
+      url: "https://github.com/CrispStrobe/dart_csp.git"
+    source: git
+    version: "2.1.0"
   dart_style:
     dependency: transitive
     description:
