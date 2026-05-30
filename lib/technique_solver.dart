@@ -103,11 +103,19 @@ class TechniqueSolver {
   /// Cells belonging to each region id, precomputed.
   late final List<List<List<int>>> _regionCells;
 
-  /// Operates on a COPY of [grid]; does not mutate the caller's grid.
-  TechniqueSolver(List<List<int>> grid, List<List<int>> regions)
-    : _grid = grid.map((row) => List<int>.from(row)).toList(),
-      _regions = regions.map((row) => List<int>.from(row)).toList(),
-      _dim = grid.length {
+  /// When true, the two main diagonals are treated as extra units (Sudoku-X).
+  final bool _diagonal;
+
+  /// Operates on a COPY of [grid]; does not mutate the caller's grid. Set
+  /// [diagonal] for Sudoku-X (adds the two diagonals as units).
+  TechniqueSolver(
+    List<List<int>> grid,
+    List<List<int>> regions, {
+    bool diagonal = false,
+  }) : _grid = grid.map((row) => List<int>.from(row)).toList(),
+       _regions = regions.map((row) => List<int>.from(row)).toList(),
+       _dim = grid.length,
+       _diagonal = diagonal {
     _initRegionCells();
     _initCandidates();
   }
@@ -137,7 +145,8 @@ class TechniqueSolver {
     }
   }
 
-  /// True if [v] does not already appear in (r,c)'s row, column or region.
+  /// True if [v] does not already appear in (r,c)'s row, column, region or
+  /// (Sudoku-X only) shared diagonal.
   bool _isLegal(int row, int col, int v) {
     for (var i = 0; i < _dim; i++) {
       if (_grid[row][i] == v) return false;
@@ -145,6 +154,18 @@ class TechniqueSolver {
     }
     for (final cell in _regionCells[_regions[row][col]]) {
       if (_grid[cell[0]][cell[1]] == v) return false;
+    }
+    if (_diagonal) {
+      if (row == col) {
+        for (var i = 0; i < _dim; i++) {
+          if (_grid[i][i] == v) return false;
+        }
+      }
+      if (row + col == _dim - 1) {
+        for (var i = 0; i < _dim; i++) {
+          if (_grid[i][_dim - 1 - i] == v) return false;
+        }
+      }
     }
     return true;
   }
@@ -159,6 +180,18 @@ class TechniqueSolver {
     }
     for (final cell in _regionCells[_regions[r][c]]) {
       _cands[cell[0]][cell[1]].remove(v);
+    }
+    if (_diagonal) {
+      if (r == c) {
+        for (var i = 0; i < _dim; i++) {
+          _cands[i][i].remove(v);
+        }
+      }
+      if (r + c == _dim - 1) {
+        for (var i = 0; i < _dim; i++) {
+          _cands[i][_dim - 1 - i].remove(v);
+        }
+      }
     }
   }
 
@@ -179,6 +212,14 @@ class TechniqueSolver {
     }
     for (var id = 0; id < _dim; id++) {
       units.add(_regionCells[id]);
+    }
+    if (_diagonal) {
+      units.add([
+        for (var i = 0; i < _dim; i++) [i, i],
+      ]);
+      units.add([
+        for (var i = 0; i < _dim; i++) [i, _dim - 1 - i],
+      ]);
     }
     return units;
   }

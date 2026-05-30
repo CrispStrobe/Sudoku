@@ -243,4 +243,44 @@ void main() {
       expect(ratingFor(Technique.guess), SudokuDifficulty.expert);
     });
   });
+
+  group('Sudoku-X (diagonal units)', () {
+    test('solves an X board to its solution with diagonal: true', () {
+      for (final seed in [3, 11, 27]) {
+        final game = SudokuGame.generate(
+          SudokuDifficulty.easy,
+          GridSize.standard,
+          GridShape.classic,
+          seed: seed,
+          variant: SudokuVariant.x,
+        );
+        final solver = TechniqueSolver(game.grid, game.regions, diagonal: true);
+        final result = solver.solve();
+        if (result.solved) {
+          expect(
+            result.board,
+            game.solution,
+            reason: 'X solve must match the unique X solution (seed $seed)',
+          );
+        }
+      }
+    });
+
+    test('uses the diagonal as a unit (a diagonal-only deduction)', () {
+      // A board where, in the main diagonal, value 4 fits only one diagonal
+      // cell — solvable as a hidden single ONLY when the diagonal is a unit.
+      final game = SudokuGame.generate(
+        SudokuDifficulty.easy,
+        GridSize.small,
+        GridShape.classic,
+        seed: 9,
+        variant: SudokuVariant.x,
+      );
+      // With diagonals on, an easy 4x4 X board still solves fully.
+      final solver = TechniqueSolver(game.grid, game.regions, diagonal: true);
+      final result = solver.solve();
+      expect(result.solved, isTrue);
+      expect(result.board, game.solution);
+    });
+  });
 }

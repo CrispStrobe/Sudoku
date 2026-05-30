@@ -862,80 +862,87 @@ class _HomeScreenState extends State<HomeScreen> {
     GameMode gameMode, {
     GridShape gridShape = GridShape.classic,
   }) {
+    var xVariant = false;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Select Difficulty',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            if (gridShape == GridShape.jigsaw)
-              Container(
-                margin: const EdgeInsets.only(top: 10),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Jigsaw mode: Regions have irregular shapes!',
-                  style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Select Difficulty',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-            const SizedBox(height: 20),
-            _buildDifficultyOption(
-              'EASY',
-              Colors.green,
-              SudokuDifficulty.easy,
-              gridSize,
-              gameMode,
-              gridShape,
-            ),
-            _buildDifficultyOption(
-              'MEDIUM',
-              Colors.orange,
-              SudokuDifficulty.medium,
-              gridSize,
-              gameMode,
-              gridShape,
-            ),
-            _buildDifficultyOption(
-              'HARD',
-              Colors.red,
-              SudokuDifficulty.hard,
-              gridSize,
-              gameMode,
-              gridShape,
-            ),
-            _buildDifficultyOption(
-              'EXPERT',
-              Colors.purple,
-              SudokuDifficulty.expert,
-              gridSize,
-              gameMode,
-              gridShape,
-            ),
-          ],
+              if (gridShape == GridShape.jigsaw)
+                Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Jigsaw mode: Regions have irregular shapes!',
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              // Sudoku-X is offered on the regular box layout.
+              if (gridShape == GridShape.classic)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('⊗ Sudoku-X (diagonals)'),
+                  subtitle: const Text(
+                    'Both main diagonals must also contain each number once.',
+                  ),
+                  value: xVariant,
+                  onChanged: (v) => setSheetState(() => xVariant = v),
+                ),
+              const SizedBox(height: 12),
+              for (final opt in const [
+                ['EASY', SudokuDifficulty.easy],
+                ['MEDIUM', SudokuDifficulty.medium],
+                ['HARD', SudokuDifficulty.hard],
+                ['EXPERT', SudokuDifficulty.expert],
+              ])
+                _buildDifficultyOption(
+                  opt[0] as String,
+                  _difficultyColor(opt[1] as SudokuDifficulty),
+                  opt[1] as SudokuDifficulty,
+                  gridSize,
+                  gameMode,
+                  gridShape,
+                  xVariant ? SudokuVariant.x : SudokuVariant.classic,
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Color _difficultyColor(SudokuDifficulty d) => switch (d) {
+    SudokuDifficulty.easy => Colors.green,
+    SudokuDifficulty.medium => Colors.orange,
+    SudokuDifficulty.hard => Colors.red,
+    SudokuDifficulty.expert => Colors.purple,
+  };
 
   Widget _buildDifficultyOption(
     String label,
@@ -944,6 +951,7 @@ class _HomeScreenState extends State<HomeScreen> {
     GridSize gridSize,
     GameMode gameMode,
     GridShape gridShape,
+    SudokuVariant variant,
   ) {
     return Container(
       width: double.infinity,
@@ -951,7 +959,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ElevatedButton(
         onPressed: () {
           Navigator.pop(context);
-          _startGame(difficulty, gridSize, gridShape, gameMode);
+          _startGame(
+            difficulty,
+            gridSize,
+            gridShape,
+            gameMode,
+            variant: variant,
+          );
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
@@ -970,8 +984,9 @@ class _HomeScreenState extends State<HomeScreen> {
     SudokuDifficulty difficulty,
     GridSize gridSize,
     GridShape gridShape,
-    GameMode gameMode,
-  ) {
+    GameMode gameMode, {
+    SudokuVariant variant = SudokuVariant.classic,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -980,6 +995,7 @@ class _HomeScreenState extends State<HomeScreen> {
           gridSize: gridSize,
           gridShape: gridShape,
           gameMode: gameMode,
+          variant: variant,
         ),
       ),
     ).then((_) {
@@ -1444,6 +1460,9 @@ class GameScreen extends StatefulWidget {
   /// `YYYY-MM-DD` of the daily puzzle; non-null marks this as the daily run.
   final String? dailyKey;
 
+  /// Rule variant (classic or Sudoku-X).
+  final SudokuVariant variant;
+
   const GameScreen({
     super.key,
     required this.difficulty,
@@ -1452,9 +1471,11 @@ class GameScreen extends StatefulWidget {
     required this.gameMode,
     this.dailySeed,
     this.dailyKey,
+    this.variant = SudokuVariant.classic,
   });
 
   bool get isDaily => dailyKey != null;
+  bool get isDiagonal => variant == SudokuVariant.x;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -1558,6 +1579,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         widget.difficulty,
         widget.gridSize,
         widget.gridShape,
+        variant: widget.variant,
       );
     }
 
@@ -1576,6 +1598,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           widget.gridSize,
           widget.gridShape,
           timeout: const Duration(seconds: 12),
+          variant: widget.variant,
         );
       } catch (e) {
         lastError = e;
@@ -1599,7 +1622,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           widget.gridShape,
           seed: widget.dailySeed,
         );
-      } else if (GameStats.useSavedPuzzles) {
+      } else if (GameStats.useSavedPuzzles &&
+          widget.variant == SudokuVariant.classic) {
+        // The cache holds only classic-rule boards; variants always generate.
         final blueprint = PuzzleCache().getRandom(
           widget.gridSize,
           widget.gridShape,
@@ -1612,7 +1637,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (built == null) {
         built = await _generatePuzzleWithRetries();
         // Cache the freshly generated solution so future plays are instant.
-        if (GameStats.useSavedPuzzles) {
+        if (GameStats.useSavedPuzzles &&
+            widget.variant == SudokuVariant.classic) {
           await PuzzleCache().set(
             PuzzleBlueprint(
               solutionGrid: built.solution,
@@ -1689,7 +1715,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       return;
     }
     try {
-      _logicRating = TechniqueSolver(g.grid, g.regions).solve().rating;
+      _logicRating = TechniqueSolver(
+        g.grid,
+        g.regions,
+        diagonal: widget.isDiagonal,
+      ).solve().rating;
     } catch (_) {
       _logicRating = null;
     }
@@ -1854,7 +1884,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _showNextStepHint() {
     final g = game;
     if (g == null) return;
-    final step = TechniqueSolver(g.grid, g.regions).nextStep();
+    final step = TechniqueSolver(
+      g.grid,
+      g.regions,
+      diagonal: widget.isDiagonal,
+    ).nextStep();
     if (step == null) {
       showDialog<void>(
         context: context,
@@ -2443,6 +2477,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           regions: g.regions,
           gridDim: g.gridDim,
           jigsaw: widget.gridShape == GridShape.jigsaw,
+          diagonal: widget.isDiagonal,
           scheme: GameStats.current,
         ),
       ),
@@ -2595,6 +2630,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Color _getCellColor(int row, int col, EnvironmentalTheme scheme) {
     if (selectedRow == row && selectedCol == col) return scheme.accent;
     if (selectedRow == row || selectedCol == col) return Colors.grey.shade200;
+
+    // Faint tint marks the two diagonals so the Sudoku-X constraint is visible.
+    if (widget.isDiagonal) {
+      final dim = game!.gridDim;
+      if (row == col || row + col == dim - 1) return const Color(0xFFEDE7F6);
+    }
 
     final regionId = game!.regions[row][col];
     if (widget.gridShape == GridShape.jigsaw) {
@@ -2758,6 +2799,7 @@ class ExplainScreen extends StatefulWidget {
   final List<List<int>> regions;
   final int gridDim;
   final bool jigsaw;
+  final bool diagonal;
   final EnvironmentalTheme scheme;
 
   const ExplainScreen({
@@ -2766,6 +2808,7 @@ class ExplainScreen extends StatefulWidget {
     required this.regions,
     required this.gridDim,
     required this.jigsaw,
+    required this.diagonal,
     required this.scheme,
   });
 
@@ -2785,7 +2828,11 @@ class _ExplainScreenState extends State<ExplainScreen> {
   @override
   void initState() {
     super.initState();
-    _result = TechniqueSolver(widget.grid, widget.regions).solve();
+    _result = TechniqueSolver(
+      widget.grid,
+      widget.regions,
+      diagonal: widget.diagonal,
+    ).solve();
     _boards = [widget.grid.map((r) => List<int>.from(r)).toList()];
     for (final step in _result.steps) {
       final next = _boards.last.map((r) => List<int>.from(r)).toList();
@@ -2880,6 +2927,7 @@ class _ExplainScreenState extends State<ExplainScreen> {
                         regions: widget.regions,
                         gridDim: widget.gridDim,
                         jigsaw: widget.jigsaw,
+                        diagonal: widget.diagonal,
                         highlight: step?.cell,
                         eliminations: step?.eliminations ?? const [],
                         scheme: scheme,
@@ -2956,6 +3004,7 @@ class _ExplainGrid extends StatelessWidget {
   final List<List<int>> regions;
   final int gridDim;
   final bool jigsaw;
+  final bool diagonal;
   final List<int>? highlight;
   final List<List<int>> eliminations;
   final EnvironmentalTheme scheme;
@@ -2965,6 +3014,7 @@ class _ExplainGrid extends StatelessWidget {
     required this.regions,
     required this.gridDim,
     required this.jigsaw,
+    required this.diagonal,
     required this.highlight,
     required this.eliminations,
     required this.scheme,
@@ -3004,12 +3054,15 @@ class _ExplainGrid extends StatelessWidget {
     final isHighlight =
         highlight != null && highlight![0] == r && highlight![1] == c;
     final isElim = elimCells.contains('$r-$c');
+    final onDiag = diagonal && (r == c || r + c == gridDim - 1);
     final v = board[r][c];
     return Container(
       alignment: Alignment.center,
       color: isHighlight
           ? scheme.accent
-          : (isElim ? Colors.red.shade100 : Colors.transparent),
+          : (isElim
+                ? Colors.red.shade100
+                : (onDiag ? const Color(0xFFEDE7F6) : Colors.transparent)),
       child: FittedBox(
         fit: BoxFit.scaleDown,
         child: Text(

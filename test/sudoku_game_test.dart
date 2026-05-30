@@ -615,6 +615,133 @@ void main() {
     });
   });
 
+  group('sudoku-x (diagonals)', () {
+    bool diagonalsOk(List<List<int>> g, int dim) {
+      final main = <int>{}, anti = <int>{};
+      for (var i = 0; i < dim; i++) {
+        if (!main.add(g[i][i])) return false;
+        if (!anti.add(g[i][dim - 1 - i])) return false;
+      }
+      return true;
+    }
+
+    // Independent X-aware uniqueness counter (does not reuse engine internals).
+    bool safeX(
+      List<List<int>> g,
+      List<List<int>> regions,
+      int dim,
+      int r,
+      int c,
+      int v,
+    ) {
+      if (!_safe(g, regions, dim, r, c, v)) return false;
+      if (r == c) {
+        for (var i = 0; i < dim; i++) {
+          if (g[i][i] == v) return false;
+        }
+      }
+      if (r + c == dim - 1) {
+        for (var i = 0; i < dim; i++) {
+          if (g[i][dim - 1 - i] == v) return false;
+        }
+      }
+      return true;
+    }
+
+    int countX(List<List<int>> puzzle, List<List<int>> regions, int dim) {
+      final g = puzzle.map((row) => List<int>.from(row)).toList();
+      var found = 0;
+      void solve() {
+        if (found >= 2) return;
+        var er = -1, ec = -1;
+        for (var r = 0; r < dim && er < 0; r++) {
+          for (var c = 0; c < dim; c++) {
+            if (g[r][c] == 0) {
+              er = r;
+              ec = c;
+              break;
+            }
+          }
+        }
+        if (er < 0) {
+          found++;
+          return;
+        }
+        for (var v = 1; v <= dim; v++) {
+          if (safeX(g, regions, dim, er, ec, v)) {
+            g[er][ec] = v;
+            solve();
+            g[er][ec] = 0;
+            if (found >= 2) return;
+          }
+        }
+      }
+
+      solve();
+      return found;
+    }
+
+    test('solution obeys both diagonals and the puzzle is X-unique', () {
+      final game = SudokuGame.generate(
+        SudokuDifficulty.medium,
+        GridSize.standard,
+        GridShape.classic,
+        seed: 5,
+        variant: SudokuVariant.x,
+      );
+      expect(isValidFullSolution(game.solution, game.regions, 9), isTrue);
+      expect(
+        diagonalsOk(game.solution, 9),
+        isTrue,
+        reason: 'both diagonals all-different',
+      );
+      for (var r = 0; r < 9; r++) {
+        for (var c = 0; c < 9; c++) {
+          if (game.grid[r][c] != 0) {
+            expect(game.grid[r][c], game.solution[r][c]);
+          }
+        }
+      }
+      expect(
+        countX(game.grid, game.regions, 9),
+        1,
+        reason: 'uniquely solvable under X rules',
+      );
+    });
+
+    test('diagonals create conflicts only under the X variant', () {
+      final board = [
+        [3, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 3, 0], // (0,0) and (2,2) share only the main diagonal
+        [0, 0, 0, 0],
+      ];
+      final x = SudokuGame.generate(
+        SudokuDifficulty.easy,
+        GridSize.small,
+        GridShape.classic,
+        seed: 9,
+        variant: SudokuVariant.x,
+      );
+      x.grid = board.map((r) => List<int>.from(r)).toList();
+      expect(x.hasConflict(0, 0), isTrue, reason: 'main-diagonal duplicate');
+      expect(x.hasConflict(2, 2), isTrue);
+
+      final classic = SudokuGame.generate(
+        SudokuDifficulty.easy,
+        GridSize.small,
+        GridShape.classic,
+        seed: 9,
+      );
+      classic.grid = board.map((r) => List<int>.from(r)).toList();
+      expect(
+        classic.hasConflict(0, 0),
+        isFalse,
+        reason: 'no diagonal rule in classic',
+      );
+    });
+  });
+
   group('async create (isolate)', () {
     test('returns a valid, uniquely solvable puzzle', () async {
       final game = await SudokuGame.create(

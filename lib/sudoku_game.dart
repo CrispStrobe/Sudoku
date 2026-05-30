@@ -16,6 +16,10 @@ enum SudokuDifficulty { easy, medium, hard, expert }
 
 enum GridShape { classic, jigsaw }
 
+/// Rule variant. `x` (Sudoku-X) additionally requires the two main diagonals to
+/// each contain 1..dim with no repeats.
+enum SudokuVariant { classic, x }
+
 enum GameMode { classic }
 
 enum HintType { showPossible, giveAnswer, nakedSingle, hiddenSingle, conflict }
@@ -180,6 +184,7 @@ void _generateIsolateEntry(List<dynamic> args) {
     args[1] as SudokuDifficulty,
     args[2] as GridSize,
     args[3] as GridShape,
+    variant: args[4] as SudokuVariant,
   );
   sendPort.send(game);
 }
@@ -200,6 +205,13 @@ class SudokuGame {
   late int gridDim;
   final SudokuDifficulty difficulty;
 
+  /// Rule variant. `x` activates the two-diagonal constraint everywhere
+  /// (generation, validation, win check).
+  SudokuVariant variant = SudokuVariant.classic;
+
+  /// Whether the Sudoku-X diagonal constraint is active.
+  bool get diagonal => variant == SudokuVariant.x;
+
   final math.Random _rng;
 
   /// Stack of reversible edits for [undo].
@@ -217,11 +229,13 @@ class SudokuGame {
     GridSize gridSize,
     GridShape gridShape, {
     int? seed,
+    SudokuVariant variant = SudokuVariant.classic,
   }) {
     final game = SudokuGame._(
       difficulty,
       rng: seed == null ? null : math.Random(seed),
     );
+    game.variant = variant;
     game._build(gridSize, gridShape);
     return game;
   }
@@ -239,6 +253,7 @@ class SudokuGame {
     GridSize gridSize,
     GridShape gridShape, {
     Duration timeout = const Duration(seconds: 5),
+    SudokuVariant variant = SudokuVariant.classic,
   }) async {
     final resultPort = ReceivePort();
     final errorPort = ReceivePort();
@@ -267,7 +282,7 @@ class SudokuGame {
     try {
       isolate = await Isolate.spawn(
         _generateIsolateEntry,
-        [resultPort.sendPort, difficulty, gridSize, gridShape],
+        [resultPort.sendPort, difficulty, gridSize, gridShape, variant],
         onError: errorPort.sendPort,
         errorsAreFatal: true,
       );
@@ -500,13 +515,31 @@ class SudokuGame {
     final rowMask = List<int>.filled(gridDim, 0);
     final colMask = List<int>.filled(gridDim, 0);
     final regMask = List<int>.filled(gridDim, 0);
-    return _solveFill(rowMask, colMask, regMask, _StepCounter(maxSteps));
+    final diagMask = List<int>.filled(2, 0); // [main r==c, anti r+c==last]
+    return _solveFill(
+      rowMask,
+      colMask,
+      regMask,
+      diagMask,
+      _StepCounter(maxSteps),
+    );
+  }
+
+  /// Bits already used on the diagonal(s) that contain (r,c), or 0 when the
+  /// X variant is off or the cell is on no diagonal.
+  int _diagBlocked(int r, int c, List<int> diagMask) {
+    if (!diagonal) return 0;
+    var bits = 0;
+    if (r == c) bits |= diagMask[0];
+    if (r + c == gridDim - 1) bits |= diagMask[1];
+    return bits;
   }
 
   bool _solveFill(
     List<int> rowMask,
     List<int> colMask,
     List<int> regMask,
+    List<int> diagMask,
     _StepCounter steps,
   ) {
     if (steps.exceeded) return false;
@@ -520,7 +553,11 @@ class SudokuGame {
       for (var c = 0; c < gridDim; c++) {
         if (grid[r][c] != 0) continue;
         final allowed =
-            full & ~(rowMask[r] | colMask[c] | regMask[regions[r][c]]);
+            full &
+            ~(rowMask[r] |
+                colMask[c] |
+                regMask[regions[r][c]] |
+                _diagBlocked(r, c, diagMask));
         if (allowed == 0) return false; // dead end
         final count = _popcount(allowed);
         if (count < bestCount) {
@@ -541,17 +578,23 @@ class SudokuGame {
     candidates.shuffle(_rng);
 
     final reg = regions[br][bc];
+    final onMain = diagonal && br == bc;
+    final onAnti = diagonal && br + bc == gridDim - 1;
     for (final v in candidates) {
       final bit = 1 << v;
       grid[br][bc] = v;
       rowMask[br] |= bit;
       colMask[bc] |= bit;
       regMask[reg] |= bit;
-      if (_solveFill(rowMask, colMask, regMask, steps)) return true;
+      if (onMain) diagMask[0] |= bit;
+      if (onAnti) diagMask[1] |= bit;
+      if (_solveFill(rowMask, colMask, regMask, diagMask, steps)) return true;
       grid[br][bc] = 0;
       rowMask[br] &= ~bit;
       colMask[bc] &= ~bit;
       regMask[reg] &= ~bit;
+      if (onMain) diagMask[0] &= ~bit;
+      if (onAnti) diagMask[1] &= ~bit;
     }
     return false;
   }
@@ -632,6 +675,7 @@ class SudokuGame {
     final rowMask = List<int>.filled(gridDim, 0);
     final colMask = List<int>.filled(gridDim, 0);
     final regMask = List<int>.filled(gridDim, 0);
+    final diagMask = List<int>.filled(2, 0);
     for (var r = 0; r < gridDim; r++) {
       for (var c = 0; c < gridDim; c++) {
         final v = grid[r][c];
@@ -640,16 +684,21 @@ class SudokuGame {
           rowMask[r] |= bit;
           colMask[c] |= bit;
           regMask[regions[r][c]] |= bit;
+          if (diagonal) {
+            if (r == c) diagMask[0] |= bit;
+            if (r + c == gridDim - 1) diagMask[1] |= bit;
+          }
         }
       }
     }
-    return _countSolutions(rowMask, colMask, regMask, 0, 2) == 1;
+    return _countSolutions(rowMask, colMask, regMask, diagMask, 0, 2) == 1;
   }
 
   int _countSolutions(
     List<int> rowMask,
     List<int> colMask,
     List<int> regMask,
+    List<int> diagMask,
     int found,
     int limit,
   ) {
@@ -660,7 +709,11 @@ class SudokuGame {
       for (var c = 0; c < gridDim; c++) {
         if (grid[r][c] != 0) continue;
         final allowed =
-            full & ~(rowMask[r] | colMask[c] | regMask[regions[r][c]]);
+            full &
+            ~(rowMask[r] |
+                colMask[c] |
+                regMask[regions[r][c]] |
+                _diagBlocked(r, c, diagMask));
         if (allowed == 0) return found; // dead end, no solution down here
         final count = _popcount(allowed);
         if (count < bestCount) {
@@ -675,6 +728,8 @@ class SudokuGame {
     if (br == -1) return found + 1; // a complete solution
 
     final reg = regions[br][bc];
+    final onMain = diagonal && br == bc;
+    final onAnti = diagonal && br + bc == gridDim - 1;
     for (var v = 1; v <= gridDim; v++) {
       if ((bestAllowed & (1 << v)) == 0) continue;
       final bit = 1 << v;
@@ -682,11 +737,22 @@ class SudokuGame {
       rowMask[br] |= bit;
       colMask[bc] |= bit;
       regMask[reg] |= bit;
-      found = _countSolutions(rowMask, colMask, regMask, found, limit);
+      if (onMain) diagMask[0] |= bit;
+      if (onAnti) diagMask[1] |= bit;
+      found = _countSolutions(
+        rowMask,
+        colMask,
+        regMask,
+        diagMask,
+        found,
+        limit,
+      );
       grid[br][bc] = 0;
       rowMask[br] &= ~bit;
       colMask[bc] &= ~bit;
       regMask[reg] &= ~bit;
+      if (onMain) diagMask[0] &= ~bit;
+      if (onAnti) diagMask[1] &= ~bit;
       if (found >= limit) return found; // early-out: not unique
     }
     return found;
@@ -694,8 +760,25 @@ class SudokuGame {
 
   // --- Gameplay API ------------------------------------------------------
 
-  /// True if placing [num] at (row,col) breaks no row/column/region rule.
-  /// Original (given) cells can never be changed.
+  /// True if [v] repeats elsewhere on a diagonal that contains (row,col).
+  /// Always false unless the Sudoku-X [diagonal] constraint is active.
+  bool _onDiagonalConflict(int row, int col, int v) {
+    if (!diagonal) return false;
+    if (row == col) {
+      for (var i = 0; i < gridDim; i++) {
+        if (i != row && grid[i][i] == v) return true;
+      }
+    }
+    if (row + col == gridDim - 1) {
+      for (var i = 0; i < gridDim; i++) {
+        if (i != row && grid[i][gridDim - 1 - i] == v) return true;
+      }
+    }
+    return false;
+  }
+
+  /// True if placing [num] at (row,col) breaks no row/column/region (and, for
+  /// Sudoku-X, diagonal) rule. Original (given) cells can never be changed.
   bool isValidMove(int row, int col, int num) {
     if (isOriginal[row][col]) return false;
     for (var i = 0; i < gridDim; i++) {
@@ -712,7 +795,7 @@ class SudokuGame {
         }
       }
     }
-    return true;
+    return !_onDiagonalConflict(row, col, num);
   }
 
   void _record(int row, int col) {
@@ -787,7 +870,7 @@ class SudokuGame {
         }
       }
     }
-    return false;
+    return _onDiagonalConflict(row, col, v);
   }
 
   /// Board is full (no validity guarantee).
@@ -822,6 +905,7 @@ class SudokuGame {
             }
           }
         }
+        if (_onDiagonalConflict(r, c, v)) return false;
       }
     }
     return true;

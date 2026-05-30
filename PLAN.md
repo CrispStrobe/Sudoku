@@ -299,10 +299,24 @@ Two distinct problems behind the report:
   Inspired by the `dart_csp` CSP library and `CrispCalc`'s Sudoku module. 10
   engine tests + widget tests for the pill, next-step and explain flows.
 
+- [x] **E20 — Sudoku-X variant (diagonals).** Added the X rule variant — the two
+  main diagonals must each hold 1..dim — implemented in our own bitmask engine
+  (no new dependency; generation stays sub-second and web-safe). Threaded diagonal
+  masks through the fill solver and the uniqueness counter, and diagonal checks
+  through `isValidMove`/`hasConflict`/`isSolved`, all gated on the variant so
+  classic/jigsaw are byte-for-byte unchanged. The technique solver gained a
+  `diagonal` flag (diagonals as extra units) so the logic rating, next-step hint
+  and explain mode stay correct on X boards. UI: a "⊗ Sudoku-X" toggle in the
+  difficulty sheet, a faint diagonal tint on the board and in the explain grid,
+  and X boards bypass the (classic-only) cache to always generate fresh. Killer
+  cages (which need `dart_csp`'s sum arithmetic) remain the next variant. Engine
+  tests verify X-unique generation + diagonal conflicts; solver tests verify X
+  solving; a widget test covers the toggle.
+
 ### Results (post-audit)
 
 - `flutter analyze` → **0 issues**; `dart format` → clean (CI-enforced).
-- `flutter test` → **74 passing** (engine, persistence + bundled-DB, isolate,
+- `flutter test` → **79 passing** (engine, persistence + bundled-DB, isolate,
   notes/undo/conflict, mistake-limit/reset, hint-budget, daily-puzzle determinism,
   streak/longest/lost stats + achievements, and widget/live tests incl. notes-mode,
   completion-dialog, hint-exhaustion, daily-launch, stats-sheet and

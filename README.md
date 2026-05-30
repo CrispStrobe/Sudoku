@@ -1,7 +1,8 @@
 # Sudoku Master Pro
 
-A Flutter Sudoku game with classic and **jigsaw** (irregular-region) variants across
-six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12) and four difficulties. Features
+A Flutter Sudoku game with classic, **jigsaw** (irregular-region) and **Sudoku-X**
+(diagonal) variants across six grid sizes (4×4, 6×6, 8×8, 9×9, 10×10, 12×12) and
+four difficulties. Features
 a **daily challenge** (same board for everyone each day), a **logic difficulty
 rating** and a step-by-step **"explain the solve"** walkthrough (both powered by a
 human-technique solver), smart hints (a board-wide **"next logical step"** plus a
@@ -21,8 +22,9 @@ layer.
   completion, best time, achievements, unlocked themes).
 - **`lib/technique_solver.dart`** — a pure-Dart human-technique logical solver
   (naked/hidden singles, locked candidates, naked/hidden pairs/triples, X-wing)
-  over rows/columns/regions, so it works for classic and jigsaw. Powers the logic
-  difficulty rating, the "next logical step" hint, and the explain-the-solve mode.
+  over rows/columns/regions (plus diagonals for Sudoku-X), so it works for every
+  variant. Powers the logic difficulty rating, the "next logical step" hint, and
+  the explain-the-solve mode.
 - **`lib/sudoku_game.g.dart`** — generated `json_serializable` code for
   `PuzzleBlueprint`. Regenerate with build_runner (below).
 
@@ -61,7 +63,7 @@ The **Admin** panel (debug builds only) pre-generates puzzles into the on-disk c
 ## Testing
 
 ```bash
-flutter test               # unit + widget tests (74)
+flutter test               # unit + widget tests (79)
 flutter analyze            # static analysis (expected: no issues)
 dart format .              # formatting (checked in CI)
 ```

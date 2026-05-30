@@ -52,6 +52,26 @@ void main() {
     expect(find.text('EXPERT'), findsOneWidget);
   });
 
+  testWidgets('Difficulty sheet offers a working Sudoku-X toggle', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const SudokuApp());
+    await tester.tap(find.text('🎯 CLASSIC MODE'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('4×4'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Select Difficulty'), findsOneWidget);
+    expect(find.textContaining('Sudoku-X'), findsOneWidget);
+
+    // The toggle flips on tap (we stop here rather than start a game, which
+    // would spawn a generation isolate in the test host).
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    await tester.tap(find.textContaining('Sudoku-X'));
+    await tester.pump();
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+  });
+
   testWidgets('Themes sheet opens and lists themes', (tester) async {
     await tester.pumpWidget(const SudokuApp());
     await tester.tap(find.text('Themes'));
