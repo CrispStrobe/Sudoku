@@ -58,7 +58,7 @@ Play**, ready to paste/upload.
 - [ ] **Add `ios/Runner/PrivacyInfo.xcprivacy` to the Runner target in Xcode**
       (drag it into the Runner group, tick the Runner target) so it ships in the
       bundle.
-- [ ] **Screenshots** — capture per `screenshots.md`
+- [x] **Screenshots** — 5 captured at 1320×2868 (`store/screenshots/`); see `screenshots.md` to add more or capture iPad sizes
 - [ ] **iOS signing** — Team, distribution certificate, provisioning profile
 - [ ] **Apple privacy** — answer "Data Not Collected"; **Play Data Safety** — "No
       data collected" (answers in `data-safety.md`)

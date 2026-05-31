@@ -6,16 +6,36 @@
 - App launcher icons (Android/iOS/web) are generated from
   `assets/images/app_icon.png` via `flutter_launcher_icons`.
 
-## Screenshots still to capture (from the running app)
-1–8 per device. Recommended shot list (the screens that sell the app):
-1. **Home** — shows the variant/mode buttons and Daily Challenge.
-2. **Classic 9×9 mid-game** — board, number pad, mistakes/logic pills.
-3. **Killer** — a board with dashed cages + sum labels (the headline variant).
-4. **Explain the solve** — the step-by-step walkthrough with a technique caption.
-5. **Next logical step hint** — the explanation dialog.
-6. **Statistics** sheet.
-7. **Themes** picker.
-8. **Sudoku-X** — a board with the highlighted diagonals.
+## Captured screenshots (in `store/screenshots/`)
+Five **1320×2868** (iPhone 17 Pro Max / App Store 6.9") shots, auto-captured from
+the running app:
+1. `01-home.png` — home with the variant chooser (Classic / Sudoku-X / Killer).
+2. `02-classic.png` — classic 9×9 gameplay (logic-rating + mistakes pills).
+3. `03-killer.png` — Killer board with dashed cages + sum labels (headline variant).
+4. `04-stats.png` — the Statistics sheet.
+5. `05-themes.png` — the Themes picker.
+
+These same PNGs work for **Google Play** phone screenshots (any portrait phone
+ratio is accepted). Capture a couple more if you want (e.g. Explain-the-solve,
+Sudoku-X diagonals) — see "How to regenerate".
+
+## How to regenerate / add shots
+The capture is automated — edit the shot list in
+`integration_test/screenshot_test.dart`, then:
+
+```bash
+xcrun simctl boot "iPhone 17 Pro Max"
+flutter drive \
+  --driver=test_driver/integration_test.dart \
+  --target=integration_test/screenshot_test.dart \
+  -d "iPhone 17 Pro Max"
+```
+
+The test prints a `SHOT:<name>` marker and holds each screen; capture with a
+parallel loop that watches the log and runs
+`xcrun simctl io booted screenshot store/screenshots/<name>.png` (more reliable
+on the Simulator than `binding.takeScreenshot`). Swap the device for an iPad 13"
+simulator to get the 2048×2732 iPad shots.
 
 ### Required sizes
 **Apple (App Store Connect)** — upload at least the largest iPhone; others are
