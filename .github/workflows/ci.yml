@@ -21,3 +21,5 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
       - run: flutter test
+      # Smoke-build for web so dart_csp / wasm-safety regressions are caught.
+      - run: flutter build web --release

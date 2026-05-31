@@ -1,0 +1,194 @@
+# Release: triggered by pushing a semver tag like v1.0.0. Builds release
+# artifacts for every platform and attaches them to a GitHub Release. The tag
+# name is injected as APP_VERSION (--dart-define), which the About screen shows
+# verbatim so the in-app version matches the release tag.
+#
+# CrispSudoku is pure Dart/Flutter (no native bridges), so every target builds
+# the full app. Android is debug-signed (the Flutter default) — fine for
+# sideloading and inspection; a Play upload needs a real upload keystore.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build APK + App Bundle (release)
+        run: |
+          flutter build apk --release --dart-define=APP_VERSION=${{ github.ref_name }}
+          flutter build appbundle --release --dart-define=APP_VERSION=${{ github.ref_name }}
+      - name: Rename artifacts
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk crispsudoku-${{ github.ref_name }}-android.apk
+          mv build/app/outputs/bundle/release/app-release.aab crispsudoku-${{ github.ref_name }}-android.aab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: |
+            crispsudoku-${{ github.ref_name }}-android.apk
+            crispsudoku-${{ github.ref_name }}-android.aab
+
+  ios:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build iOS (release, unsigned)
+        run: flutter build ios --release --no-codesign --dart-define=APP_VERSION=${{ github.ref_name }}
+      - name: Zip Runner.app
+        run: |
+          cd build/ios/iphoneos
+          zip -ryq ../../../crispsudoku-${{ github.ref_name }}-ios-unsigned.zip Runner.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-release
+          path: crispsudoku-${{ github.ref_name }}-ios-unsigned.zip
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build web --release --dart-define=APP_VERSION=${{ github.ref_name }}
+      - name: Zip web build
+        run: |
+          cd build/web
+          zip -ryq ../../crispsudoku-${{ github.ref_name }}-web.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: crispsudoku-${{ github.ref_name }}-web.zip
+
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter config --enable-macos-desktop
+      - run: flutter pub get
+      - run: flutter build macos --release --dart-define=APP_VERSION=${{ github.ref_name }}
+      - name: Zip the app
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -ryq ../../../../../crispsudoku-${{ github.ref_name }}-macos.zip CrispSudoku.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: crispsudoku-${{ github.ref_name }}-macos.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter config --enable-linux-desktop
+      - run: flutter pub get
+      - run: flutter build linux --release --dart-define=APP_VERSION=${{ github.ref_name }}
+      - name: Tar the bundle
+        run: |
+          cd build/linux/x64/release
+          tar czf ../../../../crispsudoku-${{ github.ref_name }}-linux-x64.tar.gz bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: crispsudoku-${{ github.ref_name }}-linux-x64.tar.gz
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - run: flutter build windows --release --dart-define=APP_VERSION=${{ github.ref_name }}
+      - name: Zip the bundle
+        run: |
+          cd build\windows\x64\runner\Release
+          Compress-Archive -Path * -DestinationPath ..\..\..\..\..\crispsudoku-${{ github.ref_name }}-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: crispsudoku-${{ github.ref_name }}-windows-x64.zip
+
+  publish:
+    needs: [android, ios, web, macos, linux, windows]
+    runs-on: ubuntu-latest
+    if: always() && contains(needs.*.result, 'success')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: CrispSudoku ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: |
+            artifacts/android-release/*
+            artifacts/ios-release/*
+            artifacts/web-release/*
+            artifacts/macos-release/*
+            artifacts/linux-release/*
+            artifacts/windows-release/*
+          body: |
+            CrispSudoku ${{ github.ref_name }}
+
+            **Android** — `…-android.aab` for the Play Store (needs a real
+            upload key; debug-signed here) and `…-android.apk` for sideloading
+            (`adb install …`).
+
+            **iOS** — `…-ios-unsigned.zip` for inspection; App Store submission
+            needs signing with a paid Apple Developer certificate.
+
+            **Web** — `…-web.zip` static bundle (also live at
+            https://sudoku-lac-five.vercel.app).
+
+            **macOS / Linux / Windows** — desktop builds (unsigned).
+
+            The in-app version (About screen) is built from this tag.
