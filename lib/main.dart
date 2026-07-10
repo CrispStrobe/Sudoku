@@ -5,9 +5,11 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'about_screen.dart';
+import 'l10n/app_localizations.dart';
 import 'sudoku_game.dart';
 import 'technique_solver.dart';
 import 'variant_engine.dart';
@@ -24,22 +26,36 @@ class SudokuApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'CrispSudoku',
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        fontFamily: 'Roboto',
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+    return ValueListenableBuilder<String?>(
+      valueListenable: GameStats.localeNotifier,
+      builder: (context, localeCode, _) {
+        return MaterialApp(
+          title: 'CrispSudoku',
+          theme: ThemeData(
+            primarySwatch: Colors.indigo,
+            fontFamily: 'Roboto',
+            fontFamilyFallback: const ['Apple Color Emoji', 'Noto Color Emoji'],
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                elevation: 8,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-      home: const HomeScreen(),
-      debugShowCheckedModeBanner: false,
+          locale: localeCode == null ? null : Locale(localeCode),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const HomeScreen(),
+          debugShowCheckedModeBanner: false,
+        );
+      },
     );
   }
 }
@@ -103,6 +119,20 @@ class GameStats {
 
   static String currentTheme = 'Ocean';
 
+  /// Manual language override (`'en'`/`'de'`); `null` follows the system
+  /// locale. A [ValueNotifier] so the root [SudokuApp] can rebuild
+  /// [MaterialApp] with the new locale as soon as the Settings sheet changes
+  /// it, without lifting state through the whole widget tree.
+  static final ValueNotifier<String?> localeNotifier = ValueNotifier<String?>(
+    null,
+  );
+  static String? get localeCode => localeNotifier.value;
+  static set localeCode(String? code) => localeNotifier.value = code;
+
+  /// "Infinite errors" mode: when true, the mistake limit is never enforced
+  /// regardless of difficulty.
+  static bool unlimitedMistakes = false;
+
   static const Map<String, EnvironmentalTheme> themes = {
     'Ocean': EnvironmentalTheme(
       name: 'Ocean',
@@ -153,6 +183,34 @@ class GameStats {
 
   static EnvironmentalTheme get current => themes[currentTheme]!;
 
+  /// Localized display name for a theme key (`'Ocean'`, `'Forest'`, ...). The
+  /// key itself is the stable ID used for persistence/equality and must never
+  /// be translated — only this lookup's return value is.
+  static String themeDisplayName(BuildContext context, String key) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (key) {
+      'Ocean' => l10n.themeOceanName,
+      'Forest' => l10n.themeForestName,
+      'Space' => l10n.themeSpaceName,
+      'Fire' => l10n.themeFireName,
+      'Ice' => l10n.themeIceName,
+      _ => key,
+    };
+  }
+
+  /// Localized description for a theme key. See [themeDisplayName].
+  static String themeDescriptionText(BuildContext context, String key) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (key) {
+      'Ocean' => l10n.themeOceanDesc,
+      'Forest' => l10n.themeForestDesc,
+      'Space' => l10n.themeSpaceDesc,
+      'Fire' => l10n.themeFireDesc,
+      'Ice' => l10n.themeIceDesc,
+      _ => '',
+    };
+  }
+
   // --- Persistence ---------------------------------------------------------
 
   static final StatsService _store = StatsService();
@@ -169,6 +227,8 @@ class GameStats {
     'unlockedAchievements': unlockedAchievements.toList(),
     'unlockedThemes': unlockedThemes.toList(),
     'currentTheme': currentTheme,
+    'localeCode': localeCode,
+    'unlimitedMistakes': unlimitedMistakes,
   };
 
   /// Overlays persisted values onto the static fields. Tolerant of missing or
@@ -203,6 +263,9 @@ class GameStats {
 
     final theme = json['currentTheme'] as String?;
     if (theme != null && unlockedThemes.contains(theme)) currentTheme = theme;
+
+    localeNotifier.value = json['localeCode'] as String?;
+    unlimitedMistakes = json['unlimitedMistakes'] as bool? ?? unlimitedMistakes;
   }
 
   static Future<void> load() async {
@@ -292,6 +355,35 @@ class AchievementSystem {
         }
       }
     }
+  }
+
+  /// Localized display name for an achievement, looked up by its stable
+  /// [Achievement.id] (never translated — it's the persisted unlock key).
+  static String displayName(BuildContext context, String id) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (id) {
+      'first_solve' => l10n.achFirstStepsName,
+      'speed_demon' => l10n.achSpeedDemonName,
+      'puzzle_master' => l10n.achPuzzleMasterName,
+      'no_hints_hero' => l10n.achPureLogicName,
+      'streak_master' => l10n.achStreakMasterName,
+      'marathon' => l10n.achMarathonName,
+      _ => id,
+    };
+  }
+
+  /// Localized description for an achievement. See [displayName].
+  static String description(BuildContext context, String id) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (id) {
+      'first_solve' => l10n.achFirstStepsDesc,
+      'speed_demon' => l10n.achSpeedDemonDesc,
+      'puzzle_master' => l10n.achPuzzleMasterDesc,
+      'no_hints_hero' => l10n.achPureLogicDesc,
+      'streak_master' => l10n.achStreakMasterDesc,
+      'marathon' => l10n.achMarathonDesc,
+      _ => '',
+    };
   }
 }
 
@@ -474,6 +566,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final scheme = GameStats.current;
 
     return Scaffold(
@@ -515,9 +608,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Solved: ${GameStats.totalPuzzlesSolved}  |  '
-                          'Streak: ${GameStats.currentStreak}  |  '
-                          'Best: ${GameStats.longestStreak}',
+                          l10n.homeStatsLine(
+                            GameStats.totalPuzzlesSolved,
+                            GameStats.currentStreak,
+                            GameStats.longestStreak,
+                          ),
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
@@ -526,7 +621,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (GameStats.gamesLost > 0) ...[
                           const SizedBox(height: 2),
                           Text(
-                            'Losses: ${GameStats.gamesLost}',
+                            l10n.homeLossesLine(GameStats.gamesLost),
                             style: const TextStyle(
                               color: Colors.white54,
                               fontSize: 12,
@@ -535,7 +630,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                         const SizedBox(height: 5),
                         Text(
-                          scheme.description,
+                          GameStats.themeDescriptionText(context, scheme.name),
                           style: const TextStyle(
                             color: Colors.white60,
                             fontSize: 12,
@@ -545,50 +640,81 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 30),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildQuickButton(
-                          'Stats',
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final buttons = [
+                        _buildQuickButton(
+                          l10n.homeStatsButton,
                           Icons.bar_chart,
                           _showStats,
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildQuickButton(
-                          'Themes',
+                        _buildQuickButton(
+                          l10n.homeThemesButton,
                           Icons.palette,
                           _showThemes,
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildQuickButton(
-                          'Achievements',
+                        _buildQuickButton(
+                          l10n.homeAchievementsButton,
                           Icons.emoji_events,
                           _showAchievements,
                         ),
-                      ),
-                    ],
+                        _buildQuickButton(
+                          l10n.homeSettingsButton,
+                          Icons.settings,
+                          _showSettings,
+                        ),
+                      ];
+                      // Four buttons comfortably fit one row only past ~500dp;
+                      // below that (narrow phones) fall back to a 2x2 grid so
+                      // none of them get squeezed unreadably thin.
+                      if (constraints.maxWidth >= 500) {
+                        return Row(
+                          children: [
+                            for (var i = 0; i < buttons.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 10),
+                              Expanded(child: buttons[i]),
+                            ],
+                          ],
+                        );
+                      }
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: buttons[0]),
+                              const SizedBox(width: 10),
+                              Expanded(child: buttons[1]),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(child: buttons[2]),
+                              const SizedBox(width: 10),
+                              Expanded(child: buttons[3]),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 30),
                   _buildModeButton(
                     GameStats.isDailyDoneOn(DateTime.now())
-                        ? '📅 DAILY CHALLENGE ✓'
-                        : '📅 DAILY CHALLENGE',
+                        ? l10n.homeDailyChallengeDone
+                        : l10n.homeDailyChallenge,
                     GameStats.isDailyDoneOn(DateTime.now())
-                        ? 'Completed — back tomorrow!'
-                        : "Today's 9×9 puzzle, same for everyone",
+                        ? l10n.homeDailyCompletedSubtitle
+                        : l10n.homeDailySubtitle,
                     GameStats.isDailyDoneOn(DateTime.now())
                         ? Colors.green.shade700
                         : Colors.teal.shade700,
                     _startDaily,
                   ),
                   const SizedBox(height: 30),
-                  const Text(
-                    'GAME MODES',
-                    style: TextStyle(
+                  Text(
+                    l10n.homeGameModes,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -597,8 +723,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
                   _buildModeButton(
-                    '🎯 CLASSIC MODE',
-                    'Traditional Sudoku',
+                    l10n.homeClassicMode,
+                    l10n.homeClassicModeSubtitle,
                     Colors.indigo.shade800,
                     _showClassicOptions,
                   ),
@@ -615,16 +741,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       // scaleDown keeps the icon + label on one line on narrow
                       // phones instead of overflowing the row.
-                      child: const FittedBox(
+                      child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.extension, size: 24),
-                            SizedBox(width: 10),
+                            const Icon(Icons.extension, size: 24),
+                            const SizedBox(width: 10),
                             Text(
-                              '🧩 JIGSAW MODE',
-                              style: TextStyle(
+                              l10n.homeJigsawMode,
+                              style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 2,
@@ -639,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (GameStats.debugMode)
                     ElevatedButton.icon(
                       icon: const Icon(Icons.admin_panel_settings),
-                      label: const Text('Admin Panel'),
+                      label: Text(l10n.homeAdminPanel),
                       onPressed: _navigateToAdmin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.grey.shade700,
@@ -657,9 +783,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       MaterialPageRoute(builder: (_) => const AboutScreen()),
                     ),
                     icon: const Icon(Icons.info_outline, color: Colors.white70),
-                    label: const Text(
-                      'About & Licenses',
-                      style: TextStyle(color: Colors.white70),
+                    label: Text(
+                      l10n.homeAboutLicenses,
+                      style: const TextStyle(color: Colors.white70),
                     ),
                   ),
                 ],
@@ -755,70 +881,76 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Classic Sudoku',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                childAspectRatio: 1.5,
-                crossAxisSpacing: 15,
-                mainAxisSpacing: 15,
-                children: [
-                  _buildGridSizeCard(
-                    GridSize.small,
-                    '4×4',
-                    'SMALL',
-                    Colors.green.shade500,
-                  ),
-                  _buildGridSizeCard(
-                    GridSize.medium,
-                    '6×6',
-                    'MEDIUM',
-                    Colors.blue.shade400,
-                  ),
-                  _buildGridSizeCard(
-                    GridSize.large,
-                    '8×8',
-                    'LARGE',
-                    Colors.orange.shade400,
-                  ),
-                  _buildGridSizeCard(
-                    GridSize.standard,
-                    '9×9',
-                    'CLASSIC',
-                    Colors.red.shade400,
-                  ),
-                  _buildGridSizeCard(
-                    GridSize.big,
-                    '10×10',
-                    'BIG',
-                    Colors.purple.shade400,
-                  ),
-                  _buildGridSizeCard(
-                    GridSize.mega,
-                    '12×12',
-                    'MEGA',
-                    Colors.red.shade600,
-                  ),
-                ],
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.classicSheetTitle,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  childAspectRatio: 1.5,
+                  crossAxisSpacing: 15,
+                  mainAxisSpacing: 15,
+                  children: [
+                    _buildGridSizeCard(
+                      GridSize.small,
+                      '4×4',
+                      l10n.sizeSmallDifficulty,
+                      Colors.green.shade500,
+                    ),
+                    _buildGridSizeCard(
+                      GridSize.medium,
+                      '6×6',
+                      l10n.sizeMediumDifficulty,
+                      Colors.blue.shade400,
+                    ),
+                    _buildGridSizeCard(
+                      GridSize.large,
+                      '8×8',
+                      l10n.sizeLargeDifficulty,
+                      Colors.orange.shade400,
+                    ),
+                    _buildGridSizeCard(
+                      GridSize.standard,
+                      '9×9',
+                      l10n.sizeStandardDifficulty,
+                      Colors.red.shade400,
+                    ),
+                    _buildGridSizeCard(
+                      GridSize.big,
+                      '10×10',
+                      l10n.sizeBigDifficulty,
+                      Colors.purple.shade400,
+                    ),
+                    _buildGridSizeCard(
+                      GridSize.mega,
+                      '12×12',
+                      l10n.sizeMegaDifficulty,
+                      Colors.red.shade600,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -882,108 +1014,113 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Select Difficulty',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              if (gridShape == GridShape.jigsaw)
-                Container(
-                  margin: const EdgeInsets.only(top: 10),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Jigsaw mode: Regions have irregular shapes!',
-                    style: TextStyle(
-                      color: Colors.orange.shade700,
-                      fontSize: 12,
-                    ),
-                    textAlign: TextAlign.center,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return StatefulBuilder(
+          builder: (context, setSheetState) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.selectDifficultyTitle,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              // Variants are offered on the regular box layout.
-              if (gridShape == GridShape.classic) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Variant',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
+                if (gridShape == GridShape.jigsaw)
+                  Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Classic'),
-                      selected: variant == SudokuVariant.classic,
-                      onSelected: (_) =>
-                          setSheetState(() => variant = SudokuVariant.classic),
-                    ),
-                    ChoiceChip(
-                      label: const Text('⊗ Sudoku-X'),
-                      selected: variant == SudokuVariant.x,
-                      onSelected: (_) =>
-                          setSheetState(() => variant = SudokuVariant.x),
-                    ),
-                    if (killerAllowed)
-                      ChoiceChip(
-                        label: const Text('🧮 Killer'),
-                        selected: variant == SudokuVariant.killer,
-                        onSelected: (_) =>
-                            setSheetState(() => variant = SudokuVariant.killer),
+                    child: Text(
+                      l10n.jigsawIrregularNote,
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 12,
                       ),
-                  ],
-                ),
-                if (variant == SudokuVariant.x)
-                  _variantNote('Both main diagonals must also contain 1–N.'),
-                if (variant == SudokuVariant.killer)
-                  _variantNote(
-                    'No givens — each dashed cage must sum to its number with '
-                    'no repeats.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                // Variants are offered on the regular box layout.
+                if (gridShape == GridShape.classic) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l10n.variantLabel,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: Text(l10n.variantClassic),
+                        selected: variant == SudokuVariant.classic,
+                        onSelected: (_) => setSheetState(
+                          () => variant = SudokuVariant.classic,
+                        ),
+                      ),
+                      ChoiceChip(
+                        label: Text(l10n.variantSudokuX),
+                        selected: variant == SudokuVariant.x,
+                        onSelected: (_) =>
+                            setSheetState(() => variant = SudokuVariant.x),
+                      ),
+                      if (killerAllowed)
+                        ChoiceChip(
+                          label: Text(l10n.variantKiller),
+                          selected: variant == SudokuVariant.killer,
+                          onSelected: (_) => setSheetState(
+                            () => variant = SudokuVariant.killer,
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (variant == SudokuVariant.x)
+                    _variantNote(l10n.variantXNote),
+                  if (variant == SudokuVariant.killer)
+                    _variantNote(l10n.variantKillerNote),
+                ],
+                const SizedBox(height: 12),
+                for (final opt in [
+                  (l10n.difficultyEasy, SudokuDifficulty.easy),
+                  (l10n.difficultyMedium, SudokuDifficulty.medium),
+                  (l10n.difficultyHard, SudokuDifficulty.hard),
+                  (l10n.difficultyExpert, SudokuDifficulty.expert),
+                ])
+                  _buildDifficultyOption(
+                    opt.$1,
+                    _difficultyColor(opt.$2),
+                    opt.$2,
+                    gridSize,
+                    gameMode,
+                    gridShape,
+                    variant,
                   ),
               ],
-              const SizedBox(height: 12),
-              for (final opt in const [
-                ['EASY', SudokuDifficulty.easy],
-                ['MEDIUM', SudokuDifficulty.medium],
-                ['HARD', SudokuDifficulty.hard],
-                ['EXPERT', SudokuDifficulty.expert],
-              ])
-                _buildDifficultyOption(
-                  opt[0] as String,
-                  _difficultyColor(opt[1] as SudokuDifficulty),
-                  opt[1] as SudokuDifficulty,
-                  gridSize,
-                  gameMode,
-                  gridShape,
-                  variant,
-                ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1091,70 +1228,75 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '🧩 Jigsaw Sudoku',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Irregular shaped regions instead of squares! Each size has '
-              'unique region shapes.',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                childAspectRatio: 1.8,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                children: [
-                  _buildJigsawOption(
-                    '4×4 Jigsaw',
-                    GridSize.small,
-                    'Mini Challenge',
-                  ),
-                  _buildJigsawOption(
-                    '6×6 Jigsaw',
-                    GridSize.medium,
-                    'Quick Puzzle',
-                  ),
-                  _buildJigsawOption(
-                    '8×8 Jigsaw',
-                    GridSize.large,
-                    'Brain Teaser',
-                  ),
-                  _buildJigsawOption(
-                    '9×9 Jigsaw',
-                    GridSize.standard,
-                    'Classic Twist',
-                  ),
-                  _buildJigsawOption(
-                    '10×10 Jigsaw',
-                    GridSize.big,
-                    'Big Challenge',
-                  ),
-                  _buildJigsawOption(
-                    '12×12 Jigsaw',
-                    GridSize.mega,
-                    'Ultimate Test',
-                  ),
-                ],
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.jigsawSheetTitle,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 10),
+              Text(
+                l10n.jigsawSheetSubtitle,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  childAspectRatio: 1.8,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  children: [
+                    _buildJigsawOption(
+                      l10n.jigsawSizeLabel('4×4'),
+                      GridSize.small,
+                      l10n.jigsawMini,
+                    ),
+                    _buildJigsawOption(
+                      l10n.jigsawSizeLabel('6×6'),
+                      GridSize.medium,
+                      l10n.jigsawQuick,
+                    ),
+                    _buildJigsawOption(
+                      l10n.jigsawSizeLabel('8×8'),
+                      GridSize.large,
+                      l10n.jigsawBrain,
+                    ),
+                    _buildJigsawOption(
+                      l10n.jigsawSizeLabel('9×9'),
+                      GridSize.standard,
+                      l10n.jigsawClassicTwist,
+                    ),
+                    _buildJigsawOption(
+                      l10n.jigsawSizeLabel('10×10'),
+                      GridSize.big,
+                      l10n.jigsawBig,
+                    ),
+                    _buildJigsawOption(
+                      l10n.jigsawSizeLabel('12×12'),
+                      GridSize.mega,
+                      l10n.jigsawUltimate,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1213,124 +1355,136 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Environmental Themes',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 1,
-                  childAspectRatio: 4,
-                  mainAxisSpacing: 10,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.themesSheetTitle,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
                 ),
-                itemCount: GameStats.themes.length,
-                itemBuilder: (context, index) {
-                  final theme = GameStats.themes.values.elementAt(index);
-                  final isUnlocked = GameStats.unlockedThemes.contains(
-                    theme.name,
-                  );
-                  final isSelected = GameStats.currentTheme == theme.name;
-
-                  return GestureDetector(
-                    onTap: isUnlocked
-                        ? () {
-                            setState(() {
-                              GameStats.currentTheme = theme.name;
-                            });
-                            GameStats.save();
-                            Navigator.pop(context);
-                          }
-                        : null,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: theme.gradient),
-                        borderRadius: BorderRadius.circular(15),
-                        border: isSelected
-                            ? Border.all(color: Colors.white, width: 3)
-                            : null,
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          theme.name,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                        Text(
-                                          theme.description,
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 1,
-                                  child: Center(
-                                    child: Text(
-                                      theme.particleEmojis.join(' '),
-                                      style: const TextStyle(fontSize: 24),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (!isUnlocked)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.lock,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
               ),
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 1,
+                    childAspectRatio: 4,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: GameStats.themes.length,
+                  itemBuilder: (context, index) {
+                    final theme = GameStats.themes.values.elementAt(index);
+                    final isUnlocked = GameStats.unlockedThemes.contains(
+                      theme.name,
+                    );
+                    final isSelected = GameStats.currentTheme == theme.name;
+
+                    return GestureDetector(
+                      onTap: isUnlocked
+                          ? () {
+                              setState(() {
+                                GameStats.currentTheme = theme.name;
+                              });
+                              GameStats.save();
+                              Navigator.pop(context);
+                            }
+                          : null,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: theme.gradient),
+                          borderRadius: BorderRadius.circular(15),
+                          border: isSelected
+                              ? Border.all(color: Colors.white, width: 3)
+                              : null,
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            GameStats.themeDisplayName(
+                                              context,
+                                              theme.name,
+                                            ),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
+                                            ),
+                                          ),
+                                          Text(
+                                            GameStats.themeDescriptionText(
+                                              context,
+                                              theme.name,
+                                            ),
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: Center(
+                                      child: Text(
+                                        theme.particleEmojis.join(' '),
+                                        style: const TextStyle(fontSize: 24),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!isUnlocked)
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.lock,
+                                    color: Colors.white,
+                                    size: 32,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1340,73 +1494,96 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Achievements',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: AchievementSystem.achievements.length,
-                itemBuilder: (context, index) {
-                  final achievement = AchievementSystem.achievements[index];
-                  final isUnlocked = GameStats.unlockedAchievements.contains(
-                    achievement.id,
-                  );
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.achievementsSheetTitle,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: AchievementSystem.achievements.length,
+                  itemBuilder: (context, index) {
+                    final achievement = AchievementSystem.achievements[index];
+                    final isUnlocked = GameStats.unlockedAchievements.contains(
+                      achievement.id,
+                    );
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: ListTile(
-                      leading: Text(
-                        achievement.icon,
-                        style: const TextStyle(fontSize: 30),
-                      ),
-                      title: Text(
-                        achievement.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isUnlocked ? Colors.black : Colors.grey,
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: ListTile(
+                        leading: Text(
+                          achievement.icon,
+                          style: const TextStyle(fontSize: 30),
                         ),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(achievement.description),
-                          if (achievement.rewardTheme != null)
+                        title: Text(
+                          AchievementSystem.displayName(
+                            context,
+                            achievement.id,
+                          ),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isUnlocked ? Colors.black : Colors.grey,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              'Reward: ${achievement.rewardTheme} theme',
-                              style: const TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.w500,
+                              AchievementSystem.description(
+                                context,
+                                achievement.id,
                               ),
                             ),
-                        ],
+                            if (achievement.rewardTheme != null)
+                              Text(
+                                l10n.achievementRewardTheme(
+                                  GameStats.themeDisplayName(
+                                    context,
+                                    achievement.rewardTheme!,
+                                  ),
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                        trailing: isUnlocked
+                            ? const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              )
+                            : const Icon(Icons.lock, color: Colors.grey),
                       ),
-                      trailing: isUnlocked
-                          ? const Icon(Icons.check_circle, color: Colors.green)
-                          : const Icon(Icons.lock, color: Colors.grey),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   void _showStats() {
+    final l10n = AppLocalizations.of(context)!;
     final solved = GameStats.totalPuzzlesSolved;
     final lost = GameStats.gamesLost;
     final finished = solved + lost;
@@ -1418,37 +1595,37 @@ class _HomeScreenState extends State<HomeScreen> {
     final totalAchievements = AchievementSystem.achievements.length;
 
     final rows = <_Stat>[
-      _Stat(Icons.check_circle_outline, 'Puzzles solved', '$solved'),
-      _Stat(Icons.percent, 'Win rate', winRate),
+      _Stat(Icons.check_circle_outline, l10n.statPuzzlesSolved, '$solved'),
+      _Stat(Icons.percent, l10n.statWinRate, winRate),
       _Stat(
         Icons.local_fire_department,
-        'Current streak',
+        l10n.statCurrentStreak,
         '${GameStats.currentStreak}',
       ),
       _Stat(
         Icons.emoji_events_outlined,
-        'Longest streak',
+        l10n.statLongestStreak,
         '${GameStats.longestStreak}',
       ),
-      _Stat(Icons.heart_broken_outlined, 'Games lost', '$lost'),
+      _Stat(Icons.heart_broken_outlined, l10n.statGamesLost, '$lost'),
       _Stat(
         Icons.timer_outlined,
-        'Best time',
+        l10n.statBestTime,
         hasBest ? formatClock(GameStats.bestTime) : '—',
       ),
       _Stat(
         Icons.calendar_today,
-        'Daily puzzles done',
+        l10n.statDailyPuzzlesDone,
         '${GameStats.dailyCompletedCount}',
       ),
       _Stat(
         Icons.lightbulb_outline,
-        'Hints used',
+        l10n.statHintsUsed,
         '${GameStats.totalHintsUsed}',
       ),
       _Stat(
         Icons.military_tech_outlined,
-        'Achievements',
+        l10n.statAchievements,
         '$unlocked / $totalAchievements',
       ),
     ];
@@ -1467,9 +1644,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Statistics',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Text(
+              l10n.statsSheetTitle,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
             Expanded(
@@ -1495,6 +1672,88 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return StatefulBuilder(
+          builder: (context, setSheetState) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.settingsSheetTitle,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  l10n.settingsLanguageLabel,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: Text(l10n.settingsLanguageSystem),
+                      selected: GameStats.localeCode == null,
+                      onSelected: (_) => setSheetState(() {
+                        GameStats.localeCode = null;
+                        GameStats.save();
+                      }),
+                    ),
+                    ChoiceChip(
+                      label: Text(l10n.settingsLanguageEnglish),
+                      selected: GameStats.localeCode == 'en',
+                      onSelected: (_) => setSheetState(() {
+                        GameStats.localeCode = 'en';
+                        GameStats.save();
+                      }),
+                    ),
+                    ChoiceChip(
+                      label: Text(l10n.settingsLanguageGerman),
+                      selected: GameStats.localeCode == 'de',
+                      onSelected: (_) => setSheetState(() {
+                        GameStats.localeCode = 'de';
+                        GameStats.save();
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.settingsUnlimitedMistakes),
+                  subtitle: Text(l10n.settingsUnlimitedMistakesSubtitle),
+                  value: GameStats.unlimitedMistakes,
+                  onChanged: (value) => setSheetState(() {
+                    GameStats.unlimitedMistakes = value;
+                    GameStats.save();
+                  }),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1582,7 +1841,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
   DateTime? _startTime;
 
-  String? _errorMessage;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -1625,13 +1884,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_errorMessage != null && mounted) {
+    if (_hasError && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _errorMessage != null) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(_errorMessage!)));
-          _errorMessage = null;
+        if (mounted && _hasError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.failedToCreatePuzzle),
+            ),
+          );
+          _hasError = false;
         }
       });
     }
@@ -1762,9 +2023,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       } catch (e2, st2) {
         DebugLogger.error('Fallback also failed.', e2, st2);
         if (mounted) {
-          setState(
-            () => _errorMessage = 'Failed to create puzzle. Please restart.',
-          );
+          setState(() => _hasError = true);
         }
       }
     }
@@ -1810,8 +2069,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  static String _ratingLabel(SudokuDifficulty d) =>
-      d.name[0].toUpperCase() + d.name.substring(1);
+  /// Title-case difficulty label ("Easy", "Medium", ...) reusing the same
+  /// localized difficulty strings as the picker sheet (which are all-caps,
+  /// for buttons) rather than a separate set of ARB keys.
+  static String _ratingLabel(BuildContext context, SudokuDifficulty d) {
+    final l10n = AppLocalizations.of(context)!;
+    final upper = switch (d) {
+      SudokuDifficulty.easy => l10n.difficultyEasy,
+      SudokuDifficulty.medium => l10n.difficultyMedium,
+      SudokuDifficulty.hard => l10n.difficultyHard,
+      SudokuDifficulty.expert => l10n.difficultyExpert,
+    };
+    final lower = upper.toLowerCase();
+    return lower[0].toUpperCase() + lower.substring(1);
+  }
 
   @override
   void dispose() {
@@ -1861,7 +2132,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         score = math.max(0, score - 25);
         mistakes++;
       });
-      if (mistakes >= _maxMistakes) {
+      if (!GameStats.unlimitedMistakes && mistakes >= _maxMistakes) {
         _gameOver();
         return;
       }
@@ -1940,7 +2211,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _showHint() {
     if (_hintsRemaining == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hints left for this puzzle!')),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.noHintsLeftSnackbar),
+        ),
       );
       return;
     }
@@ -1948,6 +2221,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _showHintDialog() {
+    final l10n = AppLocalizations.of(context)!;
     // A board-wide "next logical step" (works with no cell selected), plus the
     // per-cell smart hints when a cell is selected.
     final perCell = (selectedRow != null && selectedCol != null)
@@ -1957,11 +2231,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.lightbulb, color: Colors.orange),
-            SizedBox(width: 10),
-            Text('Smart Hints'),
+            const Icon(Icons.lightbulb, color: Colors.orange),
+            const SizedBox(width: 10),
+            Text(l10n.smartHintsTitle),
           ],
         ),
         content: SingleChildScrollView(
@@ -1975,13 +2249,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     Icons.auto_awesome,
                     color: Colors.deepPurple,
                   ),
-                  title: const Text('Next logical step'),
-                  subtitle: const Text(
-                    'Find and explain the next deduction on the board.',
-                  ),
-                  trailing: const Text(
-                    '-$_nextStepPenalty',
-                    style: TextStyle(
+                  title: Text(l10n.nextLogicalStepTitle),
+                  subtitle: Text(l10n.nextLogicalStepSubtitle),
+                  trailing: Text(
+                    l10n.penaltyLabel(_nextStepPenalty),
+                    style: const TextStyle(
                       color: Colors.red,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1992,13 +2264,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   },
                 ),
               ),
+              // hint.title / hint.description are dynamically-composed solver
+              // prose — left in English for now (see plan notes on
+              // technique_solver.dart / sudoku_game.dart scope).
               for (final hint in perCell)
                 Card(
                   child: ListTile(
                     title: Text(hint.title),
                     subtitle: Text(hint.description),
                     trailing: Text(
-                      hint.penalty > 0 ? '-${hint.penalty}' : '',
+                      hint.penalty > 0 ? l10n.penaltyLabel(hint.penalty) : '',
                       style: const TextStyle(
                         color: Colors.red,
                         fontWeight: FontWeight.bold,
@@ -2019,6 +2294,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   /// Compute the next logical deduction from the current board and present it.
   void _showNextStepHint() {
+    final l10n = AppLocalizations.of(context)!;
     final g = game;
     if (g == null) return;
     final step = TechniqueSolver(
@@ -2033,16 +2309,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text('No logical step found'),
-          content: const Text(
-            'No straightforward deduction is available from the current '
-            'board — it may need a more advanced technique or contain a '
-            'wrong entry. Try clearing any conflicts first.',
-          ),
+          title: Text(l10n.noStepFoundTitle),
+          content: Text(l10n.noStepFoundBody),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+              child: Text(l10n.okButton),
             ),
           ],
         ),
@@ -2054,12 +2326,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(_techniqueLabel(step.technique)),
+        title: Text(_techniqueLabel(context, step.technique)),
         content: Text(step.explanation),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancelButton),
           ),
           ElevatedButton(
             onPressed: () {
@@ -2067,7 +2339,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               _applyNextStep(step);
             },
             child: Text(
-              isPlacement ? 'Place it (-$_nextStepPenalty)' : 'Got it',
+              isPlacement
+                  ? l10n.placeItButton(_nextStepPenalty)
+                  : l10n.gotItButton,
             ),
           ),
         ],
@@ -2093,42 +2367,44 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (_isWon()) _completeGame();
   }
 
-  static String _techniqueLabel(Technique t) {
+  static String _techniqueLabel(BuildContext context, Technique t) {
+    final l10n = AppLocalizations.of(context)!;
     switch (t) {
       case Technique.nakedSingle:
-        return 'Naked Single';
+        return l10n.techniqueNakedSingle;
       case Technique.hiddenSingle:
-        return 'Hidden Single';
+        return l10n.techniqueHiddenSingle;
       case Technique.lockedCandidates:
-        return 'Locked Candidates';
+        return l10n.techniqueLockedCandidates;
       case Technique.nakedPair:
-        return 'Naked Pair';
+        return l10n.techniqueNakedPair;
       case Technique.nakedTriple:
-        return 'Naked Triple';
+        return l10n.techniqueNakedTriple;
       case Technique.hiddenPair:
-        return 'Hidden Pair';
+        return l10n.techniqueHiddenPair;
       case Technique.xWing:
-        return 'X-Wing';
+        return l10n.techniqueXWing;
       case Technique.guess:
-        return 'Next Step';
+        return l10n.techniqueNextStep;
     }
   }
 
   void _showHintConfirmation(SmartHint hint) {
     if (hint.penalty == 0) return;
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(hint.title),
-        content: Text('Use this hint for a -${hint.penalty} score penalty?'),
+        content: Text(l10n.useHintConfirm(hint.penalty)),
         actions: [
           TextButton(
-            child: const Text('Cancel'),
+            child: Text(l10n.cancelButton),
             onPressed: () => Navigator.pop(context),
           ),
           ElevatedButton(
-            child: const Text('Confirm'),
+            child: Text(l10n.confirmButton),
             onPressed: () {
               Navigator.pop(context);
               _applyHint(hint);
@@ -2140,6 +2416,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _applyHint(SmartHint hint) {
+    final l10n = AppLocalizations.of(context)!;
     final g = game;
     if (g == null) return;
     setState(() {
@@ -2149,9 +2426,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       switch (hint.type) {
         case HintType.showPossible:
           final numbers = (hint.data as List<int>).join(', ');
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Possible Numbers: $numbers')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.possibleNumbersSnackbar(numbers))),
+          );
           break;
         case HintType.giveAnswer:
         case HintType.nakedSingle:
@@ -2198,6 +2475,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _showCompletionDialog(int finalScore, Duration time, int timeBonus) {
+    final l10n = AppLocalizations.of(context)!;
     final scheme = GameStats.current;
     showDialog<void>(
       context: context,
@@ -2205,7 +2483,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          widget.isDaily ? '🎉 Daily Complete!' : '🎉 Completed!',
+          widget.isDaily ? l10n.dailyCompleteTitle : l10n.completedTitle,
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
         ),
@@ -2213,19 +2491,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Score: $finalScore',
+              l10n.scoreResult(finalScore),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            Text('Time: ${_formatDuration(time)}  •  Bonus: +$timeBonus'),
+            Text(l10n.timeResult(_formatDuration(time), timeBonus)),
             if (_logicRating != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text('Logic rating: ${_ratingLabel(_logicRating!)}'),
+                child: Text(
+                  l10n.logicRatingResult(_ratingLabel(context, _logicRating!)),
+                ),
               ),
             if (widget.isDaily)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Come back tomorrow for a new daily!'),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(l10n.dailyComeBackNote),
               ),
           ],
         ),
@@ -2235,7 +2515,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               Navigator.pop(dialogContext);
               _goToMainMenu();
             },
-            child: const Text('Main Menu'),
+            child: Text(l10n.mainMenuButton),
           ),
           // The daily is one board per day — no "Next Puzzle".
           if (!widget.isDaily)
@@ -2244,7 +2524,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 Navigator.pop(dialogContext);
                 _startNextLevel();
               },
-              child: const Text('Next Puzzle'),
+              child: Text(l10n.nextPuzzleButton),
             ),
         ],
       ),
@@ -2262,6 +2542,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _showGameOverDialog() {
+    final l10n = AppLocalizations.of(context)!;
     final scheme = GameStats.current;
     showDialog<void>(
       context: context,
@@ -2269,7 +2550,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          '💥 Game Over',
+          l10n.gameOverTitle,
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
         ),
@@ -2277,15 +2558,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'You reached $_maxMistakes mistakes.',
+              l10n.reachedMistakesMessage(_maxMistakes),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Your streak has been reset.',
-              textAlign: TextAlign.center,
-            ),
+            Text(l10n.streakResetMessage, textAlign: TextAlign.center),
           ],
         ),
         actions: [
@@ -2294,14 +2572,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               Navigator.pop(dialogContext);
               _goToMainMenu();
             },
-            child: const Text('Main Menu'),
+            child: Text(l10n.mainMenuButton),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(dialogContext);
               _retrySamePuzzle();
             },
-            child: const Text('Try Again'),
+            child: Text(l10n.tryAgainButton),
           ),
         ],
       ),
@@ -2351,15 +2629,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               colors: GameStats.current.gradient,
             ),
           ),
-          child: const Center(
+          child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircularProgressIndicator(color: Colors.white),
-                SizedBox(height: 20),
+                const CircularProgressIndicator(color: Colors.white),
+                const SizedBox(height: 20),
                 Text(
-                  'Generating puzzle...',
-                  style: TextStyle(color: Colors.white, fontSize: 18),
+                  AppLocalizations.of(context)!.generatingPuzzle,
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
                 ),
               ],
             ),
@@ -2368,6 +2646,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       );
     }
 
+    final l10n = AppLocalizations.of(context)!;
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     final scheme = GameStats.current;
@@ -2385,13 +2664,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           IconButton(
             onPressed: _goToMainMenu,
             icon: const Icon(Icons.home),
-            tooltip: 'Main Menu',
+            tooltip: l10n.mainMenuTooltip,
           ),
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Text(
-                'Score: $score',
+                l10n.scoreLabel(score),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -2492,7 +2771,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         child: Text(
-          '🧠 ${_ratingLabel(_logicRating!)}',
+          AppLocalizations.of(
+            context,
+          )!.logicRatingPill(_ratingLabel(context, _logicRating!)),
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -2504,8 +2785,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMistakesIndicator() {
-    final atRisk = mistakes >= _maxMistakes - 1;
+    final unlimited = GameStats.unlimitedMistakes;
+    final atRisk = !unlimited && mistakes >= _maxMistakes - 1;
     final accent = atRisk ? Colors.red.shade300 : Colors.white;
+    final l10n = AppLocalizations.of(context)!;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
@@ -2517,27 +2800,30 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              'Mistakes',
-              style: TextStyle(
+            Text(
+              l10n.mistakesLabel,
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
               ),
             ),
             const SizedBox(width: 10),
-            for (var i = 0; i < _maxMistakes; i++)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Icon(
-                  i < mistakes ? Icons.close : Icons.radio_button_unchecked,
-                  size: 15,
-                  color: i < mistakes ? accent : Colors.white54,
+            if (!unlimited)
+              for (var i = 0; i < _maxMistakes; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Icon(
+                    i < mistakes ? Icons.close : Icons.radio_button_unchecked,
+                    size: 15,
+                    color: i < mistakes ? accent : Colors.white54,
+                  ),
                 ),
-              ),
             const SizedBox(width: 8),
             Text(
-              '$mistakes/$_maxMistakes',
+              unlimited
+                  ? l10n.mistakesCountUnlimited(mistakes)
+                  : l10n.mistakesCount(mistakes, _maxMistakes),
               style: TextStyle(
                 color: accent,
                 fontWeight: FontWeight.bold,
@@ -2551,6 +2837,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildControls(EnvironmentalTheme scheme) {
+    final l10n = AppLocalizations.of(context)!;
     return Row(
       children: [
         Expanded(
@@ -2562,10 +2849,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             icon: const Icon(Icons.lightbulb),
             label: Text(
               widget.isKiller
-                  ? 'Hint'
+                  ? l10n.hintButtonLabel
                   : (_hintsRemaining > 0
-                        ? 'Hint ($_hintsRemaining)'
-                        : 'No Hints'),
+                        ? l10n.hintButtonWithCount(_hintsRemaining)
+                        : l10n.noHintsLabel),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
@@ -2579,7 +2866,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         const SizedBox(width: 8),
         _circleButton(
           icon: Icons.edit,
-          tooltip: 'Notes mode',
+          tooltip: l10n.notesModeTooltip,
           active: _notesMode,
           activeColor: scheme.primary,
           onPressed: _toggleNotesMode,
@@ -2587,13 +2874,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         const SizedBox(width: 8),
         _circleButton(
           icon: Icons.undo,
-          tooltip: 'Undo',
+          tooltip: l10n.undoTooltip,
           onPressed: (game?.canUndo ?? false) ? _undo : null,
         ),
         const SizedBox(width: 8),
         _circleButton(
           icon: Icons.clear,
-          tooltip: 'Erase',
+          tooltip: l10n.eraseTooltip,
           activeColor: Colors.red,
           active: true,
           onPressed: _clearCell,
@@ -2601,7 +2888,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         const SizedBox(width: 8),
         _circleButton(
           icon: Icons.school,
-          tooltip: 'Explain solve',
+          tooltip: l10n.explainSolveTooltip,
           onPressed: (game == null || widget.isKiller) ? null : _openExplain,
         ),
       ],
@@ -2654,59 +2941,71 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final g = game!;
     final gridDim = g.gridDim;
     final maxGridSize = isTablet ? 450.0 : 320.0;
-    final gridPixels = math.min(
-      maxGridSize,
-      MediaQuery.of(context).size.width - 32,
-    );
-    final cellSize = gridPixels / gridDim;
 
-    return Container(
-      width: gridPixels,
-      height: gridPixels,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            CustomPaint(
-              size: Size(gridPixels, gridPixels),
-              painter: SudokuGridPainter(
-                g.gridDim,
-                g.regions,
-                jigsaw: widget.gridShape == GridShape.jigsaw,
+    // Both width AND height must be consulted: the old version only read
+    // MediaQuery's screen width, so on a wide-but-height-constrained viewport
+    // (iPad, a resized browser window, landscape) the surrounding Expanded/
+    // Center would clamp the actual rendered box down, but the Positioned
+    // cells below were still placed using the un-clamped size — pushing the
+    // last row(s) outside the ClipRRect. Using LayoutBuilder's own
+    // constraints keeps the two in sync in both axes.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gridPixels = math.min(
+          maxGridSize,
+          math.min(constraints.maxWidth, constraints.maxHeight),
+        );
+        final cellSize = gridPixels / gridDim;
+
+        return Container(
+          width: gridPixels,
+          height: gridPixels,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
               ),
-            ),
-            for (int row = 0; row < gridDim; row++)
-              for (int col = 0; col < gridDim; col++)
-                Positioned(
-                  left: col * cellSize,
-                  top: row * cellSize,
-                  width: cellSize,
-                  height: cellSize,
-                  child: _buildCell(row, col, isTablet, scheme),
-                ),
-            if (widget.isKiller)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(
-                    size: Size(gridPixels, gridPixels),
-                    painter: KillerCagePainter(_cages, gridDim),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              children: [
+                CustomPaint(
+                  size: Size(gridPixels, gridPixels),
+                  painter: SudokuGridPainter(
+                    g.gridDim,
+                    g.regions,
+                    jigsaw: widget.gridShape == GridShape.jigsaw,
                   ),
                 ),
-              ),
-          ],
-        ),
-      ),
+                for (int row = 0; row < gridDim; row++)
+                  for (int col = 0; col < gridDim; col++)
+                    Positioned(
+                      left: col * cellSize,
+                      top: row * cellSize,
+                      width: cellSize,
+                      height: cellSize,
+                      child: _buildCell(row, col, isTablet, scheme),
+                    ),
+                if (widget.isKiller)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        size: Size(gridPixels, gridPixels),
+                        painter: KillerCagePainter(_cages, gridDim),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2839,10 +3138,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildNumberPad(bool isTablet) {
-    final buttonSize = isTablet ? 50.0 : 40.0;
-    final fontSize = isTablet ? 20.0 : 16.0;
     final maxNumber = game!.gridDim;
     final primary = GameStats.current.primary;
+    final crossAxisCount = math.min(6, maxNumber);
+    const spacing = 8.0;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2851,88 +3150,109 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
-      child: GridView.builder(
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: math.min(6, maxNumber),
-          childAspectRatio: 1,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: maxNumber,
-        itemBuilder: (context, index) {
-          final number = index + 1;
-          return Draggable<int>(
-            data: number,
-            // Anchor the feedback's centre on the pointer so the floating tile
-            // stays under the finger/cursor (and thus over the highlighted
-            // target cell). The default childDragAnchorStrategy offsets it by
-            // the grab point within the number-pad cell, which is sized
-            // independently of the fixed-size feedback and pushed it off-cursor.
-            dragAnchorStrategy: (draggable, context, position) =>
-                Offset(buttonSize / 2, buttonSize / 2),
-            feedback: Container(
-              width: buttonSize,
-              height: buttonSize,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+      // The number tiles must actually fit the available space and scale
+      // with it (previously buttonSize/fontSize only depended on the binary
+      // isTablet flag, completely disconnected from what GridView actually
+      // rendered — on a 4x4 board on a tablet that meant tiny digits in huge
+      // empty tiles, and on 12x12 boards, digits shrinking arbitrarily as
+      // more rows got squeezed into the same space). Deriving both from the
+      // real computed cell width keeps them proportionate on any device.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final rows = (maxNumber / crossAxisCount).ceil();
+          final cellWidth =
+              (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
+              crossAxisCount;
+          final cellHeight =
+              (constraints.maxHeight - spacing * (rows - 1)) / rows;
+          final buttonSize = math.min(cellWidth, cellHeight);
+          final fontSize = (buttonSize * 0.4).clamp(12.0, 28.0);
+
+          return GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 1,
+              crossAxisSpacing: spacing,
+              mainAxisSpacing: spacing,
+            ),
+            itemCount: maxNumber,
+            itemBuilder: (context, index) {
+              final number = index + 1;
+              return Draggable<int>(
+                data: number,
+                // Anchor the feedback's centre on the pointer so the floating
+                // tile stays under the finger/cursor (and thus over the
+                // highlighted target cell). The default
+                // childDragAnchorStrategy offsets it by the grab point within
+                // the number-pad cell, which is sized independently of the
+                // fixed-size feedback and pushed it off-cursor.
+                dragAnchorStrategy: (draggable, context, position) =>
+                    Offset(buttonSize / 2, buttonSize / 2),
+                feedback: Container(
+                  width: buttonSize,
+                  height: buttonSize,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  '$number',
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                    color: primary,
+                  child: Center(
+                    child: Text(
+                      '$number',
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.bold,
+                        color: primary,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            childWhenDragging: ElevatedButton(
-              onPressed: null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withValues(alpha: 0.5),
-                foregroundColor: primary.withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                childWhenDragging: ElevatedButton(
+                  onPressed: null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.5),
+                    foregroundColor: primary.withValues(alpha: 0.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 4,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    '$number',
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                elevation: 4,
-                padding: EdgeInsets.zero,
-              ),
-              child: Text(
-                '$number',
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.bold,
+                child: ElevatedButton(
+                  onPressed: () => _inputNumber(number),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 8,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: Text(
+                    '$number',
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            child: ElevatedButton(
-              onPressed: () => _inputNumber(number),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                elevation: 8,
-                padding: EdgeInsets.zero,
-              ),
-              child: Text(
-                '$number',
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+              );
+            },
           );
         },
       ),
@@ -3027,25 +3347,30 @@ class _ExplainScreenState extends State<ExplainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final scheme = widget.scheme;
     // The step that produced the current board (null at the start position).
     final step = _index == 0 ? null : _result.steps[_index - 1];
+    // step.explanation is dynamically-composed solver prose — left in English
+    // for now (see appstore/plan notes: localizing it means restructuring the
+    // solver to emit structured reasoning data instead of pre-written text).
     final caption = step == null
         ? (_stepCount == 0
-              ? 'No logical steps were needed.'
-              : 'Starting position — $_stepCount step${_stepCount == 1 ? '' : 's'} to go.')
+              ? l10n.explainNoStepsNeeded
+              : l10n.explainStartingPosition(_stepCount))
         : step.explanation;
     final atEnd = _index >= _stepCount;
     final finishedNote = atEnd && _stepCount > 0
         ? (_result.solved
-              ? '✅ Solved with logic — hardest technique: '
-                    '${_GameScreenState._techniqueLabel(_result.hardest)}.'
-              : '⛔ Stuck — needs a technique beyond this solver.')
+              ? l10n.explainSolvedNote(
+                  _GameScreenState._techniqueLabel(context, _result.hardest),
+                )
+              : l10n.explainStuckNote)
         : null;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Explain the solve'),
+        title: Text(l10n.explainAppBarTitle),
         backgroundColor: scheme.primary,
         foregroundColor: Colors.white,
       ),
@@ -3063,7 +3388,9 @@ class _ExplainScreenState extends State<ExplainScreen> {
             child: Column(
               children: [
                 Text(
-                  _index == 0 ? 'Start' : 'Step $_index / $_stepCount',
+                  _index == 0
+                      ? l10n.explainStart
+                      : l10n.explainStepOf(_index, _stepCount),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -3097,7 +3424,10 @@ class _ExplainScreenState extends State<ExplainScreen> {
                       children: [
                         if (step != null)
                           Text(
-                            _GameScreenState._techniqueLabel(step.technique),
+                            _GameScreenState._techniqueLabel(
+                              context,
+                              step.technique,
+                            ),
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: scheme.primary,
@@ -3123,21 +3453,23 @@ class _ExplainScreenState extends State<ExplainScreen> {
                     IconButton.filled(
                       onPressed: _index > 0 ? () => _go(_index - 1) : null,
                       icon: const Icon(Icons.skip_previous),
-                      tooltip: 'Previous',
+                      tooltip: l10n.explainPreviousTooltip,
                     ),
                     IconButton.filled(
                       onPressed: _stepCount == 0 ? null : _toggleAutoplay,
                       icon: Icon(
                         _autoplay == null ? Icons.play_arrow : Icons.pause,
                       ),
-                      tooltip: _autoplay == null ? 'Play' : 'Pause',
+                      tooltip: _autoplay == null
+                          ? l10n.explainPlayTooltip
+                          : l10n.explainPauseTooltip,
                     ),
                     IconButton.filled(
                       onPressed: _index < _stepCount
                           ? () => _go(_index + 1)
                           : null,
                       icon: const Icon(Icons.skip_next),
-                      tooltip: 'Next',
+                      tooltip: l10n.explainNextTooltip,
                     ),
                   ],
                 ),

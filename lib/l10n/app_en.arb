@@ -1,0 +1,254 @@
+{
+  "@@locale": "en",
+
+  "homeStatsButton": "Stats",
+  "homeThemesButton": "Themes",
+  "homeAchievementsButton": "Achievements",
+  "homeSettingsButton": "Settings",
+
+  "homeStatsLine": "Solved: {solved}  |  Streak: {streak}  |  Best: {best}",
+  "@homeStatsLine": {
+    "placeholders": {
+      "solved": {"type": "int"},
+      "streak": {"type": "int"},
+      "best": {"type": "int"}
+    }
+  },
+  "homeLossesLine": "Losses: {losses}",
+  "@homeLossesLine": {
+    "placeholders": { "losses": {"type": "int"} }
+  },
+
+  "homeDailyChallengeDone": "📅 DAILY CHALLENGE ✓",
+  "homeDailyChallenge": "📅 DAILY CHALLENGE",
+  "homeDailyCompletedSubtitle": "Completed — back tomorrow!",
+  "homeDailySubtitle": "Today's 9×9 puzzle, same for everyone",
+  "homeGameModes": "GAME MODES",
+  "homeClassicMode": "🎯 CLASSIC MODE",
+  "homeClassicModeSubtitle": "Traditional Sudoku",
+  "homeJigsawMode": "🧩 JIGSAW MODE",
+  "homeAdminPanel": "Admin Panel",
+  "homeAboutLicenses": "About & Licenses",
+
+  "classicSheetTitle": "Classic Sudoku",
+  "sizeSmallDifficulty": "SMALL",
+  "sizeMediumDifficulty": "MEDIUM",
+  "sizeLargeDifficulty": "LARGE",
+  "sizeStandardDifficulty": "CLASSIC",
+  "sizeBigDifficulty": "BIG",
+  "sizeMegaDifficulty": "MEGA",
+
+  "selectDifficultyTitle": "Select Difficulty",
+  "jigsawIrregularNote": "Jigsaw mode: Regions have irregular shapes!",
+  "variantLabel": "Variant",
+  "variantClassic": "Classic",
+  "variantSudokuX": "⊗ Sudoku-X",
+  "variantKiller": "🧮 Killer",
+  "variantXNote": "Both main diagonals must also contain 1–N.",
+  "variantKillerNote": "No givens — each dashed cage must sum to its number with no repeats.",
+  "difficultyEasy": "EASY",
+  "difficultyMedium": "MEDIUM",
+  "difficultyHard": "HARD",
+  "difficultyExpert": "EXPERT",
+
+  "jigsawSheetTitle": "🧩 Jigsaw Sudoku",
+  "jigsawSheetSubtitle": "Irregular shaped regions instead of squares! Each size has unique region shapes.",
+  "jigsawSizeLabel": "{size} Jigsaw",
+  "@jigsawSizeLabel": {
+    "placeholders": { "size": {"type": "String"} }
+  },
+  "jigsawMini": "Mini Challenge",
+  "jigsawQuick": "Quick Puzzle",
+  "jigsawBrain": "Brain Teaser",
+  "jigsawClassicTwist": "Classic Twist",
+  "jigsawBig": "Big Challenge",
+  "jigsawUltimate": "Ultimate Test",
+
+  "themesSheetTitle": "Environmental Themes",
+  "themeOceanName": "Ocean",
+  "themeOceanDesc": "Deep ocean depths",
+  "themeForestName": "Forest",
+  "themeForestDesc": "Mysterious forest",
+  "themeSpaceName": "Space",
+  "themeSpaceDesc": "Cosmic adventure",
+  "themeFireName": "Fire",
+  "themeFireDesc": "Volcanic eruption",
+  "themeIceName": "Ice",
+  "themeIceDesc": "Frozen tundra",
+
+  "achievementsSheetTitle": "Achievements",
+  "achFirstStepsName": "First Steps",
+  "achFirstStepsDesc": "Complete your first puzzle",
+  "achSpeedDemonName": "Speed Demon",
+  "achSpeedDemonDesc": "Complete a puzzle in under 3 minutes",
+  "achPuzzleMasterName": "Puzzle Master",
+  "achPuzzleMasterDesc": "Complete 10 puzzles",
+  "achPureLogicName": "Pure Logic",
+  "achPureLogicDesc": "Complete a hard puzzle without hints",
+  "achStreakMasterName": "Streak Master",
+  "achStreakMasterDesc": "Solve 5 puzzles in a row",
+  "achMarathonName": "Marathon",
+  "achMarathonDesc": "Reach a 10-puzzle streak",
+  "achievementRewardTheme": "Reward: {theme} theme",
+  "@achievementRewardTheme": {
+    "placeholders": { "theme": {"type": "String"} }
+  },
+
+  "statsSheetTitle": "Statistics",
+  "statPuzzlesSolved": "Puzzles solved",
+  "statWinRate": "Win rate",
+  "statCurrentStreak": "Current streak",
+  "statLongestStreak": "Longest streak",
+  "statGamesLost": "Games lost",
+  "statBestTime": "Best time",
+  "statDailyPuzzlesDone": "Daily puzzles done",
+  "statHintsUsed": "Hints used",
+  "statAchievements": "Achievements",
+
+  "generatingPuzzle": "Generating puzzle...",
+  "mainMenuTooltip": "Main Menu",
+  "scoreLabel": "Score: {score}",
+  "@scoreLabel": {
+    "placeholders": { "score": {"type": "int"} }
+  },
+  "mistakesLabel": "Mistakes",
+  "mistakesCount": "{mistakes}/{max}",
+  "@mistakesCount": {
+    "placeholders": {
+      "mistakes": {"type": "int"},
+      "max": {"type": "int"}
+    }
+  },
+  "mistakesCountUnlimited": "{mistakes} / ∞",
+  "@mistakesCountUnlimited": {
+    "placeholders": { "mistakes": {"type": "int"} }
+  },
+  "logicRatingPill": "🧠 {rating}",
+  "@logicRatingPill": {
+    "placeholders": { "rating": {"type": "String"} }
+  },
+  "hintButtonLabel": "Hint",
+  "hintButtonWithCount": "Hint ({count})",
+  "@hintButtonWithCount": {
+    "placeholders": { "count": {"type": "int"} }
+  },
+  "noHintsLabel": "No Hints",
+  "notesModeTooltip": "Notes mode",
+  "undoTooltip": "Undo",
+  "eraseTooltip": "Erase",
+  "explainSolveTooltip": "Explain solve",
+  "failedToCreatePuzzle": "Failed to create puzzle. Please restart.",
+
+  "smartHintsTitle": "Smart Hints",
+  "nextLogicalStepTitle": "Next logical step",
+  "nextLogicalStepSubtitle": "Find and explain the next deduction on the board.",
+  "penaltyLabel": "-{penalty}",
+  "@penaltyLabel": {
+    "placeholders": { "penalty": {"type": "int"} }
+  },
+  "noHintsLeftSnackbar": "No hints left for this puzzle!",
+  "possibleNumbersSnackbar": "Possible Numbers: {numbers}",
+  "@possibleNumbersSnackbar": {
+    "placeholders": { "numbers": {"type": "String"} }
+  },
+
+  "noStepFoundTitle": "No logical step found",
+  "noStepFoundBody": "No straightforward deduction is available from the current board — it may need a more advanced technique or contain a wrong entry. Try clearing any conflicts first.",
+  "okButton": "OK",
+  "cancelButton": "Cancel",
+  "placeItButton": "Place it (-{penalty})",
+  "@placeItButton": {
+    "placeholders": { "penalty": {"type": "int"} }
+  },
+  "gotItButton": "Got it",
+  "confirmButton": "Confirm",
+  "useHintConfirm": "Use this hint for a -{penalty} score penalty?",
+  "@useHintConfirm": {
+    "placeholders": { "penalty": {"type": "int"} }
+  },
+
+  "techniqueNakedSingle": "Naked Single",
+  "techniqueHiddenSingle": "Hidden Single",
+  "techniqueLockedCandidates": "Locked Candidates",
+  "techniqueNakedPair": "Naked Pair",
+  "techniqueNakedTriple": "Naked Triple",
+  "techniqueHiddenPair": "Hidden Pair",
+  "techniqueXWing": "X-Wing",
+  "techniqueNextStep": "Next Step",
+
+  "dailyCompleteTitle": "🎉 Daily Complete!",
+  "completedTitle": "🎉 Completed!",
+  "scoreResult": "Score: {score}",
+  "@scoreResult": {
+    "placeholders": { "score": {"type": "int"} }
+  },
+  "timeResult": "Time: {time}  •  Bonus: +{bonus}",
+  "@timeResult": {
+    "placeholders": {
+      "time": {"type": "String"},
+      "bonus": {"type": "int"}
+    }
+  },
+  "logicRatingResult": "Logic rating: {rating}",
+  "@logicRatingResult": {
+    "placeholders": { "rating": {"type": "String"} }
+  },
+  "dailyComeBackNote": "Come back tomorrow for a new daily!",
+  "mainMenuButton": "Main Menu",
+  "nextPuzzleButton": "Next Puzzle",
+  "gameOverTitle": "💥 Game Over",
+  "reachedMistakesMessage": "You reached {max} mistakes.",
+  "@reachedMistakesMessage": {
+    "placeholders": { "max": {"type": "int"} }
+  },
+  "streakResetMessage": "Your streak has been reset.",
+  "tryAgainButton": "Try Again",
+
+  "explainAppBarTitle": "Explain the solve",
+  "explainStart": "Start",
+  "explainStepOf": "Step {index} / {count}",
+  "@explainStepOf": {
+    "placeholders": {
+      "index": {"type": "int"},
+      "count": {"type": "int"}
+    }
+  },
+  "explainNoStepsNeeded": "No logical steps were needed.",
+  "explainStartingPosition": "{count, plural, one{Starting position — 1 step to go.} other{Starting position — {count} steps to go.}}",
+  "@explainStartingPosition": {
+    "placeholders": { "count": {"type": "int"} }
+  },
+  "explainSolvedNote": "✅ Solved with logic — hardest technique: {technique}.",
+  "@explainSolvedNote": {
+    "placeholders": { "technique": {"type": "String"} }
+  },
+  "explainStuckNote": "⛔ Stuck — needs a technique beyond this solver.",
+  "explainPreviousTooltip": "Previous",
+  "explainPlayTooltip": "Play",
+  "explainPauseTooltip": "Pause",
+  "explainNextTooltip": "Next",
+
+  "settingsSheetTitle": "Settings",
+  "settingsLanguageLabel": "Language",
+  "settingsLanguageSystem": "System",
+  "settingsLanguageEnglish": "English",
+  "settingsLanguageGerman": "Deutsch",
+  "settingsUnlimitedMistakes": "Unlimited mistakes",
+  "settingsUnlimitedMistakesSubtitle": "Play without a mistake limit (Infinite Errors mode)",
+
+  "aboutTitle": "About",
+  "aboutServiceProvider": "Service provider",
+  "aboutContact": "Contact",
+  "aboutPrivacy": "Privacy",
+  "aboutDisclaimer": "Disclaimer",
+  "aboutLicense": "License",
+  "aboutTagline": "Classic, jigsaw, Sudoku-X & Killer puzzles with a daily challenge.",
+  "aboutPrivacyText": "CrispSudoku runs entirely on-device. Your games, statistics and settings never leave your device — there is no account, no analytics and no contact with remote services.",
+  "aboutDisclaimerText": "CrispSudoku is provided \"as is\", without warranty of any kind. Every generated puzzle is verified to have a unique solution, but use the app at your own discretion.",
+  "aboutLicenseText": "CrispSudoku is free software, distributed under the GNU Affero General Public License version 3 or later. As the sole copyright holder, the author additionally makes official binary distributions (e.g. via the Apple App Store and Google Play) available under those stores’ standard terms; this does not affect your rights to the source under AGPL-3.0.",
+  "aboutVersionLabel": "Version {v}",
+  "@aboutVersionLabel": {
+    "placeholders": { "v": {"type": "String"} }
+  },
+  "aboutOpenSourceLicenses": "Open-source licenses"
+}

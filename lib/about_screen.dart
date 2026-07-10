@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'l10n/app_localizations.dart';
+
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
@@ -15,24 +17,6 @@ class AboutScreen extends StatelessWidget {
   static const _email = 'postmaster@crispstro.be';
   static const _provider =
       'Christian Ströbele\nNikolausstr. 5\n70190 Stuttgart\nDeutschland / Germany';
-  static const _tagline =
-      'Classic, jigsaw, Sudoku-X & Killer puzzles with a daily challenge.';
-
-  static const _privacyText =
-      'CrispSudoku runs entirely on-device. Your games, statistics and '
-      'settings never leave your device — there is no account, no analytics '
-      'and no contact with remote services.';
-  static const _disclaimerText =
-      'CrispSudoku is provided "as is", without warranty of any kind. Every '
-      'generated puzzle is verified to have a unique solution, but use the '
-      'app at your own discretion.';
-  static const _licenseText =
-      'CrispSudoku is free software, distributed under the GNU Affero General '
-      'Public License version 3 or later. As the sole copyright holder, the '
-      'author additionally makes official binary distributions (e.g. via the '
-      'Apple App Store and Google Play) available under those stores’ '
-      'standard terms; this does not affect your rights to the source under '
-      'AGPL-3.0.';
 
   /// Build-time override via `--dart-define=APP_VERSION=v1.0.0`, set by CI
   /// release builds so the screen matches the release tag. Empty in local
@@ -41,8 +25,9 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('About')),
+      appBar: AppBar(title: Text(l10n.aboutTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -50,12 +35,12 @@ class AboutScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _SectionCard(
             icon: Icons.business,
-            label: 'Service provider',
+            label: l10n.aboutServiceProvider,
             child: const Text(_provider),
           ),
           _SectionCard(
             icon: Icons.alternate_email,
-            label: 'Contact',
+            label: l10n.aboutContact,
             child: InkWell(
               onTap: () => _open('mailto:$_email'),
               child: const Text(
@@ -69,21 +54,21 @@ class AboutScreen extends StatelessWidget {
           ),
           _SectionCard(
             icon: Icons.privacy_tip_outlined,
-            label: 'Privacy',
-            child: const Text(_privacyText),
+            label: l10n.aboutPrivacy,
+            child: Text(l10n.aboutPrivacyText),
           ),
           _SectionCard(
             icon: Icons.gavel,
-            label: 'Disclaimer',
-            child: const Text(_disclaimerText),
+            label: l10n.aboutDisclaimer,
+            child: Text(l10n.aboutDisclaimerText),
           ),
           _SectionCard(
             icon: Icons.copyright,
-            label: 'License',
+            label: l10n.aboutLicense,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(_licenseText),
+                Text(l10n.aboutLicenseText),
                 const SizedBox(height: 8),
                 InkWell(
                   onTap: () =>
@@ -102,7 +87,7 @@ class AboutScreen extends StatelessWidget {
           const SizedBox(height: 4),
           OutlinedButton.icon(
             icon: const Icon(Icons.description_outlined),
-            label: const Text('Open-source licenses'),
+            label: Text(l10n.aboutOpenSourceLicenses),
             onPressed: () async {
               final info = await PackageInfo.fromPlatform();
               if (!context.mounted) return;
@@ -137,6 +122,7 @@ class _AppHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FutureBuilder<PackageInfo>(
       future: PackageInfo.fromPlatform(),
       builder: (context, snap) {
@@ -173,12 +159,12 @@ class _AppHeader extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Version $v',
+                        l10n.aboutVersionLabel(v),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        AboutScreen._tagline,
+                        l10n.aboutTagline,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],

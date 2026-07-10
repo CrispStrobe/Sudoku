@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:sudoku/about_screen.dart';
+import 'package:sudoku/l10n/app_localizations.dart';
 import 'package:sudoku/main.dart';
 import 'package:sudoku/sudoku_game.dart';
 
@@ -88,6 +90,13 @@ void main() {
 
     await tester.pumpWidget(
       const MaterialApp(
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
         home: GameScreen(
           difficulty: SudokuDifficulty.easy,
           gridSize: GridSize.small,
@@ -137,7 +146,18 @@ void main() {
       buildSignature: '',
     );
 
-    await tester.pumpWidget(const MaterialApp(home: AboutScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AboutScreen(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('CrispSudoku'), findsWidgets);
@@ -628,6 +648,13 @@ Future<dynamic> _bootCachedGame(
 
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
       home: GameScreen(
         difficulty: difficulty,
         gridSize: size,
