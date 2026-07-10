@@ -33,8 +33,12 @@ class SudokuApp extends StatelessWidget {
           title: 'CrispSudoku',
           theme: ThemeData(
             primarySwatch: Colors.indigo,
-            fontFamily: 'Roboto',
-            fontFamilyFallback: const ['Apple Color Emoji', 'Noto Color Emoji'],
+            // No explicit fontFamily: 'Roboto' is NOT bundled (it's an Android
+            // system font, absent on iOS), so referencing it left text with no
+            // usable font — and an emoji-only fontFamilyFallback made it worse,
+            // rendering all text as tofu boxes in some build/launch paths. Let
+            // each platform use its own default (SF Pro on iOS, Roboto on
+            // Android); both also render emoji via the system.
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
                 elevation: 8,
