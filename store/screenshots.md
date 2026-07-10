@@ -7,17 +7,30 @@
   `assets/images/app_icon.png` via `flutter_launcher_icons`.
 
 ## Captured screenshots (in `store/screenshots/`)
-Five **1320×2868** (iPhone 17 Pro Max / App Store 6.9") shots, auto-captured from
+Six **1320×2868** (iPhone 17 Pro Max / App Store 6.9") shots, auto-captured from
 the running app:
-1. `01-home.png` — home with the variant chooser (Classic / Sudoku-X / Killer).
+1. `01-home.png` — home with the size-picker dialog open.
 2. `02-classic.png` — classic 9×9 gameplay (logic-rating + mistakes pills).
-3. `03-killer.png` — Killer board with dashed cages + sum labels (headline variant).
-4. `04-stats.png` — the Statistics sheet.
-5. `05-themes.png` — the Themes picker.
+3. `03-explain.png` — the "Explain the solve" walkthrough.
+4. `04-killer.png` — Killer board with dashed cages + sum labels.
+5. `05-stats.png` — the Statistics sheet.
+6. `06-themes.png` — the Themes picker.
+
+The same 6 shots are captured for iPad in `store/screenshots/ipad/` at
+**2064×2752** (13" iPad Pro M4/M5 — Apple's current accepted size for that
+class).
 
 These same PNGs work for **Google Play** phone screenshots (any portrait phone
-ratio is accepted). Capture a couple more if you want (e.g. Explain-the-solve,
-Sudoku-X diagonals) — see "How to regenerate".
+ratio is accepted). See "How to regenerate" below to recapture either set.
+
+**Known issue:** emoji (🐠🌊🔥❄️ etc. in the Themes sheet, 📅 on the Daily
+Challenge button) render as boxed "?" placeholder glyphs in these captures.
+Adding `fontFamilyFallback: ['Apple Color Emoji', 'Noto Color Emoji']` to
+`ThemeData` in `lib/main.dart` did not fix it, and Material icons (Stats /
+Themes / Achievements tab icons) render fine — both point to this being an iOS
+Simulator-only color-emoji rasterization limitation rather than an app bug.
+**Verify on a real device before assuming this is fine** — if it also happens
+there, the emoji glyphs need a non-emoji fallback (e.g. plain icons).
 
 ## How to regenerate / add shots
 The capture is automated — edit the shot list in

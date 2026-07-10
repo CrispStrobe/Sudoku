@@ -1,3 +1,11 @@
+# Secrets / signing (never commit — this repo is public)
+.appstoreconnect/
+*.p8
+*.keystore
+*.jks
+key.properties
+android/key.properties
+
 # Miscellaneous
 *.class
 *.log
