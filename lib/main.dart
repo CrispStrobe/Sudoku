@@ -3169,17 +3169,32 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               crossAxisCount;
           final cellHeight =
               (constraints.maxHeight - spacing * (rows - 1)) / rows;
-          final buttonSize = math.min(cellWidth, cellHeight);
+          // Size the tiles to the SMALLER of the width- and height-derived
+          // dimensions so the pad always fits its box on any aspect ratio.
+          // Using width alone (childAspectRatio: 1 on a fixed column count)
+          // made the square tiles taller than the available height, turning
+          // the GridView into a scroll view that hid the digits.
+          final tileSize = math.max(0.0, math.min(cellWidth, cellHeight));
+          final buttonSize = tileSize;
           final fontSize = (buttonSize * 0.4).clamp(12.0, 28.0);
+          final gridWidth =
+              tileSize * crossAxisCount + spacing * (crossAxisCount - 1);
+          final gridHeight = tileSize * rows + spacing * (rows - 1);
 
-          return GridView.builder(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 1,
-              crossAxisSpacing: spacing,
-              mainAxisSpacing: spacing,
-            ),
-            itemCount: maxNumber,
+          return Center(
+            child: SizedBox(
+              width: gridWidth,
+              height: gridHeight,
+              child: GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  childAspectRatio: 1,
+                  crossAxisSpacing: spacing,
+                  mainAxisSpacing: spacing,
+                ),
+                itemCount: maxNumber,
             itemBuilder: (context, index) {
               final number = index + 1;
               return Draggable<int>(
@@ -3256,7 +3271,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                 ),
               );
-            },
+                },
+              ),
+            ),
           );
         },
       ),
