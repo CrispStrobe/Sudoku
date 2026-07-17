@@ -8,7 +8,7 @@ Play**, ready to paste/upload.
 |-------|-------|
 | App name | **CrispSudoku** |
 | Bundle / application ID | `com.crispstrobe.sudoku` |
-| Version | `1.0.1` (build `5`) — see `../APPSTORE.md` for the release runbook |
+| Version | `1.0.1` (build `5`) |
 | Price | Free |
 | In-app purchases | None (see privacy policy if added later) |
 | Category | Games → **Puzzle** (Apple secondary: Board) |
