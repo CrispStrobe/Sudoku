@@ -409,6 +409,73 @@ void main() {
       expect(isValidFullSolution(game.solution, game.regions, 9), isTrue);
       expect(countSolutions(game.grid, game.regions, 9), 1);
     });
+
+    test('fromBlueprint rejects a dimension-mismatched blueprint cleanly', () {
+      // gridSize declares 9×9 (standard) but the grid is a 1×3 stub — a
+      // corrupt / hand-edited / externally-shared save. Must fail with a clear
+      // FormatException, not an opaque RangeError deep in _puzzlify.
+      final bad = PuzzleBlueprint(
+        solutionGrid: [
+          [1, 2, 3],
+        ],
+        regions: [
+          [0, 0, 0],
+        ],
+        gridSize: GridSize.standard,
+        gridShape: GridShape.classic,
+      );
+      expect(
+        () => SudokuGame.fromBlueprint(bad, SudokuDifficulty.easy),
+        throwsA(isA<FormatException>()),
+      );
+      expect(() => SudokuGame.fromBlueprint(bad, SudokuDifficulty.easy),
+          throwsA(isNot(isA<RangeError>())));
+
+      final empty = PuzzleBlueprint(
+        solutionGrid: const [],
+        regions: const [],
+        gridSize: GridSize.standard,
+        gridShape: GridShape.classic,
+      );
+      expect(() => SudokuGame.fromBlueprint(empty, SudokuDifficulty.easy),
+          throwsA(isA<FormatException>()));
+    });
+
+    test('fromState rejects mismatched solution/regions cleanly', () {
+      final givens = List.generate(9, (_) => List.filled(9, 0));
+      // solution far too small — previously slipped past construction and blew
+      // up later during play; must now reject up front.
+      expect(
+        () => SudokuGame.fromState(
+          givens: givens,
+          solution: const [
+            [1],
+          ],
+          regions: givens,
+          difficulty: SudokuDifficulty.easy,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      // Ragged givens (row length != grid height).
+      expect(
+        () => SudokuGame.fromState(
+          givens: [
+            [0, 0],
+            [0],
+          ],
+          solution: [
+            [0, 0],
+            [0, 0],
+          ],
+          regions: [
+            [0, 0],
+            [0, 0],
+          ],
+          difficulty: SudokuDifficulty.easy,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('notes, undo, conflicts', () {

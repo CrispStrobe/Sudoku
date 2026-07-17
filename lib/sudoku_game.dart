@@ -306,13 +306,30 @@ class SudokuGame {
 
   /// Build a playable puzzle from a cached, fully-solved blueprint by digging a
   /// fresh set of holes (so a cached solution feels new each play).
+  /// Rejects a grid that is not exactly [dim]×[dim]. A blueprint or saved
+  /// state loaded from disk (or shared between users) can be dimensionally
+  /// inconsistent — e.g. a `gridSize` declaring 9×9 alongside a shorter grid,
+  /// or ragged rows — which would otherwise surface as an opaque RangeError
+  /// deep in `_puzzlify` (fromBlueprint) or later during play (fromState).
+  /// Fail fast with a clear message instead.
+  static void _requireSquare(List<List<int>> grid, int dim, String what) {
+    if (grid.length != dim || grid.any((row) => row.length != dim)) {
+      final cols = grid.isEmpty ? 0 : grid.first.length;
+      throw FormatException(
+          '$what must be $dim×$dim but is ${grid.length}×$cols');
+    }
+  }
+
   factory SudokuGame.fromBlueprint(
     PuzzleBlueprint blueprint,
     SudokuDifficulty difficulty, {
     math.Random? rng,
   }) {
     final game = SudokuGame._(difficulty, rng: rng);
-    game.gridDim = gridDimensionFor(blueprint.gridSize);
+    final dim = gridDimensionFor(blueprint.gridSize);
+    _requireSquare(blueprint.solutionGrid, dim, 'blueprint solutionGrid');
+    _requireSquare(blueprint.regions, dim, 'blueprint regions');
+    game.gridDim = dim;
     game.solution = blueprint.solutionGrid
         .map((row) => List<int>.from(row))
         .toList();
@@ -340,7 +357,11 @@ class SudokuGame {
   }) {
     final game = SudokuGame._(difficulty);
     game.variant = variant;
-    game.gridDim = givens.length;
+    final dim = givens.length;
+    _requireSquare(givens, dim, 'givens');
+    _requireSquare(solution, dim, 'solution');
+    _requireSquare(regions, dim, 'regions');
+    game.gridDim = dim;
     game.grid = givens.map((row) => List<int>.from(row)).toList();
     game.solution = solution.map((row) => List<int>.from(row)).toList();
     game.regions = regions.map((row) => List<int>.from(row)).toList();
