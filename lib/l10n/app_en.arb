@@ -1,24 +1,31 @@
 {
   "@@locale": "en",
-
   "homeStatsButton": "Stats",
   "homeThemesButton": "Themes",
   "homeAchievementsButton": "Achievements",
   "homeSettingsButton": "Settings",
-
   "homeStatsLine": "Solved: {solved}  |  Streak: {streak}  |  Best: {best}",
   "@homeStatsLine": {
     "placeholders": {
-      "solved": {"type": "int"},
-      "streak": {"type": "int"},
-      "best": {"type": "int"}
+      "solved": {
+        "type": "int"
+      },
+      "streak": {
+        "type": "int"
+      },
+      "best": {
+        "type": "int"
+      }
     }
   },
   "homeLossesLine": "Losses: {losses}",
   "@homeLossesLine": {
-    "placeholders": { "losses": {"type": "int"} }
+    "placeholders": {
+      "losses": {
+        "type": "int"
+      }
+    }
   },
-
   "homeDailyChallengeDone": "📅 DAILY CHALLENGE ✓",
   "homeDailyChallenge": "📅 DAILY CHALLENGE",
   "homeDailyCompletedSubtitle": "Completed — back tomorrow!",
@@ -29,7 +36,6 @@
   "homeJigsawMode": "🧩 JIGSAW MODE",
   "homeAdminPanel": "Admin Panel",
   "homeAboutLicenses": "About & Licenses",
-
   "classicSheetTitle": "Classic Sudoku",
   "sizeSmallDifficulty": "SMALL",
   "sizeMediumDifficulty": "MEDIUM",
@@ -37,7 +43,6 @@
   "sizeStandardDifficulty": "CLASSIC",
   "sizeBigDifficulty": "BIG",
   "sizeMegaDifficulty": "MEGA",
-
   "selectDifficultyTitle": "Select Difficulty",
   "jigsawIrregularNote": "Jigsaw mode: Regions have irregular shapes!",
   "variantLabel": "Variant",
@@ -50,12 +55,15 @@
   "difficultyMedium": "MEDIUM",
   "difficultyHard": "HARD",
   "difficultyExpert": "EXPERT",
-
   "jigsawSheetTitle": "🧩 Jigsaw Sudoku",
   "jigsawSheetSubtitle": "Irregular shaped regions instead of squares! Each size has unique region shapes.",
   "jigsawSizeLabel": "{size} Jigsaw",
   "@jigsawSizeLabel": {
-    "placeholders": { "size": {"type": "String"} }
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
   },
   "jigsawMini": "Mini Challenge",
   "jigsawQuick": "Quick Puzzle",
@@ -63,7 +71,6 @@
   "jigsawClassicTwist": "Classic Twist",
   "jigsawBig": "Big Challenge",
   "jigsawUltimate": "Ultimate Test",
-
   "themesSheetTitle": "Environmental Themes",
   "themeOceanName": "Ocean",
   "themeOceanDesc": "Deep ocean depths",
@@ -75,7 +82,6 @@
   "themeFireDesc": "Volcanic eruption",
   "themeIceName": "Ice",
   "themeIceDesc": "Frozen tundra",
-
   "achievementsSheetTitle": "Achievements",
   "achFirstStepsName": "First Steps",
   "achFirstStepsDesc": "Complete your first puzzle",
@@ -91,9 +97,12 @@
   "achMarathonDesc": "Reach a 10-puzzle streak",
   "achievementRewardTheme": "Reward: {theme} theme",
   "@achievementRewardTheme": {
-    "placeholders": { "theme": {"type": "String"} }
+    "placeholders": {
+      "theme": {
+        "type": "String"
+      }
+    }
   },
-
   "statsSheetTitle": "Statistics",
   "statPuzzlesSolved": "Puzzles solved",
   "statWinRate": "Win rate",
@@ -104,33 +113,52 @@
   "statDailyPuzzlesDone": "Daily puzzles done",
   "statHintsUsed": "Hints used",
   "statAchievements": "Achievements",
-
   "generatingPuzzle": "Generating puzzle...",
   "mainMenuTooltip": "Main Menu",
   "scoreLabel": "Score: {score}",
   "@scoreLabel": {
-    "placeholders": { "score": {"type": "int"} }
+    "placeholders": {
+      "score": {
+        "type": "int"
+      }
+    }
   },
   "mistakesLabel": "Mistakes",
   "mistakesCount": "{mistakes}/{max}",
   "@mistakesCount": {
     "placeholders": {
-      "mistakes": {"type": "int"},
-      "max": {"type": "int"}
+      "mistakes": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
     }
   },
   "mistakesCountUnlimited": "{mistakes} / ∞",
   "@mistakesCountUnlimited": {
-    "placeholders": { "mistakes": {"type": "int"} }
+    "placeholders": {
+      "mistakes": {
+        "type": "int"
+      }
+    }
   },
   "logicRatingPill": "🧠 {rating}",
   "@logicRatingPill": {
-    "placeholders": { "rating": {"type": "String"} }
+    "placeholders": {
+      "rating": {
+        "type": "String"
+      }
+    }
   },
   "hintButtonLabel": "Hint",
   "hintButtonWithCount": "Hint ({count})",
   "@hintButtonWithCount": {
-    "placeholders": { "count": {"type": "int"} }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "noHintsLabel": "No Hints",
   "notesModeTooltip": "Notes mode",
@@ -138,35 +166,48 @@
   "eraseTooltip": "Erase",
   "explainSolveTooltip": "Explain solve",
   "failedToCreatePuzzle": "Failed to create puzzle. Please restart.",
-
   "smartHintsTitle": "Smart Hints",
   "nextLogicalStepTitle": "Next logical step",
   "nextLogicalStepSubtitle": "Find and explain the next deduction on the board.",
   "penaltyLabel": "-{penalty}",
   "@penaltyLabel": {
-    "placeholders": { "penalty": {"type": "int"} }
+    "placeholders": {
+      "penalty": {
+        "type": "int"
+      }
+    }
   },
   "noHintsLeftSnackbar": "No hints left for this puzzle!",
   "possibleNumbersSnackbar": "Possible Numbers: {numbers}",
   "@possibleNumbersSnackbar": {
-    "placeholders": { "numbers": {"type": "String"} }
+    "placeholders": {
+      "numbers": {
+        "type": "String"
+      }
+    }
   },
-
   "noStepFoundTitle": "No logical step found",
   "noStepFoundBody": "No straightforward deduction is available from the current board — it may need a more advanced technique or contain a wrong entry. Try clearing any conflicts first.",
   "okButton": "OK",
   "cancelButton": "Cancel",
   "placeItButton": "Place it (-{penalty})",
   "@placeItButton": {
-    "placeholders": { "penalty": {"type": "int"} }
+    "placeholders": {
+      "penalty": {
+        "type": "int"
+      }
+    }
   },
   "gotItButton": "Got it",
   "confirmButton": "Confirm",
   "useHintConfirm": "Use this hint for a -{penalty} score penalty?",
   "@useHintConfirm": {
-    "placeholders": { "penalty": {"type": "int"} }
+    "placeholders": {
+      "penalty": {
+        "type": "int"
+      }
+    }
   },
-
   "techniqueNakedSingle": "Naked Single",
   "techniqueHiddenSingle": "Hidden Single",
   "techniqueLockedCandidates": "Locked Candidates",
@@ -175,23 +216,34 @@
   "techniqueHiddenPair": "Hidden Pair",
   "techniqueXWing": "X-Wing",
   "techniqueNextStep": "Next Step",
-
   "dailyCompleteTitle": "🎉 Daily Complete!",
   "completedTitle": "🎉 Completed!",
   "scoreResult": "Score: {score}",
   "@scoreResult": {
-    "placeholders": { "score": {"type": "int"} }
+    "placeholders": {
+      "score": {
+        "type": "int"
+      }
+    }
   },
   "timeResult": "Time: {time}  •  Bonus: +{bonus}",
   "@timeResult": {
     "placeholders": {
-      "time": {"type": "String"},
-      "bonus": {"type": "int"}
+      "time": {
+        "type": "String"
+      },
+      "bonus": {
+        "type": "int"
+      }
     }
   },
   "logicRatingResult": "Logic rating: {rating}",
   "@logicRatingResult": {
-    "placeholders": { "rating": {"type": "String"} }
+    "placeholders": {
+      "rating": {
+        "type": "String"
+      }
+    }
   },
   "dailyComeBackNote": "Come back tomorrow for a new daily!",
   "mainMenuButton": "Main Menu",
@@ -199,35 +251,49 @@
   "gameOverTitle": "💥 Game Over",
   "reachedMistakesMessage": "You reached {max} mistakes.",
   "@reachedMistakesMessage": {
-    "placeholders": { "max": {"type": "int"} }
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
   },
   "streakResetMessage": "Your streak has been reset.",
   "tryAgainButton": "Try Again",
-
   "explainAppBarTitle": "Explain the solve",
   "explainStart": "Start",
   "explainStepOf": "Step {index} / {count}",
   "@explainStepOf": {
     "placeholders": {
-      "index": {"type": "int"},
-      "count": {"type": "int"}
+      "index": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
     }
   },
   "explainNoStepsNeeded": "No logical steps were needed.",
   "explainStartingPosition": "{count, plural, one{Starting position — 1 step to go.} other{Starting position — {count} steps to go.}}",
   "@explainStartingPosition": {
-    "placeholders": { "count": {"type": "int"} }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "explainSolvedNote": "✅ Solved with logic — hardest technique: {technique}.",
   "@explainSolvedNote": {
-    "placeholders": { "technique": {"type": "String"} }
+    "placeholders": {
+      "technique": {
+        "type": "String"
+      }
+    }
   },
   "explainStuckNote": "⛔ Stuck — needs a technique beyond this solver.",
   "explainPreviousTooltip": "Previous",
   "explainPlayTooltip": "Play",
   "explainPauseTooltip": "Pause",
   "explainNextTooltip": "Next",
-
   "settingsSheetTitle": "Settings",
   "settingsLanguageLabel": "Language",
   "settingsLanguageSystem": "System",
@@ -235,7 +301,6 @@
   "settingsLanguageGerman": "Deutsch",
   "settingsUnlimitedMistakes": "Unlimited mistakes",
   "settingsUnlimitedMistakesSubtitle": "Play without a mistake limit (Infinite Errors mode)",
-
   "aboutTitle": "About",
   "aboutServiceProvider": "Service provider",
   "aboutContact": "Contact",
@@ -248,7 +313,76 @@
   "aboutLicenseText": "CrispSudoku is free software, distributed under the GNU Affero General Public License version 3 or later. As the sole copyright holder, the author additionally makes official binary distributions (e.g. via the Apple App Store and Google Play) available under those stores’ standard terms; this does not affect your rights to the source under AGPL-3.0.",
   "aboutVersionLabel": "Version {v}",
   "@aboutVersionLabel": {
-    "placeholders": { "v": {"type": "String"} }
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
   },
-  "aboutOpenSourceLicenses": "Open-source licenses"
+  "aboutOpenSourceLicenses": "Open-source licenses",
+  "achHalfCenturyName": "Half Century",
+  "achHalfCenturyDesc": "Complete 50 puzzles",
+  "achCenturionName": "Centurion",
+  "achCenturionDesc": "Complete 100 puzzles",
+  "achGrandmasterName": "Grandmaster",
+  "achGrandmasterDesc": "Complete 250 puzzles",
+  "achIntoTheDeepName": "Into the Deep",
+  "achIntoTheDeepDesc": "Solve an expert puzzle",
+  "achExpertHandlerName": "Expert Handler",
+  "achExpertHandlerDesc": "Solve 10 expert puzzles",
+  "achHardenedName": "Hardened",
+  "achHardenedDesc": "Solve 25 hard or expert puzzles",
+  "achFlawlessName": "Flawless",
+  "achFlawlessDesc": "Win without a single mistake",
+  "achUntouchableName": "Untouchable",
+  "achUntouchableDesc": "Win 10 puzzles without a mistake",
+  "achPureReasonName": "Pure Reason",
+  "achPureReasonDesc": "Beat an expert puzzle with no hints and no mistakes",
+  "achShapeshifterName": "Shapeshifter",
+  "achShapeshifterDesc": "Solve a jigsaw board",
+  "achCrossingLinesName": "Crossing Lines",
+  "achCrossingLinesDesc": "Solve a Sudoku-X board",
+  "achKillerInstinctName": "Killer Instinct",
+  "achKillerInstinctDesc": "Solve a Killer board",
+  "achPolymathName": "Polymath",
+  "achPolymathDesc": "Beat classic, jigsaw, Sudoku-X and Killer",
+  "achTwelveSquaredName": "Twelve by Twelve",
+  "achTwelveSquaredDesc": "Solve a 12×12 board",
+  "achEverySizeName": "Every Shape and Size",
+  "achEverySizeDesc": "Solve every board size, 4×4 to 12×12",
+  "achQuicksilverName": "Quicksilver",
+  "achQuicksilverDesc": "Finish a puzzle in under 90 seconds",
+  "achSubMinuteName": "Sub-Minute",
+  "achSubMinuteDesc": "Finish a puzzle in under a minute",
+  "achSevenDaysName": "Seven Days",
+  "achSevenDaysDesc": "Complete 7 daily challenges",
+  "achMonthOfPuzzlesName": "Month of Puzzles",
+  "achMonthOfPuzzlesDesc": "Complete 30 daily challenges",
+  "achUnbrokenName": "Unbroken",
+  "achUnbrokenDesc": "Reach a 25-puzzle streak",
+  "achTier1": "Getting Started",
+  "achTier2": "Skilled",
+  "achTier3": "Expert",
+  "achTier4": "Legendary",
+  "themeAuroraName": "Aurora",
+  "themeAuroraDesc": "Polar light",
+  "themeSakuraName": "Sakura",
+  "themeSakuraDesc": "Blossom drift",
+  "themeObsidianName": "Obsidian",
+  "themeObsidianDesc": "Volcanic glass",
+  "achievementsUnlockedCount": "{unlocked} of {total} unlocked",
+  "@achievementsUnlockedCount": {
+    "placeholders": {
+      "unlocked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "statsSolvedLabel": "Solved",
+  "statsStreakLabel": "Streak",
+  "statsBestLabel": "Best",
+  "statsAwardsLabel": "Awards"
 }

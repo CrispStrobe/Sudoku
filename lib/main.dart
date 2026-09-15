@@ -106,6 +106,67 @@ class GameStats {
   /// How many distinct daily puzzles have been completed.
   static int dailyCompletedCount = 0;
 
+  // --- Per-category solve counters -----------------------------------------
+  //
+  // Keyed by the enum's `.name` so a future variant/size/difficulty can be
+  // added without a migration: unknown keys simply read back as absent, and
+  // nothing here is load-bearing for game state — only for achievement tiers.
+
+  /// Wins per [SudokuDifficulty].
+  static Map<String, int> solvedByDifficulty = {};
+
+  /// Wins per [SudokuVariant] (`classic`, `x`, `killer`).
+  static Map<String, int> solvedByVariant = {};
+
+  /// Wins per [GridSize] (4x4 through 12x12).
+  static Map<String, int> solvedBySize = {};
+
+  /// Wins on a jigsaw (irregular-region) board.
+  static int jigsawSolved = 0;
+
+  /// Wins with no mistakes at all.
+  static int flawlessSolves = 0;
+
+  /// Wins with no mistakes *and* no hints.
+  static int perfectSolves = 0;
+
+  /// [perfectSolves] restricted to expert difficulty — the top tier.
+  static int expertPerfectSolves = 0;
+
+  static int solvedAt(SudokuDifficulty d) => solvedByDifficulty[d.name] ?? 0;
+
+  /// Every rule variant beaten at least once, jigsaw included.
+  static bool get hasBeatenEveryVariant =>
+      SudokuVariant.values.every((v) => (solvedByVariant[v.name] ?? 0) > 0) &&
+      jigsawSolved > 0;
+
+  /// Every board size beaten at least once.
+  static bool get hasBeatenEverySize =>
+      GridSize.values.every((g) => (solvedBySize[g.name] ?? 0) > 0);
+
+  /// Records one win across every counter above.
+  static void recordSolve({
+    required SudokuDifficulty difficulty,
+    required SudokuVariant variant,
+    required GridSize size,
+    required GridShape shape,
+    required int mistakes,
+    required int hintsUsed,
+  }) {
+    bump(Map<String, int> m, String k) => m[k] = (m[k] ?? 0) + 1;
+    bump(solvedByDifficulty, difficulty.name);
+    bump(solvedByVariant, variant.name);
+    bump(solvedBySize, size.name);
+    if (shape == GridShape.jigsaw) jigsawSolved++;
+    if (mistakes == 0) {
+      flawlessSolves++;
+      if (hintsUsed == 0) {
+        perfectSolves++;
+        if (difficulty == SudokuDifficulty.expert) expertPerfectSolves++;
+      }
+    }
+  }
+
   /// Whether the daily puzzle for [date] has already been completed.
   static bool isDailyDoneOn(DateTime date) =>
       lastDailyDate == dailyDateKey(date);
@@ -117,9 +178,7 @@ class GameStats {
 
   static bool useSavedPuzzles = true;
 
-  static Set<String> unlockedThemes = debugMode
-      ? {'Ocean', 'Forest', 'Space', 'Fire', 'Ice'}
-      : {'Ocean'};
+  static Set<String> unlockedThemes = debugMode ? {...themes.keys} : {'Ocean'};
 
   static String currentTheme = 'Ocean';
 
@@ -183,6 +242,54 @@ class GameStats {
       particleEmojis: ['❄️', '🧊', '⛄', '🌨️', '💎'],
       description: 'Frozen tundra',
     ),
+    // Reward themes for the upper achievement tiers. Deliberately more
+    // saturated/atmospheric than the starter set so a late unlock reads as a
+    // genuine step up rather than another colour swap.
+    'Aurora': EnvironmentalTheme(
+      name: 'Aurora',
+      gradient: [Color(0xFF00343D), Color(0xFF052E4A), Color(0xFF0B0B2B)],
+      primary: Color(0xFF00A88E),
+      accent: Color(0xFFA8F0E2),
+      cellHighlight: Color(0xFFE2FBF5),
+      particleEmojis: [
+        '\u2744\uFE0F',
+        '\u2728',
+        '\uD83C\uDF0C',
+        '\uD83D\uDCA0',
+        '\uD83E\uDDCA',
+      ],
+      description: 'Polar light',
+    ),
+    'Sakura': EnvironmentalTheme(
+      name: 'Sakura',
+      gradient: [Color(0xFF7A2B4E), Color(0xFF4A1733), Color(0xFF240A1B)],
+      primary: Color(0xFFC2185B),
+      accent: Color(0xFFF8C8DC),
+      cellHighlight: Color(0xFFFDEDF3),
+      particleEmojis: [
+        '\uD83C\uDF38',
+        '\uD83C\uDF42',
+        '\uD83E\uDD8B',
+        '\uD83C\uDF8B',
+        '\uD83C\uDF44',
+      ],
+      description: 'Blossom drift',
+    ),
+    'Obsidian': EnvironmentalTheme(
+      name: 'Obsidian',
+      gradient: [Color(0xFF241F2E), Color(0xFF15121C), Color(0xFF000000)],
+      primary: Color(0xFF8E7CC3),
+      accent: Color(0xFFD8CFF0),
+      cellHighlight: Color(0xFFF1EDFA),
+      particleEmojis: [
+        '\uD83D\uDD2E',
+        '\u2B50',
+        '\uD83C\uDF11',
+        '\u26A1',
+        '\uD83D\uDC8E',
+      ],
+      description: 'Volcanic glass',
+    ),
   };
 
   static EnvironmentalTheme get current => themes[currentTheme]!;
@@ -198,6 +305,9 @@ class GameStats {
       'Space' => l10n.themeSpaceName,
       'Fire' => l10n.themeFireName,
       'Ice' => l10n.themeIceName,
+      'Aurora' => l10n.themeAuroraName,
+      'Sakura' => l10n.themeSakuraName,
+      'Obsidian' => l10n.themeObsidianName,
       _ => key,
     };
   }
@@ -211,6 +321,9 @@ class GameStats {
       'Space' => l10n.themeSpaceDesc,
       'Fire' => l10n.themeFireDesc,
       'Ice' => l10n.themeIceDesc,
+      'Aurora' => l10n.themeAuroraDesc,
+      'Sakura' => l10n.themeSakuraDesc,
+      'Obsidian' => l10n.themeObsidianDesc,
       _ => '',
     };
   }
@@ -228,6 +341,13 @@ class GameStats {
     'gamesLost': gamesLost,
     'lastDailyDate': lastDailyDate,
     'dailyCompletedCount': dailyCompletedCount,
+    'solvedByDifficulty': solvedByDifficulty,
+    'solvedByVariant': solvedByVariant,
+    'solvedBySize': solvedBySize,
+    'jigsawSolved': jigsawSolved,
+    'flawlessSolves': flawlessSolves,
+    'perfectSolves': perfectSolves,
+    'expertPerfectSolves': expertPerfectSolves,
     'unlockedAchievements': unlockedAchievements.toList(),
     'unlockedThemes': unlockedThemes.toList(),
     'currentTheme': currentTheme,
@@ -253,6 +373,29 @@ class GameStats {
     lastDailyDate = json['lastDailyDate'] as String? ?? lastDailyDate;
     dailyCompletedCount =
         (json['dailyCompletedCount'] as num?)?.toInt() ?? dailyCompletedCount;
+
+    Map<String, int> counters(String key) {
+      final raw = json[key];
+      if (raw is! Map) return {};
+      return {
+        for (final e in raw.entries)
+          if (e.key is String && e.value is num)
+            e.key as String: (e.value as num).toInt(),
+      };
+    }
+
+    final byDifficulty = counters('solvedByDifficulty');
+    if (byDifficulty.isNotEmpty) solvedByDifficulty = byDifficulty;
+    final byVariant = counters('solvedByVariant');
+    if (byVariant.isNotEmpty) solvedByVariant = byVariant;
+    final bySize = counters('solvedBySize');
+    if (bySize.isNotEmpty) solvedBySize = bySize;
+    jigsawSolved = (json['jigsawSolved'] as num?)?.toInt() ?? jigsawSolved;
+    flawlessSolves =
+        (json['flawlessSolves'] as num?)?.toInt() ?? flawlessSolves;
+    perfectSolves = (json['perfectSolves'] as num?)?.toInt() ?? perfectSolves;
+    expertPerfectSolves =
+        (json['expertPerfectSolves'] as num?)?.toInt() ?? expertPerfectSolves;
 
     final achievements = (json['unlockedAchievements'] as List?)
         ?.cast<String>();
@@ -282,70 +425,256 @@ class GameStats {
 
 class Achievement {
   final String id;
-  final String name;
-  final String description;
   final String icon;
+
+  /// 1 = getting started, 4 = legendary. Groups the list and sets the accent
+  /// colour, so the upper tiers read as a ladder rather than a flat set.
+  final int tier;
+
   final bool Function() isUnlocked;
+
+  /// Current value and target for a countable goal, e.g. 42 of 50 puzzles.
+  /// Null for one-shot achievements ("solve a Killer board") where a bar would
+  /// say nothing a checkmark does not.
+  final int Function()? progress;
+  final int? goal;
+
   final String? rewardTheme;
 
   const Achievement({
     required this.id,
-    required this.name,
-    required this.description,
     required this.icon,
+    required this.tier,
     required this.isUnlocked,
+    this.progress,
+    this.goal,
     this.rewardTheme,
   });
+
+  /// Fraction complete in 0..1, or null when a bar would say nothing.
+  ///
+  /// A goal of 1 is a one-shot ("solve a Killer board"): an empty 0/1 bar next
+  /// to the padlock is noise, so those report null and render as lock-only.
+  double? get fraction {
+    final p = progress;
+    final g = goal;
+    if (p == null || g == null || g <= 1) return null;
+    return (p() / g).clamp(0.0, 1.0);
+  }
 }
 
 class AchievementSystem {
+  /// Ordered by tier, then by the order declared here — which is also the
+  /// order the sheet renders them in.
   static List<Achievement> achievements = [
     Achievement(
       id: 'first_solve',
-      name: 'First Steps',
-      description: 'Complete your first puzzle',
       icon: '🎯',
+      tier: 1,
       isUnlocked: () => GameStats.totalPuzzlesSolved >= 1,
+      progress: () => GameStats.totalPuzzlesSolved,
+      goal: 1,
     ),
     Achievement(
       id: 'speed_demon',
-      name: 'Speed Demon',
-      description: 'Complete a puzzle in under 3 minutes',
       icon: '⚡',
+      tier: 1,
       isUnlocked: () => GameStats.bestTime.inMinutes < 3,
       rewardTheme: 'Space',
     ),
     Achievement(
       id: 'puzzle_master',
-      name: 'Puzzle Master',
-      description: 'Complete 10 puzzles',
       icon: '🧩',
+      tier: 1,
       isUnlocked: () => GameStats.totalPuzzlesSolved >= 10,
+      progress: () => GameStats.totalPuzzlesSolved,
+      goal: 10,
       rewardTheme: 'Forest',
     ),
     Achievement(
       id: 'no_hints_hero',
-      name: 'Pure Logic',
-      description: 'Complete a hard puzzle without hints',
       icon: '🧠',
+      tier: 2,
       isUnlocked: () =>
           GameStats.unlockedAchievements.contains('no_hints_hard'),
       rewardTheme: 'Fire',
     ),
     Achievement(
       id: 'streak_master',
-      name: 'Streak Master',
-      description: 'Solve 5 puzzles in a row',
       icon: '🔥',
+      tier: 1,
       isUnlocked: () => GameStats.currentStreak >= 5,
+      progress: () => GameStats.currentStreak,
+      goal: 5,
       rewardTheme: 'Ice',
     ),
     Achievement(
       id: 'marathon',
-      name: 'Marathon',
-      description: 'Reach a 10-puzzle streak',
       icon: '🏅',
+      tier: 2,
       isUnlocked: () => GameStats.longestStreak >= 10,
+      progress: () => GameStats.longestStreak,
+      goal: 10,
+    ),
+    Achievement(
+      id: 'solve_50',
+      icon: '📚',
+      tier: 2,
+      isUnlocked: () => GameStats.totalPuzzlesSolved >= 50,
+      progress: () => GameStats.totalPuzzlesSolved,
+      goal: 50,
+    ),
+    Achievement(
+      id: 'solve_100',
+      icon: '🏆',
+      tier: 3,
+      isUnlocked: () => GameStats.totalPuzzlesSolved >= 100,
+      progress: () => GameStats.totalPuzzlesSolved,
+      goal: 100,
+    ),
+    Achievement(
+      id: 'solve_250',
+      icon: '👑',
+      tier: 4,
+      isUnlocked: () => GameStats.totalPuzzlesSolved >= 250,
+      progress: () => GameStats.totalPuzzlesSolved,
+      goal: 250,
+      rewardTheme: 'Obsidian',
+    ),
+    Achievement(
+      id: 'expert_first',
+      icon: '🌑',
+      tier: 2,
+      isUnlocked: () => GameStats.solvedAt(SudokuDifficulty.expert) >= 1,
+      progress: () => GameStats.solvedAt(SudokuDifficulty.expert),
+      goal: 1,
+    ),
+    Achievement(
+      id: 'expert_10',
+      icon: '🎓',
+      tier: 3,
+      isUnlocked: () => GameStats.solvedAt(SudokuDifficulty.expert) >= 10,
+      progress: () => GameStats.solvedAt(SudokuDifficulty.expert),
+      goal: 10,
+      rewardTheme: 'Aurora',
+    ),
+    Achievement(
+      id: 'hard_25',
+      icon: '⛏️',
+      tier: 3,
+      isUnlocked: () =>
+          GameStats.solvedAt(SudokuDifficulty.hard) +
+              GameStats.solvedAt(SudokuDifficulty.expert) >=
+          25,
+      progress: () =>
+          GameStats.solvedAt(SudokuDifficulty.hard) +
+          GameStats.solvedAt(SudokuDifficulty.expert),
+      goal: 25,
+    ),
+    Achievement(
+      id: 'flawless',
+      icon: '💎',
+      tier: 1,
+      isUnlocked: () => GameStats.flawlessSolves >= 1,
+      progress: () => GameStats.flawlessSolves,
+      goal: 1,
+    ),
+    Achievement(
+      id: 'flawless_10',
+      icon: '🛡️',
+      tier: 2,
+      isUnlocked: () => GameStats.flawlessSolves >= 10,
+      progress: () => GameStats.flawlessSolves,
+      goal: 10,
+    ),
+    Achievement(
+      id: 'perfect_expert',
+      icon: '🦉',
+      tier: 4,
+      isUnlocked: () => GameStats.expertPerfectSolves >= 1,
+      progress: () => GameStats.expertPerfectSolves,
+      goal: 1,
+    ),
+    Achievement(
+      id: 'jigsaw_first',
+      icon: '🔷',
+      tier: 1,
+      isUnlocked: () => GameStats.jigsawSolved >= 1,
+      progress: () => GameStats.jigsawSolved,
+      goal: 1,
+    ),
+    Achievement(
+      id: 'x_first',
+      icon: '✖️',
+      tier: 1,
+      isUnlocked: () => (GameStats.solvedByVariant['x'] ?? 0) >= 1,
+      progress: () => GameStats.solvedByVariant['x'] ?? 0,
+      goal: 1,
+    ),
+    Achievement(
+      id: 'killer_first',
+      icon: '🗡️',
+      tier: 2,
+      isUnlocked: () => (GameStats.solvedByVariant['killer'] ?? 0) >= 1,
+      progress: () => GameStats.solvedByVariant['killer'] ?? 0,
+      goal: 1,
+    ),
+    Achievement(
+      id: 'variant_all',
+      icon: '🎭',
+      tier: 4,
+      isUnlocked: () => GameStats.hasBeatenEveryVariant,
+      rewardTheme: 'Sakura',
+    ),
+    Achievement(
+      id: 'big_board',
+      icon: '🔢',
+      tier: 2,
+      isUnlocked: () => (GameStats.solvedBySize[GridSize.mega.name] ?? 0) >= 1,
+      progress: () => GameStats.solvedBySize[GridSize.mega.name] ?? 0,
+      goal: 1,
+    ),
+    Achievement(
+      id: 'size_all',
+      icon: '📐',
+      tier: 3,
+      isUnlocked: () => GameStats.hasBeatenEverySize,
+    ),
+    Achievement(
+      id: 'speed_90',
+      icon: '🏃',
+      tier: 2,
+      isUnlocked: () => GameStats.bestTime.inSeconds < 90,
+    ),
+    Achievement(
+      id: 'speed_60',
+      icon: '⏱️',
+      tier: 3,
+      isUnlocked: () => GameStats.bestTime.inSeconds < 60,
+    ),
+    Achievement(
+      id: 'daily_7',
+      icon: '📅',
+      tier: 1,
+      isUnlocked: () => GameStats.dailyCompletedCount >= 7,
+      progress: () => GameStats.dailyCompletedCount,
+      goal: 7,
+    ),
+    Achievement(
+      id: 'daily_30',
+      icon: '🗓️',
+      tier: 3,
+      isUnlocked: () => GameStats.dailyCompletedCount >= 30,
+      progress: () => GameStats.dailyCompletedCount,
+      goal: 30,
+    ),
+    Achievement(
+      id: 'streak_25',
+      icon: '🔗',
+      tier: 3,
+      isUnlocked: () => GameStats.longestStreak >= 25,
+      progress: () => GameStats.longestStreak,
+      goal: 25,
     ),
   ];
 
@@ -361,6 +690,41 @@ class AchievementSystem {
     }
   }
 
+  static int get unlockedCount => achievements
+      .where((a) => GameStats.unlockedAchievements.contains(a.id))
+      .length;
+
+  /// Achievements grouped by [Achievement.tier], lowest tier first.
+  static Map<int, List<Achievement>> byTier() {
+    final map = <int, List<Achievement>>{};
+    for (final a in achievements) {
+      map.putIfAbsent(a.tier, () => []).add(a);
+    }
+    return Map.fromEntries(
+      map.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+    );
+  }
+
+  /// Localized tier heading.
+  static String tierName(BuildContext context, int tier) {
+    final l10n = AppLocalizations.of(context)!;
+    return switch (tier) {
+      1 => l10n.achTier1,
+      2 => l10n.achTier2,
+      3 => l10n.achTier3,
+      4 => l10n.achTier4,
+      _ => '',
+    };
+  }
+
+  /// Accent colour per tier: bronze, silver, gold, then a violet for legendary.
+  static Color tierColor(int tier) => switch (tier) {
+    1 => const Color(0xFFB07A42),
+    2 => const Color(0xFF8D98A7),
+    3 => const Color(0xFFD4A017),
+    _ => const Color(0xFF7C4DFF),
+  };
+
   /// Localized display name for an achievement, looked up by its stable
   /// [Achievement.id] (never translated — it's the persisted unlock key).
   static String displayName(BuildContext context, String id) {
@@ -372,6 +736,26 @@ class AchievementSystem {
       'no_hints_hero' => l10n.achPureLogicName,
       'streak_master' => l10n.achStreakMasterName,
       'marathon' => l10n.achMarathonName,
+      'solve_50' => l10n.achHalfCenturyName,
+      'solve_100' => l10n.achCenturionName,
+      'solve_250' => l10n.achGrandmasterName,
+      'expert_first' => l10n.achIntoTheDeepName,
+      'expert_10' => l10n.achExpertHandlerName,
+      'hard_25' => l10n.achHardenedName,
+      'flawless' => l10n.achFlawlessName,
+      'flawless_10' => l10n.achUntouchableName,
+      'perfect_expert' => l10n.achPureReasonName,
+      'jigsaw_first' => l10n.achShapeshifterName,
+      'x_first' => l10n.achCrossingLinesName,
+      'killer_first' => l10n.achKillerInstinctName,
+      'variant_all' => l10n.achPolymathName,
+      'big_board' => l10n.achTwelveSquaredName,
+      'size_all' => l10n.achEverySizeName,
+      'speed_90' => l10n.achQuicksilverName,
+      'speed_60' => l10n.achSubMinuteName,
+      'daily_7' => l10n.achSevenDaysName,
+      'daily_30' => l10n.achMonthOfPuzzlesName,
+      'streak_25' => l10n.achUnbrokenName,
       _ => id,
     };
   }
@@ -386,6 +770,26 @@ class AchievementSystem {
       'no_hints_hero' => l10n.achPureLogicDesc,
       'streak_master' => l10n.achStreakMasterDesc,
       'marathon' => l10n.achMarathonDesc,
+      'solve_50' => l10n.achHalfCenturyDesc,
+      'solve_100' => l10n.achCenturionDesc,
+      'solve_250' => l10n.achGrandmasterDesc,
+      'expert_first' => l10n.achIntoTheDeepDesc,
+      'expert_10' => l10n.achExpertHandlerDesc,
+      'hard_25' => l10n.achHardenedDesc,
+      'flawless' => l10n.achFlawlessDesc,
+      'flawless_10' => l10n.achUntouchableDesc,
+      'perfect_expert' => l10n.achPureReasonDesc,
+      'jigsaw_first' => l10n.achShapeshifterDesc,
+      'x_first' => l10n.achCrossingLinesDesc,
+      'killer_first' => l10n.achKillerInstinctDesc,
+      'variant_all' => l10n.achPolymathDesc,
+      'big_board' => l10n.achTwelveSquaredDesc,
+      'size_all' => l10n.achEverySizeDesc,
+      'speed_90' => l10n.achQuicksilverDesc,
+      'speed_60' => l10n.achSubMinuteDesc,
+      'daily_7' => l10n.achSevenDaysDesc,
+      'daily_30' => l10n.achMonthOfPuzzlesDesc,
+      'streak_25' => l10n.achUnbrokenDesc,
       _ => '',
     };
   }
@@ -679,7 +1083,42 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  /// Drives the sheen that sweeps across the wordmark.
+  late final AnimationController _sheen;
+
+  /// The sheen plays a few times on arrival and then stops for good.
+  ///
+  /// Repeating forever would animate a screen that is otherwise completely
+  /// static — a real battery cost for decoration — and would also mean the
+  /// home route never stops scheduling frames, which hangs any
+  /// `pumpAndSettle` in a test.
+  static const int _maxSweeps = 3;
+  int _sweeps = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _sheen =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 2600),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed && _sweeps < _maxSweeps - 1) {
+            _sweeps++;
+            _sheen.forward(from: 0);
+          }
+        });
+    _sheen.forward();
+  }
+
+  @override
+  void dispose() {
+    _sheen.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -700,62 +1139,8 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'CRISP\nSUDOKU',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 3,
-                            height: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          l10n.homeStatsLine(
-                            GameStats.totalPuzzlesSolved,
-                            GameStats.currentStreak,
-                            GameStats.longestStreak,
-                          ),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                        if (GameStats.gamesLost > 0) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            l10n.homeLossesLine(GameStats.gamesLost),
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 5),
-                        Text(
-                          GameStats.themeDescriptionText(context, scheme.name),
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 30),
+                  _buildWordmarkHeader(context, l10n, scheme),
+                  const SizedBox(height: 22),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final buttons = [
@@ -910,6 +1295,233 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The start-screen wordmark.
+  ///
+  /// Three layers, painted back to front: a soft radial bloom in the theme's
+  /// accent so the type sits in light rather than on a flat panel; the letters
+  /// themselves filled with a gradient via [ShaderMask]; and a narrow
+  /// translucent band swept across them by [_sheen]. The band is clipped to the
+  /// glyphs by a second ShaderMask, so it lights up the letterforms instead of
+  /// sliding over the background.
+  Widget _buildWordmarkHeader(
+    BuildContext context,
+    AppLocalizations l10n,
+    EnvironmentalTheme scheme,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The wordmark is the loudest thing on the screen, so it scales with
+        // the viewport instead of sitting at one size and overflowing narrow
+        // phones or looking lost on a tablet.
+        final titleSize = (constraints.maxWidth * 0.125).clamp(28.0, 56.0);
+
+        return Column(
+          children: [
+            SizedBox(
+              // Two lines at `height: 0.98` occupy ~1.96x the font size;
+              // the rest is breathing room for the bloom.
+              height: titleSize * 2.25,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Bloom behind the type.
+                  IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          colors: [
+                            scheme.accent.withValues(alpha: 0.30),
+                            scheme.accent.withValues(alpha: 0.10),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.45, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Reduce Motion turns the sweep off entirely; the gradient
+                  // fill and bloom carry the design without it.
+                  if (MediaQuery.disableAnimationsOf(context))
+                    _wordmarkText(titleSize, scheme)
+                  else
+                    AnimatedBuilder(
+                      animation: _sheen,
+                      builder: (context, child) {
+                        // -0.4 .. 1.4 keeps the band fully off-glyph at both
+                        // ends, which is the pause between sweeps.
+                        final t = _sheen.value * 1.8 - 0.4;
+                        return ShaderMask(
+                          blendMode: BlendMode.srcATop,
+                          shaderCallback: (rect) => LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.transparent,
+                              Colors.white.withValues(alpha: 0.55),
+                              Colors.transparent,
+                            ],
+                            stops: [
+                              (t - 0.10).clamp(0.0, 1.0),
+                              t.clamp(0.0, 1.0),
+                              (t + 0.10).clamp(0.0, 1.0),
+                            ],
+                          ).createShader(rect),
+                          child: child,
+                        );
+                      },
+                      child: _wordmarkText(titleSize, scheme),
+                    ),
+                ],
+              ),
+            ),
+            // Hairline rule, brightest under the wordmark and fading out.
+            Container(
+              height: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    Colors.white.withValues(alpha: 0.45),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildStatChips(context, l10n, scheme),
+            const SizedBox(height: 8),
+            Text(
+              GameStats.themeDescriptionText(context, scheme.name),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 12,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// The gradient-filled letterforms, shared by the animated and
+  /// reduced-motion branches of [_buildWordmarkHeader].
+  Widget _wordmarkText(double titleSize, EnvironmentalTheme scheme) {
+    return ShaderMask(
+      shaderCallback: (rect) => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white,
+          scheme.accent,
+          Colors.white.withValues(alpha: 0.92),
+        ],
+        stops: const [0.0, 0.55, 1.0],
+      ).createShader(rect),
+      child: Text(
+        'CRISP\nSUDOKU',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: titleSize,
+          fontWeight: FontWeight.w900,
+          // Tight leading with wide tracking is what makes a stacked wordmark
+          // read as a mark rather than a two-line heading.
+          height: 0.98,
+          letterSpacing: titleSize * 0.16,
+          color: Colors.white,
+          shadows: [
+            Shadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+            Shadow(
+              color: scheme.accent.withValues(alpha: 0.45),
+              blurRadius: 28,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Solved / streak / best as separate chips rather than one run-on line, so
+  /// each number is legible at a glance.
+  Widget _buildStatChips(
+    BuildContext context,
+    AppLocalizations l10n,
+    EnvironmentalTheme scheme,
+  ) {
+    Widget chip(IconData icon, String value, String label) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: scheme.accent),
+              const SizedBox(width: 5),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 1),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 9,
+              letterSpacing: 1.0,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final best = GameStats.bestTime.inHours >= 99
+        ? '—'
+        : formatClock(GameStats.bestTime);
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: [
+        chip(
+          Icons.check_circle_outline,
+          '${GameStats.totalPuzzlesSolved}',
+          l10n.statsSolvedLabel,
+        ),
+        chip(
+          Icons.local_fire_department,
+          '${GameStats.currentStreak}',
+          l10n.statsStreakLabel,
+        ),
+        chip(Icons.timer_outlined, best, l10n.statsBestLabel),
+        if (AchievementSystem.unlockedCount > 0)
+          chip(
+            Icons.emoji_events_outlined,
+            '${AchievementSystem.unlockedCount}',
+            l10n.statsAwardsLabel,
+          ),
+      ],
     );
   }
 
@@ -1611,16 +2223,31 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
+        final grouped = AchievementSystem.byTier();
+        final total = AchievementSystem.achievements.length;
+        final unlocked = AchievementSystem.unlockedCount;
+
         return Container(
-          height: MediaQuery.of(context).size.height * 0.8,
+          height: MediaQuery.of(context).size.height * 0.85,
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
                 l10n.achievementsSheetTitle,
                 style: const TextStyle(
@@ -1628,72 +2255,205 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 6),
+              Text(
+                l10n.achievementsUnlockedCount(unlocked, total),
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: total == 0 ? 0 : unlocked / total,
+                  minHeight: 6,
+                  backgroundColor: Colors.black.withValues(alpha: 0.06),
+                ),
+              ),
+              const SizedBox(height: 16),
               Expanded(
-                child: ListView.builder(
-                  itemCount: AchievementSystem.achievements.length,
-                  itemBuilder: (context, index) {
-                    final achievement = AchievementSystem.achievements[index];
-                    final isUnlocked = GameStats.unlockedAchievements.contains(
-                      achievement.id,
-                    );
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: ListTile(
-                        leading: Text(
-                          achievement.icon,
-                          style: const TextStyle(fontSize: 30),
-                        ),
-                        title: Text(
-                          AchievementSystem.displayName(
-                            context,
-                            achievement.id,
-                          ),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isUnlocked ? Colors.black : Colors.grey,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              AchievementSystem.description(
-                                context,
-                                achievement.id,
-                              ),
-                            ),
-                            if (achievement.rewardTheme != null)
-                              Text(
-                                l10n.achievementRewardTheme(
-                                  GameStats.themeDisplayName(
-                                    context,
-                                    achievement.rewardTheme!,
-                                  ),
-                                ),
-                                style: const TextStyle(
-                                  color: Colors.blue,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                          ],
-                        ),
-                        trailing: isUnlocked
-                            ? const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                              )
-                            : const Icon(Icons.lock, color: Colors.grey),
-                      ),
-                    );
-                  },
+                child: ListView(
+                  children: [
+                    for (final entry in grouped.entries) ...[
+                      _achievementTierHeader(context, entry.key),
+                      for (final achievement in entry.value)
+                        _achievementTile(context, l10n, achievement),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _achievementTierHeader(BuildContext context, int tier) {
+    final color = AchievementSystem.tierColor(tier);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            AchievementSystem.tierName(context, tier).toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Divider(color: color.withValues(alpha: 0.25))),
+        ],
+      ),
+    );
+  }
+
+  Widget _achievementTile(
+    BuildContext context,
+    AppLocalizations l10n,
+    Achievement achievement,
+  ) {
+    final isUnlocked = GameStats.unlockedAchievements.contains(achievement.id);
+    final color = AchievementSystem.tierColor(achievement.tier);
+    // Locked achievements with a countable goal show how far along you are;
+    // one-shot ones ("solve a Killer board") would learn nothing from a bar.
+    final fraction = isUnlocked ? null : achievement.fraction;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isUnlocked
+            ? color.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isUnlocked
+              ? color.withValues(alpha: 0.45)
+              : Colors.black.withValues(alpha: 0.07),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Locked icons are desaturated rather than hidden, so the list reads
+          // as a ladder to climb instead of a wall of question marks.
+          Opacity(
+            opacity: isUnlocked ? 1 : 0.35,
+            child: Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: color.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                achievement.icon,
+                style: const TextStyle(fontSize: 22),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        AchievementSystem.displayName(context, achievement.id),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: isUnlocked
+                              ? Colors.black87
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      isUnlocked ? Icons.check_circle : Icons.lock_outline,
+                      size: 18,
+                      color: isUnlocked ? color : Colors.grey.shade400,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  AchievementSystem.description(context, achievement.id),
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                ),
+                if (fraction != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: fraction,
+                            minHeight: 5,
+                            backgroundColor: Colors.black.withValues(
+                              alpha: 0.06,
+                            ),
+                            valueColor: AlwaysStoppedAnimation(color),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${achievement.progress!().clamp(0, achievement.goal!)}'
+                        '/${achievement.goal}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (achievement.rewardTheme != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.palette, size: 13, color: color),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          l10n.achievementRewardTheme(
+                            GameStats.themeDisplayName(
+                              context,
+                              achievement.rewardTheme!,
+                            ),
+                          ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2583,6 +3343,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (hintsUsed == 0 && widget.difficulty == SudokuDifficulty.hard) {
       GameStats.unlockedAchievements.add('no_hints_hard');
     }
+    GameStats.recordSolve(
+      difficulty: widget.difficulty,
+      variant: widget.variant,
+      size: widget.gridSize,
+      shape: widget.gridShape,
+      mistakes: mistakes,
+      hintsUsed: hintsUsed,
+    );
     if (widget.isDaily && GameStats.lastDailyDate != widget.dailyKey) {
       GameStats.lastDailyDate = widget.dailyKey;
       GameStats.dailyCompletedCount++;

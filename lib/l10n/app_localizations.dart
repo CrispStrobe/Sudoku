@@ -1045,6 +1045,336 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open-source licenses'**
   String get aboutOpenSourceLicenses;
+
+  /// No description provided for @achHalfCenturyName.
+  ///
+  /// In en, this message translates to:
+  /// **'Half Century'**
+  String get achHalfCenturyName;
+
+  /// No description provided for @achHalfCenturyDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete 50 puzzles'**
+  String get achHalfCenturyDesc;
+
+  /// No description provided for @achCenturionName.
+  ///
+  /// In en, this message translates to:
+  /// **'Centurion'**
+  String get achCenturionName;
+
+  /// No description provided for @achCenturionDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete 100 puzzles'**
+  String get achCenturionDesc;
+
+  /// No description provided for @achGrandmasterName.
+  ///
+  /// In en, this message translates to:
+  /// **'Grandmaster'**
+  String get achGrandmasterName;
+
+  /// No description provided for @achGrandmasterDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete 250 puzzles'**
+  String get achGrandmasterDesc;
+
+  /// No description provided for @achIntoTheDeepName.
+  ///
+  /// In en, this message translates to:
+  /// **'Into the Deep'**
+  String get achIntoTheDeepName;
+
+  /// No description provided for @achIntoTheDeepDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve an expert puzzle'**
+  String get achIntoTheDeepDesc;
+
+  /// No description provided for @achExpertHandlerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Expert Handler'**
+  String get achExpertHandlerName;
+
+  /// No description provided for @achExpertHandlerDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve 10 expert puzzles'**
+  String get achExpertHandlerDesc;
+
+  /// No description provided for @achHardenedName.
+  ///
+  /// In en, this message translates to:
+  /// **'Hardened'**
+  String get achHardenedName;
+
+  /// No description provided for @achHardenedDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve 25 hard or expert puzzles'**
+  String get achHardenedDesc;
+
+  /// No description provided for @achFlawlessName.
+  ///
+  /// In en, this message translates to:
+  /// **'Flawless'**
+  String get achFlawlessName;
+
+  /// No description provided for @achFlawlessDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Win without a single mistake'**
+  String get achFlawlessDesc;
+
+  /// No description provided for @achUntouchableName.
+  ///
+  /// In en, this message translates to:
+  /// **'Untouchable'**
+  String get achUntouchableName;
+
+  /// No description provided for @achUntouchableDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Win 10 puzzles without a mistake'**
+  String get achUntouchableDesc;
+
+  /// No description provided for @achPureReasonName.
+  ///
+  /// In en, this message translates to:
+  /// **'Pure Reason'**
+  String get achPureReasonName;
+
+  /// No description provided for @achPureReasonDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Beat an expert puzzle with no hints and no mistakes'**
+  String get achPureReasonDesc;
+
+  /// No description provided for @achShapeshifterName.
+  ///
+  /// In en, this message translates to:
+  /// **'Shapeshifter'**
+  String get achShapeshifterName;
+
+  /// No description provided for @achShapeshifterDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve a jigsaw board'**
+  String get achShapeshifterDesc;
+
+  /// No description provided for @achCrossingLinesName.
+  ///
+  /// In en, this message translates to:
+  /// **'Crossing Lines'**
+  String get achCrossingLinesName;
+
+  /// No description provided for @achCrossingLinesDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve a Sudoku-X board'**
+  String get achCrossingLinesDesc;
+
+  /// No description provided for @achKillerInstinctName.
+  ///
+  /// In en, this message translates to:
+  /// **'Killer Instinct'**
+  String get achKillerInstinctName;
+
+  /// No description provided for @achKillerInstinctDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve a Killer board'**
+  String get achKillerInstinctDesc;
+
+  /// No description provided for @achPolymathName.
+  ///
+  /// In en, this message translates to:
+  /// **'Polymath'**
+  String get achPolymathName;
+
+  /// No description provided for @achPolymathDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Beat classic, jigsaw, Sudoku-X and Killer'**
+  String get achPolymathDesc;
+
+  /// No description provided for @achTwelveSquaredName.
+  ///
+  /// In en, this message translates to:
+  /// **'Twelve by Twelve'**
+  String get achTwelveSquaredName;
+
+  /// No description provided for @achTwelveSquaredDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve a 12×12 board'**
+  String get achTwelveSquaredDesc;
+
+  /// No description provided for @achEverySizeName.
+  ///
+  /// In en, this message translates to:
+  /// **'Every Shape and Size'**
+  String get achEverySizeName;
+
+  /// No description provided for @achEverySizeDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Solve every board size, 4×4 to 12×12'**
+  String get achEverySizeDesc;
+
+  /// No description provided for @achQuicksilverName.
+  ///
+  /// In en, this message translates to:
+  /// **'Quicksilver'**
+  String get achQuicksilverName;
+
+  /// No description provided for @achQuicksilverDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish a puzzle in under 90 seconds'**
+  String get achQuicksilverDesc;
+
+  /// No description provided for @achSubMinuteName.
+  ///
+  /// In en, this message translates to:
+  /// **'Sub-Minute'**
+  String get achSubMinuteName;
+
+  /// No description provided for @achSubMinuteDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish a puzzle in under a minute'**
+  String get achSubMinuteDesc;
+
+  /// No description provided for @achSevenDaysName.
+  ///
+  /// In en, this message translates to:
+  /// **'Seven Days'**
+  String get achSevenDaysName;
+
+  /// No description provided for @achSevenDaysDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete 7 daily challenges'**
+  String get achSevenDaysDesc;
+
+  /// No description provided for @achMonthOfPuzzlesName.
+  ///
+  /// In en, this message translates to:
+  /// **'Month of Puzzles'**
+  String get achMonthOfPuzzlesName;
+
+  /// No description provided for @achMonthOfPuzzlesDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete 30 daily challenges'**
+  String get achMonthOfPuzzlesDesc;
+
+  /// No description provided for @achUnbrokenName.
+  ///
+  /// In en, this message translates to:
+  /// **'Unbroken'**
+  String get achUnbrokenName;
+
+  /// No description provided for @achUnbrokenDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Reach a 25-puzzle streak'**
+  String get achUnbrokenDesc;
+
+  /// No description provided for @achTier1.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting Started'**
+  String get achTier1;
+
+  /// No description provided for @achTier2.
+  ///
+  /// In en, this message translates to:
+  /// **'Skilled'**
+  String get achTier2;
+
+  /// No description provided for @achTier3.
+  ///
+  /// In en, this message translates to:
+  /// **'Expert'**
+  String get achTier3;
+
+  /// No description provided for @achTier4.
+  ///
+  /// In en, this message translates to:
+  /// **'Legendary'**
+  String get achTier4;
+
+  /// No description provided for @themeAuroraName.
+  ///
+  /// In en, this message translates to:
+  /// **'Aurora'**
+  String get themeAuroraName;
+
+  /// No description provided for @themeAuroraDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Polar light'**
+  String get themeAuroraDesc;
+
+  /// No description provided for @themeSakuraName.
+  ///
+  /// In en, this message translates to:
+  /// **'Sakura'**
+  String get themeSakuraName;
+
+  /// No description provided for @themeSakuraDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Blossom drift'**
+  String get themeSakuraDesc;
+
+  /// No description provided for @themeObsidianName.
+  ///
+  /// In en, this message translates to:
+  /// **'Obsidian'**
+  String get themeObsidianName;
+
+  /// No description provided for @themeObsidianDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Volcanic glass'**
+  String get themeObsidianDesc;
+
+  /// No description provided for @achievementsUnlockedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{unlocked} of {total} unlocked'**
+  String achievementsUnlockedCount(int unlocked, int total);
+
+  /// No description provided for @statsSolvedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Solved'**
+  String get statsSolvedLabel;
+
+  /// No description provided for @statsStreakLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Streak'**
+  String get statsStreakLabel;
+
+  /// No description provided for @statsBestLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Best'**
+  String get statsBestLabel;
+
+  /// No description provided for @statsAwardsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Awards'**
+  String get statsAwardsLabel;
 }
 
 class _AppLocalizationsDelegate

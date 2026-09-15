@@ -540,4 +540,172 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutOpenSourceLicenses => 'Open-source licenses';
+
+  @override
+  String get achHalfCenturyName => 'Half Century';
+
+  @override
+  String get achHalfCenturyDesc => 'Complete 50 puzzles';
+
+  @override
+  String get achCenturionName => 'Centurion';
+
+  @override
+  String get achCenturionDesc => 'Complete 100 puzzles';
+
+  @override
+  String get achGrandmasterName => 'Grandmaster';
+
+  @override
+  String get achGrandmasterDesc => 'Complete 250 puzzles';
+
+  @override
+  String get achIntoTheDeepName => 'Into the Deep';
+
+  @override
+  String get achIntoTheDeepDesc => 'Solve an expert puzzle';
+
+  @override
+  String get achExpertHandlerName => 'Expert Handler';
+
+  @override
+  String get achExpertHandlerDesc => 'Solve 10 expert puzzles';
+
+  @override
+  String get achHardenedName => 'Hardened';
+
+  @override
+  String get achHardenedDesc => 'Solve 25 hard or expert puzzles';
+
+  @override
+  String get achFlawlessName => 'Flawless';
+
+  @override
+  String get achFlawlessDesc => 'Win without a single mistake';
+
+  @override
+  String get achUntouchableName => 'Untouchable';
+
+  @override
+  String get achUntouchableDesc => 'Win 10 puzzles without a mistake';
+
+  @override
+  String get achPureReasonName => 'Pure Reason';
+
+  @override
+  String get achPureReasonDesc =>
+      'Beat an expert puzzle with no hints and no mistakes';
+
+  @override
+  String get achShapeshifterName => 'Shapeshifter';
+
+  @override
+  String get achShapeshifterDesc => 'Solve a jigsaw board';
+
+  @override
+  String get achCrossingLinesName => 'Crossing Lines';
+
+  @override
+  String get achCrossingLinesDesc => 'Solve a Sudoku-X board';
+
+  @override
+  String get achKillerInstinctName => 'Killer Instinct';
+
+  @override
+  String get achKillerInstinctDesc => 'Solve a Killer board';
+
+  @override
+  String get achPolymathName => 'Polymath';
+
+  @override
+  String get achPolymathDesc => 'Beat classic, jigsaw, Sudoku-X and Killer';
+
+  @override
+  String get achTwelveSquaredName => 'Twelve by Twelve';
+
+  @override
+  String get achTwelveSquaredDesc => 'Solve a 12×12 board';
+
+  @override
+  String get achEverySizeName => 'Every Shape and Size';
+
+  @override
+  String get achEverySizeDesc => 'Solve every board size, 4×4 to 12×12';
+
+  @override
+  String get achQuicksilverName => 'Quicksilver';
+
+  @override
+  String get achQuicksilverDesc => 'Finish a puzzle in under 90 seconds';
+
+  @override
+  String get achSubMinuteName => 'Sub-Minute';
+
+  @override
+  String get achSubMinuteDesc => 'Finish a puzzle in under a minute';
+
+  @override
+  String get achSevenDaysName => 'Seven Days';
+
+  @override
+  String get achSevenDaysDesc => 'Complete 7 daily challenges';
+
+  @override
+  String get achMonthOfPuzzlesName => 'Month of Puzzles';
+
+  @override
+  String get achMonthOfPuzzlesDesc => 'Complete 30 daily challenges';
+
+  @override
+  String get achUnbrokenName => 'Unbroken';
+
+  @override
+  String get achUnbrokenDesc => 'Reach a 25-puzzle streak';
+
+  @override
+  String get achTier1 => 'Getting Started';
+
+  @override
+  String get achTier2 => 'Skilled';
+
+  @override
+  String get achTier3 => 'Expert';
+
+  @override
+  String get achTier4 => 'Legendary';
+
+  @override
+  String get themeAuroraName => 'Aurora';
+
+  @override
+  String get themeAuroraDesc => 'Polar light';
+
+  @override
+  String get themeSakuraName => 'Sakura';
+
+  @override
+  String get themeSakuraDesc => 'Blossom drift';
+
+  @override
+  String get themeObsidianName => 'Obsidian';
+
+  @override
+  String get themeObsidianDesc => 'Volcanic glass';
+
+  @override
+  String achievementsUnlockedCount(int unlocked, int total) {
+    return '$unlocked of $total unlocked';
+  }
+
+  @override
+  String get statsSolvedLabel => 'Solved';
+
+  @override
+  String get statsStreakLabel => 'Streak';
+
+  @override
+  String get statsBestLabel => 'Best';
+
+  @override
+  String get statsAwardsLabel => 'Awards';
 }

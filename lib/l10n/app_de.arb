@@ -1,14 +1,11 @@
 {
   "@@locale": "de",
-
   "homeStatsButton": "Statistik",
   "homeThemesButton": "Themen",
   "homeAchievementsButton": "Erfolge",
   "homeSettingsButton": "Einstellungen",
-
   "homeStatsLine": "Gelöst: {solved}  |  Serie: {streak}  |  Beste: {best}",
   "homeLossesLine": "Niederlagen: {losses}",
-
   "homeDailyChallengeDone": "📅 TÄGLICHE HERAUSFORDERUNG ✓",
   "homeDailyChallenge": "📅 TÄGLICHE HERAUSFORDERUNG",
   "homeDailyCompletedSubtitle": "Abgeschlossen — morgen geht's weiter!",
@@ -19,7 +16,6 @@
   "homeJigsawMode": "🧩 JIGSAW-MODUS",
   "homeAdminPanel": "Admin-Bereich",
   "homeAboutLicenses": "Über & Lizenzen",
-
   "classicSheetTitle": "Klassisches Sudoku",
   "sizeSmallDifficulty": "KLEIN",
   "sizeMediumDifficulty": "MITTEL",
@@ -27,7 +23,6 @@
   "sizeStandardDifficulty": "KLASSISCH",
   "sizeBigDifficulty": "RIESIG",
   "sizeMegaDifficulty": "MEGA",
-
   "selectDifficultyTitle": "Schwierigkeit wählen",
   "jigsawIrregularNote": "Jigsaw-Modus: Regionen haben unregelmäßige Formen!",
   "variantLabel": "Variante",
@@ -40,7 +35,6 @@
   "difficultyMedium": "MITTEL",
   "difficultyHard": "SCHWER",
   "difficultyExpert": "EXPERTE",
-
   "jigsawSheetTitle": "🧩 Jigsaw-Sudoku",
   "jigsawSheetSubtitle": "Unregelmäßig geformte Regionen statt Quadrate! Jede Größe hat eigene Regionsformen.",
   "jigsawSizeLabel": "{size} Jigsaw",
@@ -50,7 +44,6 @@
   "jigsawClassicTwist": "Klassisch mit Dreh",
   "jigsawBig": "Große Herausforderung",
   "jigsawUltimate": "Ultimativer Test",
-
   "themesSheetTitle": "Umgebungsthemen",
   "themeOceanName": "Ozean",
   "themeOceanDesc": "Tiefen des Ozeans",
@@ -62,7 +55,6 @@
   "themeFireDesc": "Vulkanausbruch",
   "themeIceName": "Eis",
   "themeIceDesc": "Gefrorene Tundra",
-
   "achievementsSheetTitle": "Erfolge",
   "achFirstStepsName": "Erste Schritte",
   "achFirstStepsDesc": "Löse dein erstes Rätsel",
@@ -71,13 +63,12 @@
   "achPuzzleMasterName": "Rätselmeister",
   "achPuzzleMasterDesc": "Löse 10 Rätsel",
   "achPureLogicName": "Reine Logik",
-  "achPureLogicDesc": "Löse ein schweres Rätsel ohne Hinweise",
+  "achPureLogicDesc": "Löse ein schweres Rätsel ohne Tipps",
   "achStreakMasterName": "Serienmeister",
   "achStreakMasterDesc": "Löse 5 Rätsel in Folge",
   "achMarathonName": "Marathon",
   "achMarathonDesc": "Erreiche eine Serie von 10 Rätseln",
   "achievementRewardTheme": "Belohnung: Thema {theme}",
-
   "statsSheetTitle": "Statistik",
   "statPuzzlesSolved": "Gelöste Rätsel",
   "statWinRate": "Gewinnrate",
@@ -88,7 +79,6 @@
   "statDailyPuzzlesDone": "Tägliche Rätsel gelöst",
   "statHintsUsed": "Verwendete Hinweise",
   "statAchievements": "Erfolge",
-
   "generatingPuzzle": "Rätsel wird erstellt …",
   "mainMenuTooltip": "Hauptmenü",
   "scoreLabel": "Punkte: {score}",
@@ -104,14 +94,12 @@
   "eraseTooltip": "Löschen",
   "explainSolveTooltip": "Lösung erklären",
   "failedToCreatePuzzle": "Rätsel konnte nicht erstellt werden. Bitte neu starten.",
-
   "smartHintsTitle": "Intelligente Hinweise",
   "nextLogicalStepTitle": "Nächster logischer Schritt",
   "nextLogicalStepSubtitle": "Findet und erklärt die nächste Ableitung auf dem Spielfeld.",
   "penaltyLabel": "-{penalty}",
   "noHintsLeftSnackbar": "Keine Hinweise mehr für dieses Rätsel!",
   "possibleNumbersSnackbar": "Mögliche Zahlen: {numbers}",
-
   "noStepFoundTitle": "Kein logischer Schritt gefunden",
   "noStepFoundBody": "Vom aktuellen Spielfeld aus ist keine einfache Ableitung möglich — es könnte eine fortgeschrittenere Technik erfordern oder einen falschen Eintrag enthalten. Prüfe zuerst auf Konflikte.",
   "okButton": "OK",
@@ -120,7 +108,6 @@
   "gotItButton": "Verstanden",
   "confirmButton": "Bestätigen",
   "useHintConfirm": "Diesen Hinweis für -{penalty} Punkte verwenden?",
-
   "techniqueNakedSingle": "Nacktes Single",
   "techniqueHiddenSingle": "Verstecktes Single",
   "techniqueLockedCandidates": "Gesperrte Kandidaten",
@@ -129,7 +116,6 @@
   "techniqueHiddenPair": "Verstecktes Paar",
   "techniqueXWing": "X-Wing",
   "techniqueNextStep": "Nächster Schritt",
-
   "dailyCompleteTitle": "🎉 Tägliche Herausforderung geschafft!",
   "completedTitle": "🎉 Geschafft!",
   "scoreResult": "Punkte: {score}",
@@ -142,7 +128,6 @@
   "reachedMistakesMessage": "Du hast {max} Fehler erreicht.",
   "streakResetMessage": "Deine Serie wurde zurückgesetzt.",
   "tryAgainButton": "Erneut versuchen",
-
   "explainAppBarTitle": "Lösung erklären",
   "explainStart": "Start",
   "explainStepOf": "Schritt {index} / {count}",
@@ -154,7 +139,6 @@
   "explainPlayTooltip": "Abspielen",
   "explainPauseTooltip": "Pause",
   "explainNextTooltip": "Weiter",
-
   "settingsSheetTitle": "Einstellungen",
   "settingsLanguageLabel": "Sprache",
   "settingsLanguageSystem": "System",
@@ -162,7 +146,6 @@
   "settingsLanguageGerman": "Deutsch",
   "settingsUnlimitedMistakes": "Unbegrenzte Fehler",
   "settingsUnlimitedMistakesSubtitle": "Spiele ohne Fehlerlimit (Modus „Unbegrenzte Fehler“)",
-
   "aboutTitle": "Über",
   "aboutServiceProvider": "Anbieter",
   "aboutContact": "Kontakt",
@@ -174,5 +157,70 @@
   "aboutDisclaimerText": "CrispSudoku wird „wie besehen“ ohne jegliche Gewährleistung bereitgestellt. Jedes generierte Rätsel wurde auf eine eindeutige Lösung geprüft, die Nutzung erfolgt dennoch auf eigenes Risiko.",
   "aboutLicenseText": "CrispSudoku ist freie Software, lizenziert unter der GNU Affero General Public License Version 3 oder später. Als alleiniger Urheberrechtsinhaber stellt der Autor zusätzlich offizielle Binärversionen (z. B. über den Apple App Store und Google Play) unter den jeweiligen Standardbedingungen dieser Stores bereit; dies berührt nicht deine Rechte am Quellcode unter der AGPL-3.0.",
   "aboutVersionLabel": "Version {v}",
-  "aboutOpenSourceLicenses": "Open-Source-Lizenzen"
+  "aboutOpenSourceLicenses": "Open-Source-Lizenzen",
+  "achHalfCenturyName": "Halbes Jahrhundert",
+  "achHalfCenturyDesc": "Löse 50 Rätsel",
+  "achCenturionName": "Zenturio",
+  "achCenturionDesc": "Löse 100 Rätsel",
+  "achGrandmasterName": "Großmeister",
+  "achGrandmasterDesc": "Löse 250 Rätsel",
+  "achIntoTheDeepName": "In die Tiefe",
+  "achIntoTheDeepDesc": "Löse ein Experten-Rätsel",
+  "achExpertHandlerName": "Expertenbezwinger",
+  "achExpertHandlerDesc": "Löse 10 Experten-Rätsel",
+  "achHardenedName": "Abgehärtet",
+  "achHardenedDesc": "Löse 25 schwere oder Experten-Rätsel",
+  "achFlawlessName": "Makellos",
+  "achFlawlessDesc": "Gewinne ohne einen einzigen Fehler",
+  "achUntouchableName": "Unantastbar",
+  "achUntouchableDesc": "Gewinne 10 Rätsel ohne Fehler",
+  "achPureReasonName": "Reine Vernunft",
+  "achPureReasonDesc": "Löse ein Experten-Rätsel ohne Tipps und ohne Fehler",
+  "achShapeshifterName": "Formwandler",
+  "achShapeshifterDesc": "Löse ein Jigsaw-Feld",
+  "achCrossingLinesName": "Kreuzende Linien",
+  "achCrossingLinesDesc": "Löse ein Sudoku-X-Feld",
+  "achKillerInstinctName": "Killerinstinkt",
+  "achKillerInstinctDesc": "Löse ein Killer-Feld",
+  "achPolymathName": "Universalgelehrter",
+  "achPolymathDesc": "Bezwinge Klassisch, Jigsaw, Sudoku-X und Killer",
+  "achTwelveSquaredName": "Zwölf mal zwölf",
+  "achTwelveSquaredDesc": "Löse ein 12×12-Feld",
+  "achEverySizeName": "Jede Größe",
+  "achEverySizeDesc": "Löse jede Feldgröße, 4×4 bis 12×12",
+  "achQuicksilverName": "Quecksilber",
+  "achQuicksilverDesc": "Beende ein Rätsel in unter 90 Sekunden",
+  "achSubMinuteName": "Unter einer Minute",
+  "achSubMinuteDesc": "Beende ein Rätsel in unter einer Minute",
+  "achSevenDaysName": "Sieben Tage",
+  "achSevenDaysDesc": "Schließe 7 Tagesrätsel ab",
+  "achMonthOfPuzzlesName": "Rätselmonat",
+  "achMonthOfPuzzlesDesc": "Schließe 30 Tagesrätsel ab",
+  "achUnbrokenName": "Ungebrochen",
+  "achUnbrokenDesc": "Erreiche eine Serie von 25 Rätseln",
+  "achTier1": "Erste Schritte",
+  "achTier2": "Fortgeschritten",
+  "achTier3": "Experte",
+  "achTier4": "Legendär",
+  "themeAuroraName": "Aurora",
+  "themeAuroraDesc": "Polarlicht",
+  "themeSakuraName": "Sakura",
+  "themeSakuraDesc": "Blütenregen",
+  "themeObsidianName": "Obsidian",
+  "themeObsidianDesc": "Vulkanglas",
+  "achievementsUnlockedCount": "{unlocked} von {total} freigeschaltet",
+  "@achievementsUnlockedCount": {
+    "placeholders": {
+      "unlocked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "statsSolvedLabel": "Gelöst",
+  "statsStreakLabel": "Serie",
+  "statsBestLabel": "Bestzeit",
+  "statsAwardsLabel": "Erfolge"
 }

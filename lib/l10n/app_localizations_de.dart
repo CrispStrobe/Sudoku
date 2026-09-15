@@ -209,7 +209,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get achPureLogicName => 'Reine Logik';
 
   @override
-  String get achPureLogicDesc => 'Löse ein schweres Rätsel ohne Hinweise';
+  String get achPureLogicDesc => 'Löse ein schweres Rätsel ohne Tipps';
 
   @override
   String get achStreakMasterName => 'Serienmeister';
@@ -544,4 +544,173 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get aboutOpenSourceLicenses => 'Open-Source-Lizenzen';
+
+  @override
+  String get achHalfCenturyName => 'Halbes Jahrhundert';
+
+  @override
+  String get achHalfCenturyDesc => 'Löse 50 Rätsel';
+
+  @override
+  String get achCenturionName => 'Zenturio';
+
+  @override
+  String get achCenturionDesc => 'Löse 100 Rätsel';
+
+  @override
+  String get achGrandmasterName => 'Großmeister';
+
+  @override
+  String get achGrandmasterDesc => 'Löse 250 Rätsel';
+
+  @override
+  String get achIntoTheDeepName => 'In die Tiefe';
+
+  @override
+  String get achIntoTheDeepDesc => 'Löse ein Experten-Rätsel';
+
+  @override
+  String get achExpertHandlerName => 'Expertenbezwinger';
+
+  @override
+  String get achExpertHandlerDesc => 'Löse 10 Experten-Rätsel';
+
+  @override
+  String get achHardenedName => 'Abgehärtet';
+
+  @override
+  String get achHardenedDesc => 'Löse 25 schwere oder Experten-Rätsel';
+
+  @override
+  String get achFlawlessName => 'Makellos';
+
+  @override
+  String get achFlawlessDesc => 'Gewinne ohne einen einzigen Fehler';
+
+  @override
+  String get achUntouchableName => 'Unantastbar';
+
+  @override
+  String get achUntouchableDesc => 'Gewinne 10 Rätsel ohne Fehler';
+
+  @override
+  String get achPureReasonName => 'Reine Vernunft';
+
+  @override
+  String get achPureReasonDesc =>
+      'Löse ein Experten-Rätsel ohne Tipps und ohne Fehler';
+
+  @override
+  String get achShapeshifterName => 'Formwandler';
+
+  @override
+  String get achShapeshifterDesc => 'Löse ein Jigsaw-Feld';
+
+  @override
+  String get achCrossingLinesName => 'Kreuzende Linien';
+
+  @override
+  String get achCrossingLinesDesc => 'Löse ein Sudoku-X-Feld';
+
+  @override
+  String get achKillerInstinctName => 'Killerinstinkt';
+
+  @override
+  String get achKillerInstinctDesc => 'Löse ein Killer-Feld';
+
+  @override
+  String get achPolymathName => 'Universalgelehrter';
+
+  @override
+  String get achPolymathDesc =>
+      'Bezwinge Klassisch, Jigsaw, Sudoku-X und Killer';
+
+  @override
+  String get achTwelveSquaredName => 'Zwölf mal zwölf';
+
+  @override
+  String get achTwelveSquaredDesc => 'Löse ein 12×12-Feld';
+
+  @override
+  String get achEverySizeName => 'Jede Größe';
+
+  @override
+  String get achEverySizeDesc => 'Löse jede Feldgröße, 4×4 bis 12×12';
+
+  @override
+  String get achQuicksilverName => 'Quecksilber';
+
+  @override
+  String get achQuicksilverDesc => 'Beende ein Rätsel in unter 90 Sekunden';
+
+  @override
+  String get achSubMinuteName => 'Unter einer Minute';
+
+  @override
+  String get achSubMinuteDesc => 'Beende ein Rätsel in unter einer Minute';
+
+  @override
+  String get achSevenDaysName => 'Sieben Tage';
+
+  @override
+  String get achSevenDaysDesc => 'Schließe 7 Tagesrätsel ab';
+
+  @override
+  String get achMonthOfPuzzlesName => 'Rätselmonat';
+
+  @override
+  String get achMonthOfPuzzlesDesc => 'Schließe 30 Tagesrätsel ab';
+
+  @override
+  String get achUnbrokenName => 'Ungebrochen';
+
+  @override
+  String get achUnbrokenDesc => 'Erreiche eine Serie von 25 Rätseln';
+
+  @override
+  String get achTier1 => 'Erste Schritte';
+
+  @override
+  String get achTier2 => 'Fortgeschritten';
+
+  @override
+  String get achTier3 => 'Experte';
+
+  @override
+  String get achTier4 => 'Legendär';
+
+  @override
+  String get themeAuroraName => 'Aurora';
+
+  @override
+  String get themeAuroraDesc => 'Polarlicht';
+
+  @override
+  String get themeSakuraName => 'Sakura';
+
+  @override
+  String get themeSakuraDesc => 'Blütenregen';
+
+  @override
+  String get themeObsidianName => 'Obsidian';
+
+  @override
+  String get themeObsidianDesc => 'Vulkanglas';
+
+  @override
+  String achievementsUnlockedCount(int unlocked, int total) {
+    return '$unlocked von $total freigeschaltet';
+  }
+
+  @override
+  String get statsSolvedLabel => 'Gelöst';
+
+  @override
+  String get statsStreakLabel => 'Serie';
+
+  @override
+  String get statsBestLabel => 'Bestzeit';
+
+  @override
+  String get statsAwardsLabel => 'Erfolge';
 }
