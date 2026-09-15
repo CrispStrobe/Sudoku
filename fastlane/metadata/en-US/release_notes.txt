@@ -1,3 +1,5 @@
-• Fixes digits being cut off or shrunk on the board and the number pad. Both now scale to the screen, so they stay centred and legible at any window size or orientation.
+• A new look for the home screen, with a redesigned title and at-a-glance stats.
+• 26 achievements across four tiers, with progress tracking and three new themes to unlock.
+• Fixes digits being cut off or shrunk on the board and the number pad. Both now scale to the screen, so they stay centred and legible at any size or orientation.
 • Fixes a crash that could occur when resuming a saved game.
 • Smoother background animation, lighter on the battery.

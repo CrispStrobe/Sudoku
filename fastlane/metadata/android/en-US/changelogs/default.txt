@@ -1,8 +1,5 @@
-First release of CrispSudoku!
-
-• Four variants: Classic, Jigsaw, Sudoku-X and Killer
-• Six grid sizes (4×4 to 12×12) and four difficulties
-• Daily Challenge
-• Step-by-step "Explain the solve" tutor and "Next logical step" hints
-• Notes, undo, themes, achievements and statistics
-• 100% offline — no ads, no tracking
+• A new look for the home screen, with a redesigned title and at-a-glance stats.
+• 26 achievements across four tiers, with progress tracking and three new themes to unlock.
+• Fixes digits being cut off or shrunk on the board and the number pad at some screen sizes.
+• Fixes a crash that could occur when resuming a saved game.
+• Smoother background animation, lighter on the battery.
