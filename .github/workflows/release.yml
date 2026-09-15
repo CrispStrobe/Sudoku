@@ -17,6 +17,18 @@ on:
 permissions:
   contents: write
 
+# One tag, one release run. Never cancel in progress: a half-cancelled release
+# leaves the tag with a partial artifact set.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Pinned deliberately — release artifacts must be reproducible, and a floating
+  # "stable" can shift the toolchain under a tag mid-run. Keep in step with
+  # ci.yml and ios-release.yml; bump all three together.
+  FLUTTER_VERSION: '3.44.4'
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -29,6 +41,7 @@ jobs:
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter pub get
@@ -54,6 +67,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter pub get
@@ -75,6 +89,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter pub get
@@ -95,6 +110,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter config --enable-macos-desktop
@@ -119,6 +135,7 @@ jobs:
           sudo apt-get install -y ninja-build libgtk-3-dev
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter config --enable-linux-desktop
@@ -140,6 +157,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter config --enable-windows-desktop
@@ -157,7 +175,10 @@ jobs:
   publish:
     needs: [android, ios, web, macos, linux, windows]
     runs-on: ubuntu-latest
-    if: always() && contains(needs.*.result, 'success')
+    # Every build job must have succeeded. `contains(needs.*.result, 'success')`
+    # would be true if merely ONE did — that published releases missing
+    # platforms, silently, because fail_on_unmatched_files is false.
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -168,7 +189,9 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: CrispSudoku ${{ github.ref_name }}
           generate_release_notes: true
-          fail_on_unmatched_files: false
+          # Now that publish only runs when every build succeeded, a missing
+          # artifact is a real fault — fail loudly instead of shipping short.
+          fail_on_unmatched_files: true
           files: |
             artifacts/android-release/*
             artifacts/ios-release/*

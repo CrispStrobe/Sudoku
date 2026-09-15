@@ -33,7 +33,7 @@ on:
 env:
   BUNDLE_ID: com.crispstrobe.sudoku
   PROFILE_NAME: CrispSudoku AppStore CI
-  FLUTTER_VERSION: '3.44.2'
+  FLUTTER_VERSION: '3.44.4' # keep in step with ci.yml and release.yml
 
 jobs:
   build-upload:
