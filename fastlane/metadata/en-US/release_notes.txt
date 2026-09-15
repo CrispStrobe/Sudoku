@@ -1,1 +1,2 @@
-Fixes the on-screen number pad. On some screens the number buttons at the bottom of the board could appear oversized and get cut off, hiding the digits. The pad now scales to fit any screen so every number stays fully visible.
+• Fixes a crash that could occur when resuming a saved game.
+• Smoother background animation, lighter on the battery.

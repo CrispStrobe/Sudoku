@@ -1,0 +1,71 @@
+# GitHub Pages: publishes the web build to crispstrobe.github.io/Sudoku/ on each
+# release tag, so the Pages site tracks releases rather than the tip of main.
+#
+# Vercel (see deploy.sh) remains the primary web host; this is a second, free
+# mirror served straight from the repo.
+#
+# Pages serves the site from a subpath, so the build needs --base-href /Sudoku/
+# — without it every asset URL resolves against the domain root and the app
+# loads to a blank page.
+
+name: Pages
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a Pages deploy in flight, but only run one at a time.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.44.4' # keep in step with ci.yml and release.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build web
+        run: |
+          flutter build web --release \
+            --base-href /Sudoku/ \
+            --dart-define=APP_VERSION=${{ github.ref_name }}
+
+      # Pages has no SPA rewrite rule: an unknown path 404s instead of falling
+      # back to the app shell. Serving index.html as the 404 page gives the
+      # Flutter router the same deep-link behaviour Vercel's rewrite provides.
+      - name: Add SPA fallback
+        run: cp build/web/index.html build/web/404.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

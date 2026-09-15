@@ -109,6 +109,14 @@ step (build → write `vercel.json` → link the `sudoku` project → deploy):
 Requires `vercel login` (or a `VERCEL_TOKEN` env var). Live at
 https://sudoku-lac-five.vercel.app
 
+## Deploying (GitHub Pages)
+
+A second, free mirror, published by the `Pages` workflow on every `v*` tag (or
+manually via *Run workflow*). Pages serves from a subpath, so that build passes
+`--base-href /Sudoku/`; it also copies `index.html` to `404.html`, which is how
+a static Pages site gets the SPA deep-link fallback Vercel does with a rewrite.
+Live at https://crispstrobe.github.io/Sudoku/
+
 ## Regenerating serialization code
 
 ```bash
