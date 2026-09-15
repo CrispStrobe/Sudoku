@@ -1,15 +1,15 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'about_screen.dart';
 import 'l10n/app_localizations.dart';
+import 'painters.dart';
+import 'services.dart';
 import 'sudoku_game.dart';
 import 'technique_solver.dart';
 import 'variant_engine.dart';
@@ -422,9 +422,80 @@ class Particle {
   double get opacity => life / maxLife;
 }
 
+/// Emoji glyphs rasterised once and reused for every frame they appear in.
+///
+/// Painting a particle as text costs a [TextPainter] layout per glyph per
+/// frame; painting a cached image is a blit. The themes between them use only a
+/// couple of dozen distinct emoji, so the cache is small and permanently warm.
+class _EmojiGlyph {
+  const _EmojiGlyph(this.image, this.size);
+
+  final ui.Image image;
+  final Size size; // logical, i.e. the image's size divided by the DPR
+
+  static const double fontSize = 20;
+  static final Map<String, _EmojiGlyph> _cache = {};
+
+  /// Rasterised at [dpr] so the glyph stays sharp on high-density screens; the
+  /// key includes the ratio because moving to another display changes it.
+  static _EmojiGlyph? of(String emoji, double dpr) {
+    final key = '$emoji@${dpr.toStringAsFixed(2)}';
+    final hit = _cache[key];
+    if (hit != null) return hit;
+
+    final painter = TextPainter(
+      text: TextSpan(
+        text: emoji,
+        style: const TextStyle(fontSize: fontSize),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    if (painter.width <= 0 || painter.height <= 0) return null;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(dpr);
+    painter.paint(canvas, Offset.zero);
+    final picture = recorder.endRecording();
+    final glyph = _EmojiGlyph(
+      picture.toImageSync(
+        (painter.width * dpr).ceil(),
+        (painter.height * dpr).ceil(),
+      ),
+      Size(painter.width, painter.height),
+    );
+    picture.dispose();
+    painter.dispose();
+    return _cache[key] = glyph;
+  }
+}
+
+/// Alpha applied by multiplying the glyph's own alpha — unlike [Opacity] (or a
+/// bare `canvas.saveLayer`) this needs no offscreen layer, which is what made
+/// the old widget-per-particle overlay expensive. Quantised into buckets so the
+/// filters can be built once instead of per particle per frame.
+class _ParticleFade {
+  static const int _buckets = 32;
+  static final List<ColorFilter> _filters = List.generate(
+    _buckets + 1,
+    (i) => ColorFilter.mode(
+      Color.fromRGBO(255, 255, 255, i / _buckets),
+      BlendMode.modulate,
+    ),
+  );
+
+  static ColorFilter of(double opacity) =>
+      _filters[(opacity.clamp(0.0, 1.0) * _buckets).round()];
+}
+
 /// A self-contained particle overlay. It owns its own animation controller and
-/// only ticks (and rebuilds) while particles are alive, so it never forces the
-/// rest of the screen to rebuild at 60fps.
+/// only ticks while particles are alive, so it never forces the rest of the
+/// screen to rebuild at 60fps.
+///
+/// Ticks repaint but do not *rebuild*: the particle list is mutated in place
+/// and a [ValueNotifier] drives [CustomPaint] straight to the paint phase,
+/// skipping the widget, element and layout work that a `setState` per frame
+/// used to redo for every live particle.
 class ParticleLayer extends StatefulWidget {
   const ParticleLayer({super.key});
 
@@ -436,6 +507,11 @@ class ParticleLayerState extends State<ParticleLayer>
     with SingleTickerProviderStateMixin {
   final List<Particle> _particles = [];
   final math.Random _random = math.Random();
+
+  /// Bumped once per tick; the painter listens to it instead of us calling
+  /// `setState`.
+  final ValueNotifier<int> _frame = ValueNotifier<int>(0);
+
   late final AnimationController _controller;
   Timer? _spawnTimer;
   Size _size = Size.zero;
@@ -461,12 +537,13 @@ class ParticleLayerState extends State<ParticleLayer>
       _controller.stop();
       return;
     }
-    setState(() {
-      _particles.removeWhere((p) => p.isDead);
-      for (final p in _particles) {
-        p.update();
-      }
-    });
+    _particles.removeWhere((p) => p.isDead);
+    for (final p in _particles) {
+      p.update();
+    }
+    // Bump before the stop check below, so emptying the list still paints one
+    // final (clear) frame rather than leaving the last particles on screen.
+    _frame.value++;
     if (_particles.isEmpty) _controller.stop();
   }
 
@@ -509,37 +586,72 @@ class ParticleLayerState extends State<ParticleLayer>
   void dispose() {
     _spawnTimer?.cancel();
     _controller.dispose();
+    _frame.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         _size = constraints.biggest;
         return IgnorePointer(
           child: RepaintBoundary(
-            child: Stack(
-              children: [
-                for (final p in _particles)
-                  Positioned(
-                    left: p.x,
-                    top: p.y,
-                    child: Opacity(
-                      opacity: (p.opacity * 0.7).clamp(0.0, 1.0),
-                      child: Text(
-                        p.emoji,
-                        style: const TextStyle(fontSize: 20),
-                      ),
-                    ),
-                  ),
-              ],
+            child: CustomPaint(
+              size: constraints.biggest,
+              painter: _ParticlePainter(
+                particles: _particles,
+                devicePixelRatio: dpr,
+                repaint: _frame,
+              ),
             ),
           ),
         );
       },
     );
   }
+}
+
+class _ParticlePainter extends CustomPainter {
+  _ParticlePainter({
+    required this.particles,
+    required this.devicePixelRatio,
+    required Listenable repaint,
+  }) : super(repaint: repaint);
+
+  /// Mutated in place by [ParticleLayerState]; never copied per frame.
+  final List<Particle> particles;
+  final double devicePixelRatio;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (particles.isEmpty) return;
+    final paint = Paint()..filterQuality = FilterQuality.low;
+    for (final p in particles) {
+      final glyph = _EmojiGlyph.of(p.emoji, devicePixelRatio);
+      if (glyph == null) continue;
+      paint.colorFilter = _ParticleFade.of(p.opacity * 0.7);
+      canvas.drawImageRect(
+        glyph.image,
+        Rect.fromLTWH(
+          0,
+          0,
+          glyph.image.width.toDouble(),
+          glyph.image.height.toDouble(),
+        ),
+        Rect.fromLTWH(p.x, p.y, glyph.size.width, glyph.size.height),
+        paint,
+      );
+    }
+  }
+
+  // Repaints are driven by the `repaint` listenable above, not by the painter
+  // being rebuilt — the particle list keeps the same identity throughout.
+  @override
+  bool shouldRepaint(_ParticlePainter old) =>
+      old.devicePixelRatio != devicePixelRatio ||
+      !identical(old.particles, particles);
 }
 
 // ---------------------------------------------------------------------------
@@ -1453,7 +1565,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   Expanded(
-                                    flex: 1,
                                     child: Center(
                                       child: Text(
                                         theme.particleEmojis.join(' '),
@@ -2733,7 +2844,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     const SizedBox(height: 16),
                     _buildControls(scheme),
                     const SizedBox(height: 10),
-                    Expanded(flex: 1, child: _buildNumberPad(isTablet)),
+                    Expanded(child: _buildNumberPad(isTablet)),
                   ],
                 ),
               ),
@@ -3025,7 +3136,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final value = g.grid[row][col];
     final conflict = _cellConflict(row, col);
 
-    Widget cell = DragTarget<int>(
+    final Widget cell = DragTarget<int>(
       onAcceptWithDetails: (details) => _placeValue(row, col, details.data),
       onWillAcceptWithDetails: (_) => true,
       builder: (context, candidateData, rejectedData) {
@@ -3190,87 +3301,86 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 padding: EdgeInsets.zero,
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
-                  childAspectRatio: 1,
                   crossAxisSpacing: spacing,
                   mainAxisSpacing: spacing,
                 ),
                 itemCount: maxNumber,
-            itemBuilder: (context, index) {
-              final number = index + 1;
-              return Draggable<int>(
-                data: number,
-                // Anchor the feedback's centre on the pointer so the floating
-                // tile stays under the finger/cursor (and thus over the
-                // highlighted target cell). The default
-                // childDragAnchorStrategy offsets it by the grab point within
-                // the number-pad cell, which is sized independently of the
-                // fixed-size feedback and pushed it off-cursor.
-                dragAnchorStrategy: (draggable, context, position) =>
-                    Offset(buttonSize / 2, buttonSize / 2),
-                feedback: Container(
-                  width: buttonSize,
-                  height: buttonSize,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
+                itemBuilder: (context, index) {
+                  final number = index + 1;
+                  return Draggable<int>(
+                    data: number,
+                    // Anchor the feedback's centre on the pointer so the floating
+                    // tile stays under the finger/cursor (and thus over the
+                    // highlighted target cell). The default
+                    // childDragAnchorStrategy offsets it by the grab point within
+                    // the number-pad cell, which is sized independently of the
+                    // fixed-size feedback and pushed it off-cursor.
+                    dragAnchorStrategy: (draggable, context, position) =>
+                        Offset(buttonSize / 2, buttonSize / 2),
+                    feedback: Container(
+                      width: buttonSize,
+                      height: buttonSize,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$number',
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        fontWeight: FontWeight.bold,
-                        color: primary,
+                      child: Center(
+                        child: Text(
+                          '$number',
+                          style: TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.bold,
+                            color: primary,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                childWhenDragging: ElevatedButton(
-                  onPressed: null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.5),
-                    foregroundColor: primary.withValues(alpha: 0.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                    childWhenDragging: ElevatedButton(
+                      onPressed: null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.5),
+                        foregroundColor: primary.withValues(alpha: 0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 4,
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Text(
+                        '$number',
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                    elevation: 4,
-                    padding: EdgeInsets.zero,
-                  ),
-                  child: Text(
-                    '$number',
-                    style: TextStyle(
-                      fontSize: fontSize,
-                      fontWeight: FontWeight.bold,
+                    child: ElevatedButton(
+                      onPressed: () => _inputNumber(number),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 8,
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Text(
+                        '$number',
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                child: ElevatedButton(
-                  onPressed: () => _inputNumber(number),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 8,
-                    padding: EdgeInsets.zero,
-                  ),
-                  child: Text(
-                    '$number',
-                    style: TextStyle(
-                      fontSize: fontSize,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              );
+                  );
                 },
               ),
             ),
@@ -3584,311 +3694,6 @@ class _ExplainGrid extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Grid painter
-// ---------------------------------------------------------------------------
-
-/// Draws Killer cages: a dashed inset border along each cage boundary and the
-/// cage sum in the top-left cell.
-class KillerCagePainter extends CustomPainter {
-  final List<KillerCage> cages;
-  final int gridDim;
-
-  KillerCagePainter(this.cages, this.gridDim);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cell = size.width / gridDim;
-    const inset = 4.0;
-    final paint = Paint()
-      ..color = Colors.black54
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    final cageOf = List.generate(gridDim, (_) => List.filled(gridDim, -1));
-    for (var i = 0; i < cages.length; i++) {
-      for (final c in cages[i].cells) {
-        cageOf[c[0]][c[1]] = i;
-      }
-    }
-    bool same(int r, int c, int idx) =>
-        r >= 0 && r < gridDim && c >= 0 && c < gridDim && cageOf[r][c] == idx;
-
-    for (var i = 0; i < cages.length; i++) {
-      for (final pos in cages[i].cells) {
-        final r = pos[0], c = pos[1];
-        final left = c * cell + inset;
-        final top = r * cell + inset;
-        final right = (c + 1) * cell - inset;
-        final bottom = (r + 1) * cell - inset;
-        if (!same(r - 1, c, i)) {
-          _dash(canvas, Offset(left, top), Offset(right, top), paint);
-        }
-        if (!same(r + 1, c, i)) {
-          _dash(canvas, Offset(left, bottom), Offset(right, bottom), paint);
-        }
-        if (!same(r, c - 1, i)) {
-          _dash(canvas, Offset(left, top), Offset(left, bottom), paint);
-        }
-        if (!same(r, c + 1, i)) {
-          _dash(canvas, Offset(right, top), Offset(right, bottom), paint);
-        }
-      }
-      final anchor = cages[i].labelCell;
-      final tp = TextPainter(
-        text: TextSpan(
-          text: '${cages[i].sum}',
-          style: TextStyle(
-            fontSize: cell * 0.24,
-            color: Colors.black87,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(
-        canvas,
-        Offset(anchor[1] * cell + inset + 1, anchor[0] * cell + inset),
-      );
-    }
-  }
-
-  void _dash(Canvas canvas, Offset a, Offset b, Paint paint) {
-    const dash = 4.0, gap = 3.0;
-    final total = (b - a).distance;
-    if (total == 0) return;
-    final dir = (b - a) / total;
-    var d = 0.0;
-    while (d < total) {
-      final start = a + dir * d;
-      final end = a + dir * math.min(d + dash, total);
-      canvas.drawLine(start, end, paint);
-      d += dash + gap;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant KillerCagePainter old) =>
-      old.cages != cages || old.gridDim != gridDim;
-}
-
-class SudokuGridPainter extends CustomPainter {
-  final int gridDim;
-  final List<List<int>> regions;
-  final bool jigsaw;
-
-  SudokuGridPainter(this.gridDim, this.regions, {this.jigsaw = false});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cellSize = size.width / gridDim;
-    if (jigsaw) {
-      _drawJigsawGrid(canvas, size, cellSize);
-    } else {
-      _drawStandardGrid(canvas, size, cellSize);
-    }
-  }
-
-  void _drawStandardGrid(Canvas canvas, Size size, double cellSize) {
-    final paint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = 1;
-    final thickPaint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = 3;
-
-    final box = boxDimensionsFor(gridDim);
-    final rowsPerBox = box[0];
-    final colsPerBox = box[1];
-
-    for (var i = 0; i <= gridDim; i++) {
-      canvas.drawLine(
-        Offset(i * cellSize, 0),
-        Offset(i * cellSize, size.height),
-        i % colsPerBox == 0 ? thickPaint : paint,
-      );
-      canvas.drawLine(
-        Offset(0, i * cellSize),
-        Offset(size.width, i * cellSize),
-        i % rowsPerBox == 0 ? thickPaint : paint,
-      );
-    }
-  }
-
-  void _drawJigsawGrid(Canvas canvas, Size size, double cellSize) {
-    final paint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    for (var row = 0; row < gridDim; row++) {
-      for (var col = 0; col < gridDim; col++) {
-        final region = regions[row][col];
-        final left = col * cellSize;
-        final top = row * cellSize;
-        final right = left + cellSize;
-        final bottom = top + cellSize;
-
-        if (row == 0 || regions[row - 1][col] != region) {
-          canvas.drawLine(Offset(left, top), Offset(right, top), paint);
-        }
-        if (row == gridDim - 1 || regions[row + 1][col] != region) {
-          canvas.drawLine(Offset(left, bottom), Offset(right, bottom), paint);
-        }
-        if (col == 0 || regions[row][col - 1] != region) {
-          canvas.drawLine(Offset(left, top), Offset(left, bottom), paint);
-        }
-        if (col == gridDim - 1 || regions[row][col + 1] != region) {
-          canvas.drawLine(Offset(right, top), Offset(right, bottom), paint);
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(SudokuGridPainter oldDelegate) =>
-      oldDelegate.gridDim != gridDim ||
-      oldDelegate.jigsaw != jigsaw ||
-      !identical(oldDelegate.regions, regions);
-}
-
-// ---------------------------------------------------------------------------
-// Puzzle cache + storage
-// ---------------------------------------------------------------------------
-
-class PuzzleCache {
-  static final PuzzleCache _instance = PuzzleCache._internal();
-  factory PuzzleCache() => _instance;
-  PuzzleCache._internal();
-
-  /// Cap on cached blueprints per size/shape key — bounds the persisted payload
-  /// (and avoids unbounded growth) while keeping plenty of variety.
-  static const int _maxPerKey = 25;
-
-  /// Bundled, read-only database (shipped as an asset) — never persisted back.
-  final Map<String, List<PuzzleBlueprint>> _bundled = {};
-
-  /// Player-generated blueprints, persisted to [SharedPreferences].
-  final Map<String, List<PuzzleBlueprint>> _cache = {};
-  final StorageService _storage = StorageService();
-  final math.Random _random = math.Random();
-
-  Future<void> initialize() async {
-    // 1. The bundled, pre-generated database (always present, so the first play
-    //    — and the web build — is instant, with no solving required).
-    await _loadBundled();
-    // 2. Anything the player generated and persisted locally.
-    for (final bp in await _storage.loadBlueprints()) {
-      _cache.putIfAbsent(_key(bp.gridSize, bp.gridShape), () => []).add(bp);
-    }
-    DebugLogger.log(
-      'Puzzle cache: ${_bundled.length} bundled + ${_cache.length} local types.',
-    );
-  }
-
-  Future<void> _loadBundled() async {
-    try {
-      final data = await rootBundle.loadString('assets/puzzles.json');
-      final List<dynamic> list = jsonDecode(data);
-      for (final json in list) {
-        final bp = PuzzleBlueprint.fromJson(json as Map<String, dynamic>);
-        _bundled.putIfAbsent(_key(bp.gridSize, bp.gridShape), () => []).add(bp);
-      }
-    } catch (e) {
-      DebugLogger.error('No bundled puzzle database.', e);
-    }
-  }
-
-  String _key(GridSize size, GridShape shape) => '${size.name}-${shape.name}';
-
-  PuzzleBlueprint? getRandom(GridSize size, GridShape shape) {
-    final key = _key(size, shape);
-    final pool = [...?_bundled[key], ...?_cache[key]];
-    if (pool.isEmpty) return null;
-    return pool[_random.nextInt(pool.length)];
-  }
-
-  Future<void> set(PuzzleBlueprint blueprint) async {
-    final list = _cache.putIfAbsent(
-      _key(blueprint.gridSize, blueprint.gridShape),
-      () => [],
-    );
-    list.add(blueprint);
-    if (list.length > _maxPerKey) {
-      list.removeRange(0, list.length - _maxPerKey); // drop oldest
-    }
-    // Persist only player-generated blueprints (the bundled DB ships with app).
-    await _storage.saveBlueprints(_cache.values.expand((l) => l).toList());
-  }
-}
-
-/// Stores the puzzle-blueprint cache in [SharedPreferences] (works on web,
-/// mobile and desktop alike).
-class StorageService {
-  static final StorageService _instance = StorageService._internal();
-  factory StorageService() => _instance;
-  StorageService._internal();
-
-  static const String _key = 'puzzle_blueprints';
-
-  Future<List<PuzzleBlueprint>> loadBlueprints() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final contents = prefs.getString(_key);
-      if (contents == null || contents.isEmpty) return [];
-      final List<dynamic> jsonList = jsonDecode(contents);
-      return jsonList
-          .map((json) => PuzzleBlueprint.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      DebugLogger.error('Failed to load blueprints.', e);
-      return [];
-    }
-  }
-
-  Future<void> saveBlueprints(List<PuzzleBlueprint> blueprints) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _key,
-        jsonEncode(blueprints.map((bp) => bp.toJson()).toList()),
-      );
-    } catch (e) {
-      DebugLogger.error('Failed to save blueprints.', e);
-    }
-  }
-}
-
-/// Persists [GameStats] in [SharedPreferences].
-class StatsService {
-  static final StatsService _instance = StatsService._internal();
-  factory StatsService() => _instance;
-  StatsService._internal();
-
-  static const String _key = 'game_stats';
-
-  Future<Map<String, dynamic>?> load() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final contents = prefs.getString(_key);
-      if (contents == null || contents.isEmpty) return null;
-      return jsonDecode(contents) as Map<String, dynamic>;
-    } catch (e) {
-      DebugLogger.error('Failed to load stats.', e);
-      return null;
-    }
-  }
-
-  Future<void> save(Map<String, dynamic> json) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key, jsonEncode(json));
-    } catch (e) {
-      DebugLogger.error('Failed to save stats.', e);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Admin (debug only): pre-generate puzzles into the cache
 // ---------------------------------------------------------------------------
 
@@ -3924,7 +3729,6 @@ class _AdminScreenState extends State<AdminScreen> {
           SudokuDifficulty.easy,
           size,
           shape,
-          timeout: const Duration(seconds: 5),
         );
         await PuzzleCache().set(
           PuzzleBlueprint(

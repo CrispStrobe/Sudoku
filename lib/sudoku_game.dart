@@ -281,12 +281,13 @@ class SudokuGame {
     });
 
     try {
-      isolate = await Isolate.spawn(
-        _generateIsolateEntry,
-        [resultPort.sendPort, difficulty, gridSize, gridShape, variant],
-        onError: errorPort.sendPort,
-        errorsAreFatal: true,
-      );
+      isolate = await Isolate.spawn(_generateIsolateEntry, [
+        resultPort.sendPort,
+        difficulty,
+        gridSize,
+        gridShape,
+        variant,
+      ], onError: errorPort.sendPort);
     } catch (e) {
       cleanup();
       rethrow;
@@ -316,7 +317,8 @@ class SudokuGame {
     if (grid.length != dim || grid.any((row) => row.length != dim)) {
       final cols = grid.isEmpty ? 0 : grid.first.length;
       throw FormatException(
-          '$what must be $dim×$dim but is ${grid.length}×$cols');
+        '$what must be $dim×$dim but is ${grid.length}×$cols',
+      );
     }
   }
 

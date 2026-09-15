@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sudoku/main.dart';
+import 'package:sudoku/services.dart';
 import 'package:sudoku/sudoku_game.dart';
 
 void main() {

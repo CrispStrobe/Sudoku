@@ -6,6 +6,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sudoku/about_screen.dart';
 import 'package:sudoku/l10n/app_localizations.dart';
 import 'package:sudoku/main.dart';
+import 'package:sudoku/painters.dart';
+import 'package:sudoku/services.dart';
 import 'package:sudoku/sudoku_game.dart';
 
 void main() {

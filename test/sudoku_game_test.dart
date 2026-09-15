@@ -428,8 +428,10 @@ void main() {
         () => SudokuGame.fromBlueprint(bad, SudokuDifficulty.easy),
         throwsA(isA<FormatException>()),
       );
-      expect(() => SudokuGame.fromBlueprint(bad, SudokuDifficulty.easy),
-          throwsA(isNot(isA<RangeError>())));
+      expect(
+        () => SudokuGame.fromBlueprint(bad, SudokuDifficulty.easy),
+        throwsA(isNot(isA<RangeError>())),
+      );
 
       final empty = PuzzleBlueprint(
         solutionGrid: const [],
@@ -437,8 +439,10 @@ void main() {
         gridSize: GridSize.standard,
         gridShape: GridShape.classic,
       );
-      expect(() => SudokuGame.fromBlueprint(empty, SudokuDifficulty.easy),
-          throwsA(isA<FormatException>()));
+      expect(
+        () => SudokuGame.fromBlueprint(empty, SudokuDifficulty.easy),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('fromState rejects mismatched solution/regions cleanly', () {
