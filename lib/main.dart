@@ -1885,6 +1885,12 @@ class _Stat {
 // Game screen
 // ---------------------------------------------------------------------------
 
+/// Number-pad metrics, shared between the height [_GameScreenState.build]
+/// reserves for the pad and the grid laid out inside it — computing them in two
+/// places is how the pad ends up sized for tiles it does not actually draw.
+const double _kPadSpacing = 8.0;
+const double _kPadPadding = 16.0;
+
 class GameScreen extends StatefulWidget {
   final SudokuDifficulty difficulty;
   final GridSize gridSize;
@@ -2824,28 +2830,58 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               Positioned.fill(child: ParticleLayer(key: _particleKey)),
               Padding(
                 padding: EdgeInsets.all(isTablet ? 24 : 16),
-                child: Column(
-                  children: [
-                    _buildStatusStrip(),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      flex: isTablet ? 3 : 2,
-                      child: Center(
-                        child: AnimatedBuilder(
-                          animation: _shakeAnimation,
-                          builder: (context, child) => Transform.translate(
-                            offset: Offset(_shakeAnimation.value, 0),
-                            child: child,
+                // A fixed flex split (3:1 on tablet, 2:1 on phone) starved the
+                // number pad on short viewports: its share worked out to a
+                // couple of dozen pixels per tile, so the digits shrank to the
+                // clamp floor and stopped being either legible or tappable,
+                // while the board sat centred in slack it could not use
+                // because maxGridSize caps it anyway. The pad's height is not
+                // a proportion of the screen — it is whatever its rows need at
+                // a sane tile size — so derive it, and let the board take the
+                // remainder.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final padCols = _padColumnsFor(constraints);
+                    final padRows = (game!.gridDim / padCols).ceil();
+                    // 44pt is Apple's minimum tap target; go a little above it
+                    // where there is room.
+                    final idealTile = isTablet ? 64.0 : 52.0;
+                    final wanted =
+                        padRows * idealTile +
+                        (padRows - 1) * _kPadSpacing +
+                        _kPadPadding * 2;
+                    // Never let the pad crowd out the board on a short window.
+                    final padHeight = math.min(
+                      wanted,
+                      constraints.maxHeight * 0.42,
+                    );
+
+                    return Column(
+                      children: [
+                        _buildStatusStrip(),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Center(
+                            child: AnimatedBuilder(
+                              animation: _shakeAnimation,
+                              builder: (context, child) => Transform.translate(
+                                offset: Offset(_shakeAnimation.value, 0),
+                                child: child,
+                              ),
+                              child: _buildSudokuGrid(isTablet, scheme),
+                            ),
                           ),
-                          child: _buildSudokuGrid(isTablet, scheme),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildControls(scheme),
-                    const SizedBox(height: 10),
-                    Expanded(child: _buildNumberPad(isTablet)),
-                  ],
+                        const SizedBox(height: 16),
+                        _buildControls(scheme),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: padHeight,
+                          child: _buildNumberPad(isTablet, padCols),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -3105,7 +3141,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       top: row * cellSize,
                       width: cellSize,
                       height: cellSize,
-                      child: _buildCell(row, col, isTablet, scheme),
+                      child: _buildCell(row, col, cellSize, scheme),
                     ),
                 if (widget.isKiller)
                   Positioned.fill(
@@ -3127,11 +3163,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Widget _buildCell(
     int row,
     int col,
-    bool isTablet,
+    double cellSize,
     EnvironmentalTheme scheme,
   ) {
     final g = game!;
     final isSelected = selectedRow == row && selectedCol == col;
+
+    // Scale the digit to the cell it actually occupies. This was
+    // `isTablet ? 28 : 20` — a binary derived from screen WIDTH, with no
+    // relation to the cell's height. The board is capped by whichever of its
+    // width or height is smaller, so on a short viewport a 9x9 cell lands near
+    // 29px while the digit stayed 28pt, and every row was clipped along its
+    // bottom edge. 0.62 leaves room for the 0.5px cell margin and the selected
+    // cell's 3px border without the glyph touching either.
+    final digitSize = (cellSize * 0.62).clamp(6.0, 48.0);
 
     final value = g.grid[row][col];
     final conflict = _cellConflict(row, col);
@@ -3162,16 +3207,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ),
             child: Center(
               child: value != 0
-                  ? Text(
-                      '$value',
-                      style: TextStyle(
-                        fontSize: isTablet ? 28 : 20,
-                        fontWeight: g.isOriginal[row][col]
-                            ? FontWeight.bold
-                            : FontWeight.w500,
-                        color: g.isOriginal[row][col]
-                            ? Colors.black
-                            : (conflict ? Colors.red.shade800 : scheme.primary),
+                  // scaleDown guarantees the glyph fits whatever the cell turns
+                  // out to be, even at grid sizes the ratio above does not
+                  // anticipate.
+                  ? FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '$value',
+                        style: TextStyle(
+                          fontSize: digitSize,
+                          fontWeight: g.isOriginal[row][col]
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: g.isOriginal[row][col]
+                              ? Colors.black
+                              : (conflict
+                                    ? Colors.red.shade800
+                                    : scheme.primary),
+                        ),
                       ),
                     )
                   : _buildNotes(g.notes[row][col], g.gridDim),
@@ -3252,14 +3305,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildNumberPad(bool isTablet) {
+  /// How many columns the number pad should use for [constraints].
+  ///
+  /// A hardcoded six wrapped 1-9 onto two rows even in landscape, where the
+  /// second row cost the board vertical space the layout had plenty of width
+  /// to absorb instead. On a viewport wider than it is tall, spread the digits
+  /// across as many columns as still leave a tappable (44pt) tile — usually a
+  /// single row — and hand the height back to the grid.
+  int _padColumnsFor(BoxConstraints constraints) {
+    final dim = game!.gridDim;
+    final innerWidth = constraints.maxWidth - _kPadPadding * 2;
+    final fitsByWidth = math.max(
+      1,
+      ((innerWidth + _kPadSpacing) / (44.0 + _kPadSpacing)).floor(),
+    );
+    final preferred = constraints.maxWidth > constraints.maxHeight
+        ? dim
+        : math.min(6, dim);
+    return math.min(dim, math.min(fitsByWidth, preferred));
+  }
+
+  Widget _buildNumberPad(bool isTablet, int crossAxisCount) {
     final maxNumber = game!.gridDim;
     final primary = GameStats.current.primary;
-    final crossAxisCount = math.min(6, maxNumber);
-    const spacing = 8.0;
+    const spacing = _kPadSpacing;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(_kPadPadding),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
@@ -3287,7 +3359,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           // the GridView into a scroll view that hid the digits.
           final tileSize = math.max(0.0, math.min(cellWidth, cellHeight));
           final buttonSize = tileSize;
-          final fontSize = (buttonSize * 0.4).clamp(12.0, 28.0);
+          // Proportional to the tile, with no floor that could exceed it: a
+          // `.clamp(12, 28)` floor pushed the digit past the height of a small
+          // tile, which is what left the numbers sitting off-centre and cut
+          // off. Every digit is additionally wrapped in a scaleDown FittedBox
+          // below, so overflow is impossible whatever the tile ends up being.
+          final fontSize = (buttonSize * 0.45).clamp(8.0, 32.0);
           final gridWidth =
               tileSize * crossAxisCount + spacing * (crossAxisCount - 1);
           final gridHeight = tileSize * rows + spacing * (rows - 1);
@@ -3332,12 +3409,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         ],
                       ),
                       child: Center(
-                        child: Text(
-                          '$number',
-                          style: TextStyle(
-                            fontSize: fontSize,
-                            fontWeight: FontWeight.bold,
-                            color: primary,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '$number',
+                            style: TextStyle(
+                              fontSize: fontSize,
+                              fontWeight: FontWeight.bold,
+                              color: primary,
+                            ),
                           ),
                         ),
                       ),
@@ -3353,11 +3433,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         elevation: 4,
                         padding: EdgeInsets.zero,
                       ),
-                      child: Text(
-                        '$number',
-                        style: TextStyle(
-                          fontSize: fontSize,
-                          fontWeight: FontWeight.bold,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$number',
+                          style: TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -3372,11 +3455,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         elevation: 8,
                         padding: EdgeInsets.zero,
                       ),
-                      child: Text(
-                        '$number',
-                        style: TextStyle(
-                          fontSize: fontSize,
-                          fontWeight: FontWeight.bold,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$number',
+                          style: TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
