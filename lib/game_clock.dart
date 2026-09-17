@@ -4,30 +4,36 @@ import 'package:flutter/foundation.dart';
 
 /// Owns the per-game timer and the [elapsed] notifier.
 ///
-/// Elapsed time accumulates one second per periodic tick rather than being
-/// read off a wall clock: it is deterministic under fake-async tests and
-/// matches the clock display's 1-second granularity. (Tradeoff: time spent
-/// with the app suspended mid-game is not counted — the previous
-/// wall-clock implementation would have jumped after resuming.)
+/// Elapsed time is read off the clock ([now], injectable for tests) at every
+/// one-second tick, so time the app spends suspended mid-game still counts —
+/// the next tick after resuming catches up to elapsed wall time.
 ///
 /// Extracted from GameScreen so the tick rule is enforced in one place: the
 /// periodic timer is cancelled in [dispose] BEFORE the notifier is disposed,
 /// so a tick can never fire on a disposed notifier (which throws in debug
 /// builds and was reachable by leaving the screen while a puzzle generated).
+/// All methods are safe no-ops after [dispose], so a late [start] from an
+/// async completion path cannot resurrect a disposed clock either.
 class GameClock {
+  /// Injectable clock source; defaults to the system time.
+  final DateTime Function() now;
+
   final ValueNotifier<Duration> elapsed = ValueNotifier(Duration.zero);
 
   Timer? _timer;
-  int _seconds = 0;
+  DateTime? _startTime;
+  bool _disposed = false;
+
+  GameClock({DateTime Function()? now}) : now = now ?? DateTime.now;
 
   /// Start (or restart) the clock; elapsed resets to zero.
   void start() {
+    if (_disposed) return;
     _timer?.cancel();
-    _seconds = 0;
+    _startTime = now();
     elapsed.value = Duration.zero;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _seconds++;
-      elapsed.value = Duration(seconds: _seconds);
+      elapsed.value = now().difference(_startTime!);
     });
   }
 
@@ -35,6 +41,8 @@ class GameClock {
   void stop() => _timer?.cancel();
 
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _timer?.cancel();
     _timer = null;
     elapsed.dispose();

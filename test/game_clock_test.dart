@@ -2,36 +2,38 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sudoku/game_clock.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  testWidgets('clock ticks while running and freezes after dispose', (
+  testWidgets('elapsed follows time, not number of delivered ticks', (
     tester,
   ) async {
-    final clock = GameClock();
+    var now = DateTime(2026);
+    final clock = GameClock(now: () => now);
+    addTearDown(clock.dispose);
+    clock.start();
+
+    now = now.add(const Duration(seconds: 30));
+    await tester.pump(const Duration(seconds: 1));
+    expect(clock.elapsed.value, const Duration(seconds: 30));
+
+    clock.stop();
+    now = now.add(const Duration(seconds: 10));
+    await tester.pump(const Duration(seconds: 1));
+    expect(clock.elapsed.value, const Duration(seconds: 30));
+
     clock.start();
     expect(clock.elapsed.value, Duration.zero);
-
-    await tester.pump(const Duration(seconds: 2));
+    now = now.add(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 1));
     expect(clock.elapsed.value, const Duration(seconds: 2));
-
-    clock.dispose();
-    // A periodic tick arriving after dispose must not throw and must not
-    // advance the disposed notifier.
-    await tester.pump(const Duration(seconds: 2));
-    expect(clock.elapsed.value, const Duration(seconds: 2));
+    clock.dispose(); // Flutter checks pending timers before addTearDown runs.
   });
 
-  testWidgets('restarting resets elapsed to zero', (tester) async {
+  testWidgets('a disposed clock ignores start/stop/dispose', (tester) async {
     final clock = GameClock();
-    clock.start();
-    await tester.pump(const Duration(seconds: 3));
-    expect(clock.elapsed.value, const Duration(seconds: 3));
-
-    clock.start();
-    expect(clock.elapsed.value, Duration.zero);
-
-    await tester.pump(const Duration(seconds: 1));
-    expect(clock.elapsed.value, const Duration(seconds: 1));
     clock.dispose();
+    clock.start(); // must be a no-op: no timer may be scheduled
+    clock.stop();
+    clock.dispose(); // idempotent
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.takeException(), isNull);
   });
 }

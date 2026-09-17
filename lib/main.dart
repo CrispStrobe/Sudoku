@@ -10,6 +10,7 @@ import 'about_screen.dart';
 import 'game_clock.dart';
 import 'l10n/app_localizations.dart';
 import 'painters.dart';
+import 'ready_puzzle.dart';
 import 'services.dart';
 import 'sudoku_game.dart';
 import 'technique_solver.dart';
@@ -18,6 +19,7 @@ import 'variant_engine.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await PuzzleCache().initialize();
+  await ReadyPuzzleCache().initialize();
   await GameStats.load();
   runApp(const SudokuApp());
 }
@@ -2811,10 +2813,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _initializeGame() async {
+    if (!mounted) return;
     try {
       setState(() => game = null);
 
       SudokuGame? built;
+      ReadyPuzzle? ready;
       _cages = const [];
       if (widget.isKiller) {
         // Killer is generated outside the bitmask engine (cage sums need the
@@ -2823,6 +2827,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           gridSize: widget.gridSize,
           difficulty: widget.difficulty,
         );
+        if (!mounted) return;
         _cages = puzzle.cages;
         built = SudokuGame.fromState(
           givens: puzzle.givens,
@@ -2842,18 +2847,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         );
       } else if (GameStats.useSavedPuzzles &&
           widget.variant == SudokuVariant.classic) {
-        // The cache holds only classic-rule boards; variants always generate.
-        final blueprint = PuzzleCache().getRandom(
+        ready = ReadyPuzzleCache().get(
           widget.gridSize,
           widget.gridShape,
+          widget.difficulty,
         );
-        if (blueprint != null) {
-          built = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
+        if (ready != null) {
+          built = ready.createGame();
+        } else {
+          final blueprint = PuzzleCache().getRandom(
+            widget.gridSize,
+            widget.gridShape,
+          );
+          if (blueprint != null) {
+            built = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
+          }
         }
       }
 
       if (built == null) {
         built = await _generatePuzzleWithRetries();
+        if (!mounted) return;
         // Cache the freshly generated solution so future plays are instant.
         if (GameStats.useSavedPuzzles &&
             widget.variant == SudokuVariant.classic) {
@@ -2875,12 +2889,32 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _startGameTimer();
       score = _calculateInitialScore();
       mistakes = 0;
-      _updateLogicRating();
+      if (ready != null) {
+        _logicRating = ready.rating;
+      } else {
+        _updateLogicRating();
+      }
       setState(() {});
+      if (ready == null &&
+          GameStats.useSavedPuzzles &&
+          widget.dailySeed == null &&
+          widget.variant == SudokuVariant.classic) {
+        unawaited(
+          ReadyPuzzleCache().add(
+            ReadyPuzzle.fromGame(
+              built,
+              widget.gridSize,
+              widget.gridShape,
+              rating: _logicRating,
+            ),
+          ),
+        );
+      }
     } catch (e, st) {
+      if (!mounted) return;
       DebugLogger.error('Generation failed; falling back to classic.', e, st);
       try {
-        game = kIsWeb
+        final SudokuGame fallback = kIsWeb
             ? SudokuGame.generate(
                 widget.difficulty,
                 widget.gridSize,
@@ -2892,6 +2926,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 GridShape.classic,
               );
         if (!mounted) return;
+        game = fallback;
+        _cages = const [];
         _startGameTimer();
         score = _calculateInitialScore();
         mistakes = 0;
