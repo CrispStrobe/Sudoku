@@ -8,6 +8,8 @@ import 'game_screen.dart';
 import 'game_stats.dart';
 import 'l10n/app_localizations.dart';
 import 'sudoku_game.dart';
+import 'saved_game.dart';
+import 'saved_game_service.dart';
 
 // ---------------------------------------------------------------------------
 // Home
@@ -39,6 +41,22 @@ class _HomeScreenState extends State<HomeScreen>
   /// `pumpAndSettle` in a test.
   static const int _maxSweeps = 3;
   int _sweeps = 0;
+  SavedGame? _savedGame;
+
+  Future<void> _refreshSavedGame() async {
+    final saved = await SavedGameService().load();
+    if (mounted) setState(() => _savedGame = saved);
+  }
+
+  Future<void> _resumeGame() async {
+    final saved = _savedGame;
+    if (saved == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => GameScreen.resume(saved)),
+    );
+    await _refreshSavedGame();
+  }
 
   @override
   void initState() {
@@ -54,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen>
           }
         });
     _sheen.forward();
+    _refreshSavedGame();
   }
 
   @override
@@ -83,6 +102,18 @@ class _HomeScreenState extends State<HomeScreen>
               child: Column(
                 children: [
                   _buildWordmarkHeader(context, l10n, scheme),
+                  if (_savedGame != null) ...[
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        key: const ValueKey('resume-game'),
+                        onPressed: _resumeGame,
+                        icon: const Icon(Icons.play_arrow),
+                        label: Text(l10n.homeResumeButton),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 22),
                   LayoutBuilder(
                     builder: (context, constraints) {
@@ -871,7 +902,7 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     ).then((_) {
-      if (mounted) setState(() {}); // refresh stats shown on home
+      _refreshSavedGame(); // refresh resume slot and stats
     });
   }
 
@@ -890,7 +921,7 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     ).then((_) {
-      if (mounted) setState(() {}); // refresh daily/stats shown on home
+      _refreshSavedGame(); // refresh resume slot and daily/stats
     });
   }
 
