@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sudoku_game.dart';
@@ -144,6 +145,8 @@ class ReadyPuzzleCache {
   static const int _maxPerKey = 8;
 
   final Map<String, List<ReadyPuzzle>> _local = {};
+  final Map<String, List<ReadyPuzzle>> _bundled = {};
+  final Map<String, ReadyPuzzle> _lastServed = {};
   Future<void>? _initializing;
   Future<void> _writes = Future<void>.value();
   final math.Random _random = math.Random();
@@ -152,9 +155,32 @@ class ReadyPuzzleCache {
       '${size.name}-${shape.name}-${d.name}';
 
   /// Load persisted puzzles. Idempotent.
-  Future<void> initialize() => _initializing ??= _load();
+  Future<void> initialize({bool loadBundle = true}) =>
+      _initializing ??= _load(loadBundle);
 
-  Future<void> _load() async {
+  Future<void> _load(bool loadBundle) async {
+    if (loadBundle) {
+      try {
+        final entries =
+            jsonDecode(await rootBundle.loadString('assets/ready_puzzles.json'))
+                as List<dynamic>;
+        for (final entry in entries) {
+          try {
+            final ready = ReadyPuzzle.fromJson(entry as Map<String, dynamic>);
+            _bundled
+                .putIfAbsent(
+                  _keyFor(ready.size, ready.shape, ready.difficulty),
+                  () => [],
+                )
+                .add(ready);
+          } catch (e) {
+            DebugLogger.error('Skipping invalid bundled puzzle.', e);
+          }
+        }
+      } catch (e) {
+        DebugLogger.error('Failed to load bundled ready puzzles.', e);
+      }
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final contents = prefs.getString(_key);
@@ -211,8 +237,12 @@ class ReadyPuzzleCache {
     GridShape shape,
     SudokuDifficulty difficulty,
   ) {
-    final pool = _local[_keyFor(size, shape, difficulty)];
-    if (pool == null || pool.isEmpty) return null;
-    return pool[_random.nextInt(pool.length)];
+    final key = _keyFor(size, shape, difficulty);
+    final pool = [...?_bundled[key], ...?_local[key]];
+    if (pool.isEmpty) return null;
+    if (pool.length > 1) pool.remove(_lastServed[key]);
+    final ready = pool[_random.nextInt(pool.length)];
+    _lastServed[key] = ready;
+    return ready;
   }
 }

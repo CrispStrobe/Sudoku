@@ -81,8 +81,8 @@ void main() {
       );
 
       final reloaded = ReadyPuzzleCache.isolated();
-      await reloaded.initialize();
-      await reloaded.initialize(); // idempotent
+      await reloaded.initialize(loadBundle: false);
+      await reloaded.initialize(loadBundle: false); // idempotent
       expect(
         reloaded.get(GridSize.small, GridShape.classic, SudokuDifficulty.easy),
         isNull,
