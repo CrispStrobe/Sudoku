@@ -1,5 +1,5 @@
-• A new look for the home screen, with a redesigned title and at-a-glance stats.
-• 26 achievements across four tiers, with progress tracking and three new themes to unlock.
-• Fixes digits being cut off or shrunk on the board and the number pad at some screen sizes.
-• Fixes a crash that could occur when resuming a saved game.
-• Smoother background animation, lighter on the battery.
+• Resume: verlasse ein Rätsel jederzeit und setze es genau dort fort, wo du aufgehört hast.
+• Der erste Start jeder Größe, Form und Schwierigkeit ist dank mitgelieferter Rätsel jetzt nahezu sofort.
+• Smarthinweise und die Schritt-für-Schritt-Lösung sind jetzt vollständig auf Deutsch verfügbar.
+• Ein Bestätigungsdialog schützt dein gespeichertes Spiel vor dem Überschreiben.
+• Schnellerer Start bei großen 12×12-Brettern.
