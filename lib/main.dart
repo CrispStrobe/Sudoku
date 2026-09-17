@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'about_screen.dart';
+import 'game_clock.dart';
 import 'l10n/app_localizations.dart';
 import 'painters.dart';
 import 'services.dart';
@@ -2718,9 +2719,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int get _maxHints => maxHintsFor(widget.difficulty);
   int get _hintsRemaining => math.max(0, _maxHints - hintsUsed);
 
-  Timer? _gameTimer;
-  final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
-  DateTime? _startTime;
+  final GameClock _clock = GameClock();
 
   bool _hasError = false;
 
@@ -2749,16 +2748,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _startGameTimer() {
-    _gameTimer?.cancel();
-    _startTime = DateTime.now();
-    _elapsed.value = Duration.zero;
-    _gameTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _elapsed.value = DateTime.now().difference(_startTime!);
-    });
-  }
+  void _startGameTimer() => _clock.start();
 
-  void _stopGameTimer() => _gameTimer?.cancel();
+  void _stopGameTimer() => _clock.stop();
 
   String _formatDuration(Duration d) => formatClock(d);
 
@@ -2876,12 +2868,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       }
 
+      // The await above may have resolved after this State was disposed
+      // (left screen mid-generation): commit nothing to the disposed clock.
+      if (!mounted) return;
       game = built;
       _startGameTimer();
       score = _calculateInitialScore();
       mistakes = 0;
       _updateLogicRating();
-      if (mounted) setState(() {});
+      setState(() {});
     } catch (e, st) {
       DebugLogger.error('Generation failed; falling back to classic.', e, st);
       try {
@@ -2896,11 +2891,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 widget.gridSize,
                 GridShape.classic,
               );
+        if (!mounted) return;
         _startGameTimer();
         score = _calculateInitialScore();
         mistakes = 0;
         _updateLogicRating();
-        if (mounted) setState(() {});
+        setState(() {});
       } catch (e2, st2) {
         DebugLogger.error('Fallback also failed.', e2, st2);
         if (mounted) {
@@ -2968,7 +2964,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _stopGameTimer();
-    _elapsed.dispose();
+    _clock.dispose();
     _pulseController.dispose();
     _shakeController.dispose();
     super.dispose();
@@ -3328,7 +3324,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (g == null) return;
     _stopGameTimer();
 
-    final completionTime = _elapsed.value;
+    final completionTime = _clock.elapsed.value;
     final timeBonus = math.max(0, 300 - completionTime.inSeconds ~/ 2);
     final finalScore = score + timeBonus;
 
@@ -3571,7 +3567,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: ValueListenableBuilder<Duration>(
-                valueListenable: _elapsed,
+                valueListenable: _clock.elapsed,
                 builder: (context, value, _) => Text(
                   _formatDuration(value),
                   style: const TextStyle(
