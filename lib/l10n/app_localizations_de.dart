@@ -62,6 +62,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get homeAboutLicenses => 'Über & Lizenzen';
 
   @override
+  String get homeResumeButton => 'Fortsetzen';
+
+  @override
   String get classicSheetTitle => 'Klassisches Sudoku';
 
   @override

@@ -99,14 +99,11 @@ class _ExplainScreenState extends State<ExplainScreen> {
     final scheme = widget.scheme;
     // The step that produced the current board (null at the start position).
     final step = _index == 0 ? null : _result.steps[_index - 1];
-    // step.explanation is dynamically-composed solver prose — left in English
-    // for now (see appstore/plan notes: localizing it means restructuring the
-    // solver to emit structured reasoning data instead of pre-written text).
     final caption = step == null
         ? (_stepCount == 0
               ? l10n.explainNoStepsNeeded
               : l10n.explainStartingPosition(_stepCount))
-        : step.explanation;
+        : step.explanationFor(l10n.localeName);
     final atEnd = _index >= _stepCount;
     final finishedNote = atEnd && _stepCount > 0
         ? (_result.solved

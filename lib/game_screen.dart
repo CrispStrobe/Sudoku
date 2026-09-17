@@ -14,6 +14,8 @@ import 'painters.dart';
 import 'particles.dart';
 import 'ready_puzzle.dart';
 import 'services.dart';
+import 'saved_game.dart';
+import 'saved_game_service.dart';
 import 'sudoku_game.dart';
 import 'technique_labels.dart';
 import 'technique_solver.dart';
@@ -34,6 +36,7 @@ class GameScreen extends StatefulWidget {
   final GridSize gridSize;
   final GridShape gridShape;
   final GameMode gameMode;
+  final SavedGame? savedGame;
 
   /// When set, the board is generated deterministically from this seed (the
   /// daily puzzle) instead of pulled from the random cache/generator.
@@ -51,10 +54,21 @@ class GameScreen extends StatefulWidget {
     required this.gridSize,
     required this.gridShape,
     required this.gameMode,
+    this.savedGame,
     this.dailySeed,
     this.dailyKey,
     this.variant = SudokuVariant.classic,
   });
+
+  GameScreen.resume(SavedGame saved, {super.key})
+    : savedGame = saved,
+      difficulty = saved.difficulty,
+      gridSize = saved.size,
+      gridShape = saved.shape,
+      gameMode = saved.gameMode,
+      dailySeed = saved.dailySeed,
+      dailyKey = saved.dailyKey,
+      variant = saved.variant;
 
   bool get isDaily => dailyKey != null;
   bool get isDiagonal => variant == SudokuVariant.x;
@@ -64,7 +78,8 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   SudokuGame? game;
   int? selectedRow;
   int? selectedCol;
@@ -99,10 +114,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final GameClock _clock = GameClock();
 
   bool _hasError = false;
+  bool _finished = false;
+  bool _background = false;
+  bool _explaining = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _background =
+        WidgetsBinding.instance.lifecycleState != null &&
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
     _initializeAnimations();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initializeGame());
   }
@@ -125,9 +147,54 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _startGameTimer() => _clock.start();
+  void _startGameTimer({Duration initialElapsed = Duration.zero}) {
+    _clock.start(initialElapsed: initialElapsed);
+    if (_background || _explaining || _finished) _clock.stop();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final wasBackground = _background;
+    _background = state != AppLifecycleState.resumed;
+    if (_background) {
+      _stopGameTimer();
+      _saveGame();
+    } else if (wasBackground && !_finished && !_explaining && game != null) {
+      _startGameTimer(initialElapsed: _clock.elapsed.value);
+    }
+  }
+
+  void _finishRun() {
+    _finished = true;
+    _stopGameTimer();
+    unawaited(SavedGameService().clear());
+  }
 
   void _stopGameTimer() => _clock.stop();
+
+  void _saveGame() {
+    final g = game;
+    if (g == null || _finished) return;
+    unawaited(
+      SavedGameService().save(
+        SavedGame.capture(
+          game: g,
+          size: widget.gridSize,
+          shape: widget.gridShape,
+          gameMode: widget.gameMode,
+          elapsed: _clock.currentElapsed,
+          score: score,
+          mistakes: mistakes,
+          hintsUsed: hintsUsed,
+          dailySeed: widget.dailySeed,
+          dailyKey: widget.dailyKey,
+          rating: _logicRating,
+          cages: _cages,
+          notesMode: _notesMode,
+        ),
+      ),
+    );
+  }
 
   String _formatDuration(Duration d) => formatClock(d);
 
@@ -189,6 +256,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   Future<void> _initializeGame() async {
     if (!mounted) return;
+    final saved = widget.savedGame;
+    if (saved != null && game == null) {
+      game = saved.createGame();
+      score = saved.score;
+      mistakes = saved.mistakes;
+      hintsUsed = saved.hintsUsed;
+      _cages = saved.cages;
+      _logicRating = saved.rating;
+      _notesMode = saved.notesMode;
+      _startGameTimer(initialElapsed: saved.elapsed);
+      setState(() {});
+      return;
+    }
+    _finished = false;
     try {
       setState(() => game = null);
 
@@ -270,6 +351,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _updateLogicRating();
       }
       setState(() {});
+      _saveGame();
       if (ready == null &&
           GameStats.useSavedPuzzles &&
           widget.dailySeed == null &&
@@ -308,6 +390,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         mistakes = 0;
         _updateLogicRating();
         setState(() {});
+        _saveGame();
       } catch (e2, st2) {
         DebugLogger.error('Fallback also failed.', e2, st2);
         if (mounted) {
@@ -374,7 +457,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stopGameTimer();
+    _saveGame();
     _clock.dispose();
     _pulseController.dispose();
     _shakeController.dispose();
@@ -399,6 +484,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (selectedRow == null || selectedCol == null) return;
     if (_notesMode) {
       setState(() => game?.toggleNote(selectedRow!, selectedCol!, number));
+      _saveGame();
     } else {
       _placeValue(selectedRow!, selectedCol!, number);
     }
@@ -409,7 +495,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   /// when [SudokuGame.isSolved] holds.
   void _placeValue(int row, int col, int number) {
     final g = game;
-    if (g == null || g.isOriginal[row][col]) return;
+    if (g == null || _finished || g.isOriginal[row][col]) return;
     final wasValid =
         g.isValidMove(row, col, number) &&
         _killerPlacementValid(row, col, number);
@@ -426,6 +512,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
     if (_isWon()) _completeGame();
+    _saveGame();
   }
 
   /// The cage containing (row,col), or null (always null off the Killer variant).
@@ -481,6 +568,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _clearCell() {
     if (selectedRow != null && selectedCol != null) {
       setState(() => game?.clearCell(selectedRow!, selectedCol!));
+      _saveGame();
     }
   }
 
@@ -491,10 +579,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         selectedRow = cell[0];
         selectedCol = cell[1];
       });
+      _saveGame();
     }
   }
 
-  void _toggleNotesMode() => setState(() => _notesMode = !_notesMode);
+  void _toggleNotesMode() {
+    setState(() => _notesMode = !_notesMode);
+    _saveGame();
+  }
 
   void _showHint() {
     if (_hintsRemaining == 0) {
@@ -552,14 +644,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   },
                 ),
               ),
-              // hint.title / hint.description are dynamically-composed solver
-              // prose — left in English for now (see plan notes on
-              // technique_solver.dart / sudoku_game.dart scope).
               for (final hint in perCell)
                 Card(
                   child: ListTile(
-                    title: Text(hint.title),
-                    subtitle: Text(hint.description),
+                    title: Text(hint.titleFor(l10n.localeName)),
+                    subtitle: Text(hint.descriptionFor(l10n.localeName)),
                     trailing: Text(
                       hint.penalty > 0 ? l10n.penaltyLabel(hint.penalty) : '',
                       style: const TextStyle(
@@ -615,7 +704,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(techniqueLabel(context, step.technique)),
-        content: Text(step.explanation),
+        content: Text(step.explanationFor(l10n.localeName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -653,6 +742,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     });
     if (_isWon()) _completeGame();
+    _saveGame();
   }
 
   void _showHintConfirmation(SmartHint hint) {
@@ -662,7 +752,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(hint.title),
+        title: Text(hint.titleFor(l10n.localeName)),
         content: Text(l10n.useHintConfirm(hint.penalty)),
         actions: [
           TextButton(
@@ -706,12 +796,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     });
     if (_isWon()) _completeGame();
+    _saveGame();
   }
 
   void _completeGame() {
     final g = game;
-    if (g == null) return;
-    _stopGameTimer();
+    if (g == null || _finished) return;
+    _finishRun();
 
     final completionTime = _clock.elapsed.value;
     final timeBonus = math.max(0, 300 - completionTime.inSeconds ~/ 2);
@@ -808,7 +899,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   /// The player has used up their mistake allowance. End the run, break the
   /// streak, and offer a retry of the same board or a return to the menu.
   void _gameOver() {
-    _stopGameTimer();
+    if (_finished) return;
+    _finishRun();
     GameStats.currentStreak = 0;
     GameStats.gamesLost++;
     GameStats.save(); // persist the broken streak + loss count
@@ -873,7 +965,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _notesMode = false;
       score = _calculateInitialScore();
     });
+    _finished = false;
     _startGameTimer();
+    _saveGame();
   }
 
   void _startNextLevel() {
@@ -888,6 +982,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _goToMainMenu() {
+    _stopGameTimer();
+    _saveGame();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -1201,10 +1297,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   /// Opens a step-by-step walkthrough that solves the current board with
   /// human techniques, explaining each deduction.
-  void _openExplain() {
+  Future<void> _openExplain() async {
     final g = game;
     if (g == null) return;
-    Navigator.push(
+    _explaining = true;
+    _stopGameTimer();
+    _saveGame();
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ExplainScreen(
@@ -1217,6 +1316,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+    if (!mounted) return;
+    _explaining = false;
+    if (!_finished) _startGameTimer(initialElapsed: _clock.elapsed.value);
   }
 
   Widget _circleButton({

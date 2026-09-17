@@ -194,6 +194,12 @@ abstract class AppLocalizations {
   /// **'About & Licenses'**
   String get homeAboutLicenses;
 
+  /// No description provided for @homeResumeButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get homeResumeButton;
+
   /// No description provided for @classicSheetTitle.
   ///
   /// In en, this message translates to:

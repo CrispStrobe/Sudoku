@@ -4,6 +4,8 @@ import 'dart:math' as math;
 
 import 'package:json_annotation/json_annotation.dart';
 
+import 'solve_localizations.dart';
+
 part 'sudoku_game.g.dart';
 
 // ---------------------------------------------------------------------------
@@ -173,8 +175,15 @@ class GenerationBudget {
 
 class SmartHint {
   final HintType type;
-  final String title;
-  final String description;
+  final String? _title;
+  final String? _description;
+  final SmartHintMessage? message;
+
+  String get title => titleFor('en');
+  String get description => descriptionFor('en');
+  String titleFor(String languageCode) => message?.title(languageCode) ?? _title!;
+  String descriptionFor(String languageCode) =>
+      message?.description(languageCode) ?? _description!;
   final int penalty;
 
   /// Solution payload: an `int` for single-answer hints, a `List<int>` for
@@ -183,11 +192,14 @@ class SmartHint {
 
   SmartHint({
     required this.type,
-    required this.title,
-    required this.description,
+    String? title,
+    String? description,
+    this.message,
     required this.penalty,
     this.data,
-  });
+  }) : assert(message != null || (title != null && description != null)),
+       _title = title,
+       _description = description;
 }
 
 // ---------------------------------------------------------------------------
@@ -1011,9 +1023,7 @@ class SudokuGame {
       return [
         SmartHint(
           type: HintType.conflict,
-          title: 'Cell Occupied',
-          description:
-              'This cell is already filled or is part of the original puzzle.',
+          message: SmartHintMessage.occupied,
           penalty: 0,
         ),
       ];
@@ -1024,10 +1034,7 @@ class SudokuGame {
       return [
         SmartHint(
           type: HintType.conflict,
-          title: 'Conflict Detected',
-          description:
-              'No number can legally go here. Check the row, column, or region '
-              'for a mistake.',
+          message: SmartHintMessage.conflict,
           penalty: 0,
         ),
       ];
@@ -1038,8 +1045,7 @@ class SudokuGame {
       hints.add(
         SmartHint(
           type: HintType.nakedSingle,
-          title: 'Only Choice (Naked Single)',
-          description: 'There is only one number that can fit in this cell.',
+          message: SmartHintMessage.nakedSingle,
           penalty: 25,
           data: possible.first,
         ),
@@ -1052,10 +1058,7 @@ class SudokuGame {
         hints.add(
           SmartHint(
             type: HintType.hiddenSingle,
-            title: 'Hidden Single',
-            description:
-                'This is the only cell in its row, column, or region where this '
-                'number can go.',
+            message: SmartHintMessage.hiddenSingle,
             penalty: 30,
             data: num,
           ),
@@ -1067,8 +1070,7 @@ class SudokuGame {
     hints.add(
       SmartHint(
         type: HintType.showPossible,
-        title: 'Show Possible Numbers',
-        description: 'Reveals every number that can legally go here.',
+        message: SmartHintMessage.showPossible,
         penalty: 15,
         data: possible,
       ),
@@ -1076,8 +1078,7 @@ class SudokuGame {
     hints.add(
       SmartHint(
         type: HintType.giveAnswer,
-        title: 'Give Answer',
-        description: 'Fills in the correct number.',
+        message: SmartHintMessage.giveAnswer,
         penalty: 50,
         data: solution[row][col],
       ),

@@ -1,4 +1,5 @@
 import 'sudoku_game.dart';
+import 'solve_localizations.dart';
 
 /// Ordered easiest -> hardest. `guess` means the puzzle needs more than the
 /// implemented logical techniques (treated as the hardest tier).
@@ -26,7 +27,16 @@ class SolveStep {
   final int? value;
 
   /// Human-readable description of the deduction.
-  final String explanation;
+  final String? _explanation;
+
+  /// Structured deduction for locale-aware UI rendering; null for legacy steps.
+  final SolveMessage? message;
+
+  /// English by default, preserving the original engine API.
+  String get explanation => explanationFor('en');
+
+  String explanationFor(String languageCode) =>
+      message?.localize(languageCode) ?? _explanation!;
 
   /// Candidate eliminations performed by this step, each `[row, col, value]`.
   /// Empty for placement steps.
@@ -36,9 +46,11 @@ class SolveStep {
     required this.technique,
     required this.cell,
     required this.value,
-    required this.explanation,
+    String? explanation,
+    this.message,
     this.eliminations = const [],
-  });
+  }) : assert(explanation != null || message != null),
+       _explanation = explanation;
 }
 
 class TechniqueSolveResult {
@@ -308,8 +320,7 @@ class TechniqueSolver {
             technique: Technique.nakedSingle,
             cell: [r, c],
             value: v,
-            explanation:
-                'R${r + 1}C${c + 1} has only one candidate ($v) — naked single.',
+            message: NakedSingleMessage(r, c, v),
           );
         }
       }
@@ -321,7 +332,6 @@ class TechniqueSolver {
 
   SolveStep? _hiddenSingle() {
     final units = _allUnits();
-    final names = _unitNames();
     for (var u = 0; u < units.length; u++) {
       final unit = units[u];
       for (var v = 1; v <= _dim; v++) {
@@ -340,9 +350,12 @@ class TechniqueSolver {
             technique: Technique.hiddenSingle,
             cell: only,
             value: v,
-            explanation:
-                'R${only[0] + 1}C${only[1] + 1} is the only cell in '
-                '${names[u]} that can be $v — hidden single.',
+            message: HiddenSingleMessage(
+              only[0],
+              only[1],
+              v,
+              _unitDescriptor(u),
+            ),
           );
         }
       }
@@ -350,18 +363,13 @@ class TechniqueSolver {
     return null;
   }
 
-  List<String> _unitNames() {
-    final names = <String>[];
-    for (var r = 0; r < _dim; r++) {
-      names.add('row ${r + 1}');
-    }
-    for (var c = 0; c < _dim; c++) {
-      names.add('column ${c + 1}');
-    }
-    for (var id = 0; id < _dim; id++) {
-      names.add('region ${id + 1}');
-    }
-    return names;
+  SolveUnit _unitDescriptor(int u) {
+    if (u < _dim) return SolveUnit(SolveUnitKind.row, u);
+    if (u < 2 * _dim) return SolveUnit(SolveUnitKind.column, u - _dim);
+    if (u < 3 * _dim) return SolveUnit(SolveUnitKind.region, u - 2 * _dim);
+    return SolveUnit(
+      u == 3 * _dim ? SolveUnitKind.mainDiagonal : SolveUnitKind.antiDiagonal,
+    );
   }
 
   // --- Technique 3: Locked candidates -----------------------------------
@@ -398,9 +406,13 @@ class TechniqueSolver {
               technique: Technique.lockedCandidates,
               cell: [elims.first[0], elims.first[1]],
               value: null,
-              explanation:
-                  'In region ${id + 1}, $v only appears in row ${row + 1} '
-                  '(pointing); removed $v from that row outside the region.',
+              message: LockedCandidatesMessage(
+                value: v,
+                region: id,
+                line: row,
+                isRow: true,
+                pointing: true,
+              ),
               eliminations: elims,
             );
           }
@@ -421,10 +433,13 @@ class TechniqueSolver {
               technique: Technique.lockedCandidates,
               cell: [elims.first[0], elims.first[1]],
               value: null,
-              explanation:
-                  'In region ${id + 1}, $v only appears in column '
-                  '${col + 1} (pointing); removed $v from that column outside '
-                  'the region.',
+              message: LockedCandidatesMessage(
+                value: v,
+                region: id,
+                line: col,
+                isRow: false,
+                pointing: true,
+              ),
               eliminations: elims,
             );
           }
@@ -459,9 +474,13 @@ class TechniqueSolver {
               technique: Technique.lockedCandidates,
               cell: [elims.first[0], elims.first[1]],
               value: null,
-              explanation:
-                  'In row ${r + 1}, $v is confined to region ${id + 1} '
-                  '(claiming); removed $v from the rest of that region.',
+              message: LockedCandidatesMessage(
+                value: v,
+                region: id,
+                line: r,
+                isRow: true,
+                pointing: false,
+              ),
               eliminations: elims,
             );
           }
@@ -490,9 +509,13 @@ class TechniqueSolver {
               technique: Technique.lockedCandidates,
               cell: [elims.first[0], elims.first[1]],
               value: null,
-              explanation:
-                  'In column ${c + 1}, $v is confined to region ${id + 1} '
-                  '(claiming); removed $v from the rest of that region.',
+              message: LockedCandidatesMessage(
+                value: v,
+                region: id,
+                line: c,
+                isRow: false,
+                pointing: false,
+              ),
               eliminations: elims,
             );
           }
@@ -506,7 +529,6 @@ class TechniqueSolver {
 
   SolveStep? _nakedPair() {
     final units = _allUnits();
-    final names = _unitNames();
     for (var u = 0; u < units.length; u++) {
       final unit = units[u];
       final twos = <List<int>>[];
@@ -538,10 +560,12 @@ class TechniqueSolver {
                 technique: Technique.nakedPair,
                 cell: [elims.first[0], elims.first[1]],
                 value: null,
-                explanation:
-                    'R${a[0] + 1}C${a[1] + 1} and R${b[0] + 1}C${b[1] + 1} '
-                    'form a naked pair (${pair[0]},${pair[1]}) in ${names[u]}; '
-                    'removed those from the rest of the unit.',
+                message: SubsetMessage(
+                  kind: SubsetKind.nakedPair,
+                  cells: [a, b],
+                  candidates: pair,
+                  unit: _unitDescriptor(u),
+                ),
                 eliminations: elims,
               );
             }
@@ -556,7 +580,6 @@ class TechniqueSolver {
 
   SolveStep? _nakedTriple() {
     final units = _allUnits();
-    final names = _unitNames();
     for (var u = 0; u < units.length; u++) {
       final unit = units[u];
       // Candidate cells: 2 or 3 candidates (subsets of a potential triple).
@@ -596,11 +619,12 @@ class TechniqueSolver {
                 technique: Technique.nakedTriple,
                 cell: [elims.first[0], elims.first[1]],
                 value: null,
-                explanation:
-                    'R${a[0] + 1}C${a[1] + 1}, R${b[0] + 1}C${b[1] + 1} and '
-                    'R${cc[0] + 1}C${cc[1] + 1} form a naked triple '
-                    '(${triple[0]},${triple[1]},${triple[2]}) in ${names[u]}; '
-                    'removed those from the rest of the unit.',
+                message: SubsetMessage(
+                  kind: SubsetKind.nakedTriple,
+                  cells: [a, b, cc],
+                  candidates: triple,
+                  unit: _unitDescriptor(u),
+                ),
                 eliminations: elims,
               );
             }
@@ -615,7 +639,6 @@ class TechniqueSolver {
 
   SolveStep? _hiddenPair() {
     final units = _allUnits();
-    final names = _unitNames();
     for (var u = 0; u < units.length; u++) {
       final unit = units[u];
       // For each value, which cells (indices into unit) can hold it.
@@ -651,11 +674,12 @@ class TechniqueSolver {
                 technique: Technique.hiddenPair,
                 cell: [elims.first[0], elims.first[1]],
                 value: null,
-                explanation:
-                    'Values $v1 and $v2 are confined to R${c1[0] + 1}C'
-                    '${c1[1] + 1} and R${c2[0] + 1}C${c2[1] + 1} in '
-                    '${names[u]} (hidden pair); removed other candidates from '
-                    'those cells.',
+                message: SubsetMessage(
+                  kind: SubsetKind.hiddenPair,
+                  cells: [c1, c2],
+                  candidates: [v1, v2],
+                  unit: _unitDescriptor(u),
+                ),
                 eliminations: elims,
               );
             }
@@ -700,10 +724,14 @@ class TechniqueSolver {
                 technique: Technique.xWing,
                 cell: [elims.first[0], elims.first[1]],
                 value: null,
-                explanation:
-                    'X-wing on $v: rows ${r1 + 1} and ${r2 + 1} confine it to '
-                    'columns ${c1 + 1} and ${c2 + 1}; removed $v from those '
-                    'columns in other rows.',
+                message: XWingMessage(
+                  value: v,
+                  row1: r1,
+                  row2: r2,
+                  col1: c1,
+                  col2: c2,
+                  rowBased: true,
+                ),
                 eliminations: elims,
               );
             }
@@ -740,10 +768,14 @@ class TechniqueSolver {
                 technique: Technique.xWing,
                 cell: [elims.first[0], elims.first[1]],
                 value: null,
-                explanation:
-                    'X-wing on $v: columns ${cc1 + 1} and ${cc2 + 1} confine '
-                    'it to rows ${rr1 + 1} and ${rr2 + 1}; removed $v from '
-                    'those rows in other columns.',
+                message: XWingMessage(
+                  value: v,
+                  row1: rr1,
+                  row2: rr2,
+                  col1: cc1,
+                  col2: cc2,
+                  rowBased: false,
+                ),
                 eliminations: elims,
               );
             }
