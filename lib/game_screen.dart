@@ -1,0 +1,1631 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'achievements.dart';
+import 'clock_format.dart';
+import 'explain_screen.dart';
+import 'game_clock.dart';
+import 'game_stats.dart';
+import 'l10n/app_localizations.dart';
+import 'painters.dart';
+import 'particles.dart';
+import 'ready_puzzle.dart';
+import 'services.dart';
+import 'sudoku_game.dart';
+import 'technique_labels.dart';
+import 'technique_solver.dart';
+import 'variant_engine.dart';
+
+// ---------------------------------------------------------------------------
+// Game screen
+// ---------------------------------------------------------------------------
+
+/// Number-pad metrics, shared between the height [_GameScreenState.build]
+/// reserves for the pad and the grid laid out inside it — computing them in two
+/// places is how the pad ends up sized for tiles it does not actually draw.
+const double _kPadSpacing = 8.0;
+const double _kPadPadding = 16.0;
+
+class GameScreen extends StatefulWidget {
+  final SudokuDifficulty difficulty;
+  final GridSize gridSize;
+  final GridShape gridShape;
+  final GameMode gameMode;
+
+  /// When set, the board is generated deterministically from this seed (the
+  /// daily puzzle) instead of pulled from the random cache/generator.
+  final int? dailySeed;
+
+  /// `YYYY-MM-DD` of the daily puzzle; non-null marks this as the daily run.
+  final String? dailyKey;
+
+  /// Rule variant (classic or Sudoku-X).
+  final SudokuVariant variant;
+
+  const GameScreen({
+    super.key,
+    required this.difficulty,
+    required this.gridSize,
+    required this.gridShape,
+    required this.gameMode,
+    this.dailySeed,
+    this.dailyKey,
+    this.variant = SudokuVariant.classic,
+  });
+
+  bool get isDaily => dailyKey != null;
+  bool get isDiagonal => variant == SudokuVariant.x;
+  bool get isKiller => variant == SudokuVariant.killer;
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+  SudokuGame? game;
+  int? selectedRow;
+  int? selectedCol;
+
+  late AnimationController _pulseController;
+  late AnimationController _shakeController;
+  late Animation<double> _pulseAnimation;
+  late Animation<double> _shakeAnimation;
+
+  final GlobalKey<ParticleLayerState> _particleKey =
+      GlobalKey<ParticleLayerState>();
+
+  int hintsUsed = 0;
+  int score = 1000;
+  int mistakes = 0;
+  bool _notesMode = false;
+
+  /// Difficulty of the current board as rated by the logical-technique solver
+  /// (distinct from the generation difficulty, which is hole-count based).
+  SudokuDifficulty? _logicRating;
+
+  /// Killer cages for the current board (empty unless the Killer variant).
+  List<KillerCage> _cages = const [];
+
+  /// Score cost of revealing the next logical step.
+  static const int _nextStepPenalty = 40;
+
+  int get _maxMistakes => maxMistakesFor(widget.difficulty);
+  int get _maxHints => maxHintsFor(widget.difficulty);
+  int get _hintsRemaining => math.max(0, _maxHints - hintsUsed);
+
+  final GameClock _clock = GameClock();
+
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAnimations();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeGame());
+  }
+
+  void _initializeAnimations() {
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _shakeController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _shakeAnimation = Tween<double>(begin: 0, end: 10).animate(
+      CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
+    );
+  }
+
+  void _startGameTimer() => _clock.start();
+
+  void _stopGameTimer() => _clock.stop();
+
+  String _formatDuration(Duration d) => formatClock(d);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_hasError && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _hasError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.failedToCreatePuzzle),
+            ),
+          );
+          _hasError = false;
+        }
+      });
+    }
+  }
+
+  Future<SudokuGame> _generatePuzzleWithRetries() async {
+    // The web has no Isolate.spawn, so generate inline on the main thread
+    // (bounded by the engine's internal budgets). A microtask yield lets the
+    // loading indicator paint first.
+    if (kIsWeb) {
+      await Future<void>.delayed(Duration.zero);
+      return SudokuGame.generate(
+        widget.difficulty,
+        widget.gridSize,
+        widget.gridShape,
+        variant: widget.variant,
+      );
+    }
+
+    const totalBudget = Duration(seconds: 24);
+    const maxAttempts = 3;
+    final stopwatch = Stopwatch()..start();
+    Object? lastError;
+    for (
+      var attempt = 1;
+      attempt <= maxAttempts && stopwatch.elapsed < totalBudget;
+      attempt++
+    ) {
+      try {
+        return await SudokuGame.create(
+          widget.difficulty,
+          widget.gridSize,
+          widget.gridShape,
+          timeout: const Duration(seconds: 12),
+          variant: widget.variant,
+        );
+      } catch (e) {
+        lastError = e;
+        DebugLogger.log('Generation attempt $attempt failed; retrying.');
+      }
+    }
+    throw TimeoutException('Failed to generate a puzzle: $lastError');
+  }
+
+  Future<void> _initializeGame() async {
+    if (!mounted) return;
+    try {
+      setState(() => game = null);
+
+      SudokuGame? built;
+      ReadyPuzzle? ready;
+      _cages = const [];
+      if (widget.isKiller) {
+        // Killer is generated outside the bitmask engine (cage sums need the
+        // CSP solver). Fast enough (~100ms) to run inline behind the spinner.
+        final puzzle = await VariantEngine.generateKiller(
+          gridSize: widget.gridSize,
+          difficulty: widget.difficulty,
+        );
+        if (!mounted) return;
+        _cages = puzzle.cages;
+        built = SudokuGame.fromState(
+          givens: puzzle.givens,
+          solution: puzzle.solution,
+          regions: puzzle.regions,
+          difficulty: widget.difficulty,
+          variant: SudokuVariant.killer,
+        );
+      } else if (widget.dailySeed != null) {
+        // Deterministic, cache-free generation so the daily board is identical
+        // for every player and every replay. 9×9 classic generates instantly.
+        built = SudokuGame.generate(
+          widget.difficulty,
+          widget.gridSize,
+          widget.gridShape,
+          seed: widget.dailySeed,
+        );
+      } else if (GameStats.useSavedPuzzles &&
+          widget.variant == SudokuVariant.classic) {
+        ready = ReadyPuzzleCache().get(
+          widget.gridSize,
+          widget.gridShape,
+          widget.difficulty,
+        );
+        if (ready != null) {
+          built = ready.createGame();
+        } else {
+          final blueprint = PuzzleCache().getRandom(
+            widget.gridSize,
+            widget.gridShape,
+          );
+          if (blueprint != null) {
+            built = SudokuGame.fromBlueprint(blueprint, widget.difficulty);
+          }
+        }
+      }
+
+      if (built == null) {
+        built = await _generatePuzzleWithRetries();
+        if (!mounted) return;
+        // Cache the freshly generated solution so future plays are instant.
+        if (GameStats.useSavedPuzzles &&
+            widget.variant == SudokuVariant.classic) {
+          await PuzzleCache().set(
+            PuzzleBlueprint(
+              solutionGrid: built.solution,
+              regions: built.regions,
+              gridSize: widget.gridSize,
+              gridShape: widget.gridShape,
+            ),
+          );
+        }
+      }
+
+      // The await above may have resolved after this State was disposed
+      // (left screen mid-generation): commit nothing to the disposed clock.
+      if (!mounted) return;
+      game = built;
+      _startGameTimer();
+      score = _calculateInitialScore();
+      mistakes = 0;
+      if (ready != null) {
+        _logicRating = ready.rating;
+      } else {
+        _updateLogicRating();
+      }
+      setState(() {});
+      if (ready == null &&
+          GameStats.useSavedPuzzles &&
+          widget.dailySeed == null &&
+          widget.variant == SudokuVariant.classic) {
+        unawaited(
+          ReadyPuzzleCache().add(
+            ReadyPuzzle.fromGame(
+              built,
+              widget.gridSize,
+              widget.gridShape,
+              rating: _logicRating,
+            ),
+          ),
+        );
+      }
+    } catch (e, st) {
+      if (!mounted) return;
+      DebugLogger.error('Generation failed; falling back to classic.', e, st);
+      try {
+        final SudokuGame fallback = kIsWeb
+            ? SudokuGame.generate(
+                widget.difficulty,
+                widget.gridSize,
+                GridShape.classic,
+              )
+            : await SudokuGame.create(
+                widget.difficulty,
+                widget.gridSize,
+                GridShape.classic,
+              );
+        if (!mounted) return;
+        game = fallback;
+        _cages = const [];
+        _startGameTimer();
+        score = _calculateInitialScore();
+        mistakes = 0;
+        _updateLogicRating();
+        setState(() {});
+      } catch (e2, st2) {
+        DebugLogger.error('Fallback also failed.', e2, st2);
+        if (mounted) {
+          setState(() => _hasError = true);
+        }
+      }
+    }
+  }
+
+  int _calculateInitialScore() {
+    var base = 500;
+    base += switch (widget.gridSize) {
+      GridSize.small => 200,
+      GridSize.medium => 400,
+      GridSize.large => 600,
+      GridSize.standard => 800,
+      GridSize.big => 1000,
+      GridSize.mega => 1200,
+    };
+    base += switch (widget.difficulty) {
+      SudokuDifficulty.easy => 100,
+      SudokuDifficulty.medium => 300,
+      SudokuDifficulty.hard => 500,
+      SudokuDifficulty.expert => 800,
+    };
+    if (widget.gridShape == GridShape.jigsaw) base += 200;
+    return base;
+  }
+
+  /// Rate the current board by the hardest human technique it requires. Cheap
+  /// (a few ms); recomputed whenever a new board is built.
+  void _updateLogicRating() {
+    final g = game;
+    // The technique solver doesn't model cage sums, so it can't rate Killer.
+    if (g == null || widget.isKiller) {
+      _logicRating = null;
+      return;
+    }
+    try {
+      _logicRating = TechniqueSolver(
+        g.grid,
+        g.regions,
+        diagonal: widget.isDiagonal,
+      ).solve().rating;
+    } catch (_) {
+      _logicRating = null;
+    }
+  }
+
+  /// Title-case difficulty label ("Easy", "Medium", ...) reusing the same
+  /// localized difficulty strings as the picker sheet (which are all-caps,
+  /// for buttons) rather than a separate set of ARB keys.
+  static String _ratingLabel(BuildContext context, SudokuDifficulty d) {
+    final l10n = AppLocalizations.of(context)!;
+    final upper = switch (d) {
+      SudokuDifficulty.easy => l10n.difficultyEasy,
+      SudokuDifficulty.medium => l10n.difficultyMedium,
+      SudokuDifficulty.hard => l10n.difficultyHard,
+      SudokuDifficulty.expert => l10n.difficultyExpert,
+    };
+    final lower = upper.toLowerCase();
+    return lower[0].toUpperCase() + lower.substring(1);
+  }
+
+  @override
+  void dispose() {
+    _stopGameTimer();
+    _clock.dispose();
+    _pulseController.dispose();
+    _shakeController.dispose();
+    super.dispose();
+  }
+
+  void _selectCell(int row, int col) {
+    setState(() {
+      if (selectedRow == row && selectedCol == col) {
+        selectedRow = null;
+        selectedCol = null;
+      } else {
+        selectedRow = row;
+        selectedCol = col;
+      }
+    });
+    _pulseController.forward().then((_) => _pulseController.reverse());
+  }
+
+  /// Number-pad tap: toggles a note in notes mode, otherwise places the value.
+  void _inputNumber(int number) {
+    if (selectedRow == null || selectedCol == null) return;
+    if (_notesMode) {
+      setState(() => game?.toggleNote(selectedRow!, selectedCol!, number));
+    } else {
+      _placeValue(selectedRow!, selectedCol!, number);
+    }
+  }
+
+  /// Places [number] at (row,col). Wrong (conflicting) moves are allowed — they
+  /// stay on the board (highlighted) and cost score; the puzzle is won only
+  /// when [SudokuGame.isSolved] holds.
+  void _placeValue(int row, int col, int number) {
+    final g = game;
+    if (g == null || g.isOriginal[row][col]) return;
+    final wasValid =
+        g.isValidMove(row, col, number) &&
+        _killerPlacementValid(row, col, number);
+    setState(() => g.setCell(row, col, number));
+    if (!wasValid) {
+      _shakeController.forward().then((_) => _shakeController.reverse());
+      setState(() {
+        score = math.max(0, score - 25);
+        mistakes++;
+      });
+      if (!GameStats.unlimitedMistakes && mistakes >= _maxMistakes) {
+        _gameOver();
+        return;
+      }
+    }
+    if (_isWon()) _completeGame();
+  }
+
+  /// The cage containing (row,col), or null (always null off the Killer variant).
+  KillerCage? _cageAt(int row, int col) {
+    for (final cage in _cages) {
+      if (cage.contains(row, col)) return cage;
+    }
+    return null;
+  }
+
+  /// True unless placing [number] would break (row,col)'s Killer cage (repeat
+  /// digit or sum overflow). Always true off the Killer variant.
+  bool _killerPlacementValid(int row, int col, int number) {
+    if (!widget.isKiller) return true;
+    final cage = _cageAt(row, col);
+    if (cage == null) return true;
+    final g = game!;
+    final seen = <int>{number};
+    var total = number, filled = 1;
+    for (final cell in cage.cells) {
+      if (cell[0] == row && cell[1] == col) continue;
+      final v = g.grid[cell[0]][cell[1]];
+      if (v == 0) continue;
+      filled++;
+      total += v;
+      if (!seen.add(v)) return false;
+    }
+    if (total > cage.sum) return false;
+    if (filled == cage.cells.length && total != cage.sum) return false;
+    return true;
+  }
+
+  /// Win condition: standard full-and-consistent, plus every cage satisfied
+  /// for Killer.
+  bool _isWon() {
+    final g = game;
+    if (g == null || !g.isSolved()) return false;
+    return !widget.isKiller || cagesSatisfied(_cages, g.grid);
+  }
+
+  /// Conflict highlight for a cell: standard conflicts, plus a Killer cage that
+  /// currently has a repeated digit or an over/wrong sum.
+  bool _cellConflict(int row, int col) {
+    final g = game!;
+    if (g.hasConflict(row, col)) return true;
+    if (widget.isKiller) {
+      final cage = _cageAt(row, col);
+      if (cage != null && cage.hasError(g.grid)) return true;
+    }
+    return false;
+  }
+
+  void _clearCell() {
+    if (selectedRow != null && selectedCol != null) {
+      setState(() => game?.clearCell(selectedRow!, selectedCol!));
+    }
+  }
+
+  void _undo() {
+    final cell = game?.undo();
+    if (cell != null) {
+      setState(() {
+        selectedRow = cell[0];
+        selectedCol = cell[1];
+      });
+    }
+  }
+
+  void _toggleNotesMode() => setState(() => _notesMode = !_notesMode);
+
+  void _showHint() {
+    if (_hintsRemaining == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.noHintsLeftSnackbar),
+        ),
+      );
+      return;
+    }
+    if (game != null) _showHintDialog();
+  }
+
+  void _showHintDialog() {
+    final l10n = AppLocalizations.of(context)!;
+    // A board-wide "next logical step" (works with no cell selected), plus the
+    // per-cell smart hints when a cell is selected.
+    final perCell = (selectedRow != null && selectedCol != null)
+        ? game!.getSmartHints(selectedRow!, selectedCol!)
+        : <SmartHint>[];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.lightbulb, color: Colors.orange),
+            const SizedBox(width: 10),
+            Text(l10n.smartHintsTitle),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Card(
+                color: GameStats.current.cellHighlight,
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.auto_awesome,
+                    color: Colors.deepPurple,
+                  ),
+                  title: Text(l10n.nextLogicalStepTitle),
+                  subtitle: Text(l10n.nextLogicalStepSubtitle),
+                  trailing: Text(
+                    l10n.penaltyLabel(_nextStepPenalty),
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showNextStepHint();
+                  },
+                ),
+              ),
+              // hint.title / hint.description are dynamically-composed solver
+              // prose — left in English for now (see plan notes on
+              // technique_solver.dart / sudoku_game.dart scope).
+              for (final hint in perCell)
+                Card(
+                  child: ListTile(
+                    title: Text(hint.title),
+                    subtitle: Text(hint.description),
+                    trailing: Text(
+                      hint.penalty > 0 ? l10n.penaltyLabel(hint.penalty) : '',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showHintConfirmation(hint);
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Compute the next logical deduction from the current board and present it.
+  void _showNextStepHint() {
+    final l10n = AppLocalizations.of(context)!;
+    final g = game;
+    if (g == null) return;
+    final step = TechniqueSolver(
+      g.grid,
+      g.regions,
+      diagonal: widget.isDiagonal,
+    ).nextStep();
+    if (step == null) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(l10n.noStepFoundTitle),
+          content: Text(l10n.noStepFoundBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.okButton),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    final isPlacement = step.value != null;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(techniqueLabel(context, step.technique)),
+        content: Text(step.explanation),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancelButton),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _applyNextStep(step);
+            },
+            child: Text(
+              isPlacement
+                  ? l10n.placeItButton(_nextStepPenalty)
+                  : l10n.gotItButton,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Charge a hint and apply [step] — placing its value (placement steps) or
+  /// just selecting the cell so the player can act on the explanation.
+  void _applyNextStep(SolveStep step) {
+    final g = game;
+    if (g == null) return;
+    setState(() {
+      hintsUsed++;
+      GameStats.totalHintsUsed++;
+      score = math.max(0, score - _nextStepPenalty);
+      selectedRow = step.cell[0];
+      selectedCol = step.cell[1];
+      if (step.value != null) {
+        g.setCell(step.cell[0], step.cell[1], step.value!);
+      }
+    });
+    if (_isWon()) _completeGame();
+  }
+
+  void _showHintConfirmation(SmartHint hint) {
+    if (hint.penalty == 0) return;
+    final l10n = AppLocalizations.of(context)!;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(hint.title),
+        content: Text(l10n.useHintConfirm(hint.penalty)),
+        actions: [
+          TextButton(
+            child: Text(l10n.cancelButton),
+            onPressed: () => Navigator.pop(context),
+          ),
+          ElevatedButton(
+            child: Text(l10n.confirmButton),
+            onPressed: () {
+              Navigator.pop(context);
+              _applyHint(hint);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _applyHint(SmartHint hint) {
+    final l10n = AppLocalizations.of(context)!;
+    final g = game;
+    if (g == null) return;
+    setState(() {
+      score = math.max(0, score - hint.penalty);
+      hintsUsed++;
+      GameStats.totalHintsUsed++;
+      switch (hint.type) {
+        case HintType.showPossible:
+          final numbers = (hint.data as List<int>).join(', ');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.possibleNumbersSnackbar(numbers))),
+          );
+          break;
+        case HintType.giveAnswer:
+        case HintType.nakedSingle:
+        case HintType.hiddenSingle:
+          g.setCell(selectedRow!, selectedCol!, hint.data as int);
+          break;
+        case HintType.conflict:
+          break;
+      }
+    });
+    if (_isWon()) _completeGame();
+  }
+
+  void _completeGame() {
+    final g = game;
+    if (g == null) return;
+    _stopGameTimer();
+
+    final completionTime = _clock.elapsed.value;
+    final timeBonus = math.max(0, 300 - completionTime.inSeconds ~/ 2);
+    final finalScore = score + timeBonus;
+
+    GameStats.totalPuzzlesSolved++;
+    if (completionTime < GameStats.bestTime) {
+      GameStats.bestTime = completionTime;
+    }
+    GameStats.currentStreak++;
+    if (GameStats.currentStreak > GameStats.longestStreak) {
+      GameStats.longestStreak = GameStats.currentStreak;
+    }
+    if (hintsUsed == 0 && widget.difficulty == SudokuDifficulty.hard) {
+      GameStats.unlockedAchievements.add('no_hints_hard');
+    }
+    GameStats.recordSolve(
+      difficulty: widget.difficulty,
+      variant: widget.variant,
+      size: widget.gridSize,
+      shape: widget.gridShape,
+      mistakes: mistakes,
+      hintsUsed: hintsUsed,
+    );
+    if (widget.isDaily && GameStats.lastDailyDate != widget.dailyKey) {
+      GameStats.lastDailyDate = widget.dailyKey;
+      GameStats.dailyCompletedCount++;
+    }
+    AchievementSystem.checkAchievements();
+    GameStats.save(); // persist solved count, streak, best time, unlocks
+
+    setState(() => score = finalScore);
+    _particleKey.currentState?.burst();
+    _showCompletionDialog(finalScore, completionTime, timeBonus);
+  }
+
+  void _showCompletionDialog(int finalScore, Duration time, int timeBonus) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = GameStats.current;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          widget.isDaily ? l10n.dailyCompleteTitle : l10n.completedTitle,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.scoreResult(finalScore),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            Text(l10n.timeResult(_formatDuration(time), timeBonus)),
+            if (_logicRating != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  l10n.logicRatingResult(_ratingLabel(context, _logicRating!)),
+                ),
+              ),
+            if (widget.isDaily)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(l10n.dailyComeBackNote),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _goToMainMenu();
+            },
+            child: Text(l10n.mainMenuButton),
+          ),
+          // The daily is one board per day — no "Next Puzzle".
+          if (!widget.isDaily)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _startNextLevel();
+              },
+              child: Text(l10n.nextPuzzleButton),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// The player has used up their mistake allowance. End the run, break the
+  /// streak, and offer a retry of the same board or a return to the menu.
+  void _gameOver() {
+    _stopGameTimer();
+    GameStats.currentStreak = 0;
+    GameStats.gamesLost++;
+    GameStats.save(); // persist the broken streak + loss count
+    _showGameOverDialog();
+  }
+
+  void _showGameOverDialog() {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = GameStats.current;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          l10n.gameOverTitle,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.reachedMistakesMessage(_maxMistakes),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(l10n.streakResetMessage, textAlign: TextAlign.center),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _goToMainMenu();
+            },
+            child: Text(l10n.mainMenuButton),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _retrySamePuzzle();
+            },
+            child: Text(l10n.tryAgainButton),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Replay the current board from its givens (no new generation).
+  void _retrySamePuzzle() {
+    final g = game;
+    if (g == null) return;
+    setState(() {
+      g.reset();
+      selectedRow = null;
+      selectedCol = null;
+      hintsUsed = 0;
+      mistakes = 0;
+      _notesMode = false;
+      score = _calculateInitialScore();
+    });
+    _startGameTimer();
+  }
+
+  void _startNextLevel() {
+    setState(() {
+      selectedRow = null;
+      selectedCol = null;
+      hintsUsed = 0;
+      mistakes = 0;
+      _notesMode = false;
+    });
+    _initializeGame();
+  }
+
+  void _goToMainMenu() {
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (game == null) {
+      return Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: GameStats.current.gradient,
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(color: Colors.white),
+                const SizedBox(height: 20),
+                Text(
+                  AppLocalizations.of(context)!.generatingPuzzle,
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth > 600;
+    final scheme = GameStats.current;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          '${widget.gridSize.name.toUpperCase()} '
+          '${widget.gridShape.name.toUpperCase()}',
+        ),
+        backgroundColor: scheme.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            onPressed: _goToMainMenu,
+            icon: const Icon(Icons.home),
+            tooltip: l10n.mainMenuTooltip,
+          ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                l10n.scoreLabel(score),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ValueListenableBuilder<Duration>(
+                valueListenable: _clock.elapsed,
+                builder: (context, value, _) => Text(
+                  _formatDuration(value),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: scheme.gradient,
+          ),
+        ),
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Positioned.fill(child: ParticleLayer(key: _particleKey)),
+              Padding(
+                padding: EdgeInsets.all(isTablet ? 24 : 16),
+                // A fixed flex split (3:1 on tablet, 2:1 on phone) starved the
+                // number pad on short viewports: its share worked out to a
+                // couple of dozen pixels per tile, so the digits shrank to the
+                // clamp floor and stopped being either legible or tappable,
+                // while the board sat centred in slack it could not use
+                // because maxGridSize caps it anyway. The pad's height is not
+                // a proportion of the screen — it is whatever its rows need at
+                // a sane tile size — so derive it, and let the board take the
+                // remainder.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final padCols = _padColumnsFor(constraints);
+                    final padRows = (game!.gridDim / padCols).ceil();
+                    // 44pt is Apple's minimum tap target; go a little above it
+                    // where there is room.
+                    final idealTile = isTablet ? 64.0 : 52.0;
+                    final wanted =
+                        padRows * idealTile +
+                        (padRows - 1) * _kPadSpacing +
+                        _kPadPadding * 2;
+                    // Never let the pad crowd out the board on a short window.
+                    final padHeight = math.min(
+                      wanted,
+                      constraints.maxHeight * 0.42,
+                    );
+
+                    return Column(
+                      children: [
+                        _buildStatusStrip(),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Center(
+                            child: AnimatedBuilder(
+                              animation: _shakeAnimation,
+                              builder: (context, child) => Transform.translate(
+                                offset: Offset(_shakeAnimation.value, 0),
+                                child: child,
+                              ),
+                              child: _buildSudokuGrid(isTablet, scheme),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildControls(scheme),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: padHeight,
+                          child: _buildNumberPad(isTablet, padCols),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Slim "Mistakes ✕ ✕ ○ ○ ○ (n/max)" strip above the grid. The pips fill in
+  /// as mistakes accrue and turn red on the final life so the lose condition is
+  /// visible at a glance.
+  /// The status row above the grid: the logic-rating pill (when known) beside
+  /// the mistakes strip. Wrapped in a scaleDown FittedBox so both fit on a
+  /// narrow phone without overflowing.
+  Widget _buildStatusStrip() {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_logicRating != null) ...[
+            _buildLogicPill(),
+            const SizedBox(width: 8),
+          ],
+          _buildMistakesIndicator(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogicPill() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Text(
+          AppLocalizations.of(
+            context,
+          )!.logicRatingPill(_ratingLabel(context, _logicRating!)),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMistakesIndicator() {
+    final unlimited = GameStats.unlimitedMistakes;
+    final atRisk = !unlimited && mistakes >= _maxMistakes - 1;
+    final accent = atRisk ? Colors.red.shade300 : Colors.white;
+    final l10n = AppLocalizations.of(context)!;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              l10n.mistakesLabel,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 10),
+            if (!unlimited)
+              for (var i = 0; i < _maxMistakes; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Icon(
+                    i < mistakes ? Icons.close : Icons.radio_button_unchecked,
+                    size: 15,
+                    color: i < mistakes ? accent : Colors.white54,
+                  ),
+                ),
+            const SizedBox(width: 8),
+            Text(
+              unlimited
+                  ? l10n.mistakesCountUnlimited(mistakes)
+                  : l10n.mistakesCount(mistakes, _maxMistakes),
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControls(EnvironmentalTheme scheme) {
+    final l10n = AppLocalizations.of(context)!;
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            // Logic hints don't model cage sums, so they're off for Killer.
+            onPressed: (!widget.isKiller && _hintsRemaining > 0)
+                ? _showHint
+                : null,
+            icon: const Icon(Icons.lightbulb),
+            label: Text(
+              widget.isKiller
+                  ? l10n.hintButtonLabel
+                  : (_hintsRemaining > 0
+                        ? l10n.hintButtonWithCount(_hintsRemaining)
+                        : l10n.noHintsLabel),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.grey.shade400,
+              disabledForegroundColor: Colors.white70,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _circleButton(
+          icon: Icons.edit,
+          tooltip: l10n.notesModeTooltip,
+          active: _notesMode,
+          activeColor: scheme.primary,
+          onPressed: _toggleNotesMode,
+        ),
+        const SizedBox(width: 8),
+        _circleButton(
+          icon: Icons.undo,
+          tooltip: l10n.undoTooltip,
+          onPressed: (game?.canUndo ?? false) ? _undo : null,
+        ),
+        const SizedBox(width: 8),
+        _circleButton(
+          icon: Icons.clear,
+          tooltip: l10n.eraseTooltip,
+          activeColor: Colors.red,
+          active: true,
+          onPressed: _clearCell,
+        ),
+        const SizedBox(width: 8),
+        _circleButton(
+          icon: Icons.school,
+          tooltip: l10n.explainSolveTooltip,
+          onPressed: (game == null || widget.isKiller) ? null : _openExplain,
+        ),
+      ],
+    );
+  }
+
+  /// Opens a step-by-step walkthrough that solves the current board with
+  /// human techniques, explaining each deduction.
+  void _openExplain() {
+    final g = game;
+    if (g == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExplainScreen(
+          grid: g.grid,
+          regions: g.regions,
+          gridDim: g.gridDim,
+          jigsaw: widget.gridShape == GridShape.jigsaw,
+          diagonal: widget.isDiagonal,
+          scheme: GameStats.current,
+        ),
+      ),
+    );
+  }
+
+  Widget _circleButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    bool active = false,
+    Color activeColor = Colors.white,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: active ? activeColor : Colors.white,
+          foregroundColor: active ? Colors.white : Colors.black87,
+          shape: const CircleBorder(),
+          padding: const EdgeInsets.all(12),
+        ),
+        child: Icon(icon),
+      ),
+    );
+  }
+
+  Widget _buildSudokuGrid(bool isTablet, EnvironmentalTheme scheme) {
+    final g = game!;
+    final gridDim = g.gridDim;
+    final maxGridSize = isTablet ? 450.0 : 320.0;
+
+    // Both width AND height must be consulted: the old version only read
+    // MediaQuery's screen width, so on a wide-but-height-constrained viewport
+    // (iPad, a resized browser window, landscape) the surrounding Expanded/
+    // Center would clamp the actual rendered box down, but the Positioned
+    // cells below were still placed using the un-clamped size — pushing the
+    // last row(s) outside the ClipRRect. Using LayoutBuilder's own
+    // constraints keeps the two in sync in both axes.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gridPixels = math.min(
+          maxGridSize,
+          math.min(constraints.maxWidth, constraints.maxHeight),
+        );
+        final cellSize = gridPixels / gridDim;
+
+        return Container(
+          width: gridPixels,
+          height: gridPixels,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              children: [
+                CustomPaint(
+                  size: Size(gridPixels, gridPixels),
+                  painter: SudokuGridPainter(
+                    g.gridDim,
+                    g.regions,
+                    jigsaw: widget.gridShape == GridShape.jigsaw,
+                  ),
+                ),
+                for (int row = 0; row < gridDim; row++)
+                  for (int col = 0; col < gridDim; col++)
+                    Positioned(
+                      left: col * cellSize,
+                      top: row * cellSize,
+                      width: cellSize,
+                      height: cellSize,
+                      child: _buildCell(row, col, cellSize, scheme),
+                    ),
+                if (widget.isKiller)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        size: Size(gridPixels, gridPixels),
+                        painter: KillerCagePainter(_cages, gridDim),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCell(
+    int row,
+    int col,
+    double cellSize,
+    EnvironmentalTheme scheme,
+  ) {
+    final g = game!;
+    final isSelected = selectedRow == row && selectedCol == col;
+
+    // Scale the digit to the cell it actually occupies. This was
+    // `isTablet ? 28 : 20` — a binary derived from screen WIDTH, with no
+    // relation to the cell's height. The board is capped by whichever of its
+    // width or height is smaller, so on a short viewport a 9x9 cell lands near
+    // 29px while the digit stayed 28pt, and every row was clipped along its
+    // bottom edge. 0.62 leaves room for the 0.5px cell margin and the selected
+    // cell's 3px border without the glyph touching either.
+    final digitSize = (cellSize * 0.62).clamp(6.0, 48.0);
+
+    final value = g.grid[row][col];
+    final conflict = _cellConflict(row, col);
+
+    final Widget cell = DragTarget<int>(
+      onAcceptWithDetails: (details) => _placeValue(row, col, details.data),
+      onWillAcceptWithDetails: (_) => true,
+      builder: (context, candidateData, rejectedData) {
+        final isHovered = candidateData.isNotEmpty;
+        return GestureDetector(
+          onTap: () => _selectCell(row, col),
+          child: Container(
+            margin: const EdgeInsets.all(0.5),
+            decoration: BoxDecoration(
+              color: isHovered
+                  ? scheme.accent.withValues(alpha: 0.7)
+                  : (conflict
+                        ? const Color(0xFFFFCDD2) // red tint for conflicts
+                        : _getCellColor(row, col, scheme)),
+              border: Border.all(
+                color: isSelected
+                    ? scheme.primary
+                    : (isHovered
+                          ? scheme.primary.withValues(alpha: 0.5)
+                          : Colors.transparent),
+                width: isSelected ? 3 : (isHovered ? 2 : 0),
+              ),
+            ),
+            child: Center(
+              child: value != 0
+                  // scaleDown guarantees the glyph fits whatever the cell turns
+                  // out to be, even at grid sizes the ratio above does not
+                  // anticipate.
+                  ? FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '$value',
+                        style: TextStyle(
+                          fontSize: digitSize,
+                          fontWeight: g.isOriginal[row][col]
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: g.isOriginal[row][col]
+                              ? Colors.black
+                              : (conflict
+                                    ? Colors.red.shade800
+                                    : scheme.primary),
+                        ),
+                      ),
+                    )
+                  : _buildNotes(g.notes[row][col], g.gridDim),
+            ),
+          ),
+        );
+      },
+    );
+
+    // Only the selected cell pulses, so only it is wrapped in an
+    // AnimatedBuilder — the rest of the grid stays static.
+    if (isSelected) {
+      return AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) =>
+            Transform.scale(scale: _pulseAnimation.value, child: child),
+        child: cell,
+      );
+    }
+    return cell;
+  }
+
+  Color _getCellColor(int row, int col, EnvironmentalTheme scheme) {
+    if (selectedRow == row && selectedCol == col) return scheme.accent;
+    if (selectedRow == row || selectedCol == col) return Colors.grey.shade200;
+
+    // Faint tint marks the two diagonals so the Sudoku-X constraint is visible.
+    if (widget.isDiagonal) {
+      final dim = game!.gridDim;
+      if (row == col || row + col == dim - 1) return const Color(0xFFEDE7F6);
+    }
+
+    final regionId = game!.regions[row][col];
+    if (widget.gridShape == GridShape.jigsaw) {
+      const colors = [
+        Color(0xFFFAFAFA),
+        Color(0xFFE3F2FD),
+        Color(0xFFE8F5E9),
+        Color(0xFFFFF3E0),
+        Color(0xFFF3E5F5),
+        Color(0xFFFFEBEE),
+      ];
+      return colors[regionId % colors.length];
+    }
+    if (regionId % 2 == 0) return scheme.cellHighlight;
+    return Colors.white;
+  }
+
+  /// Renders pencil-mark candidates as a compact grid inside an empty cell.
+  Widget _buildNotes(Set<int> notes, int gridDim) {
+    if (notes.isEmpty) return const SizedBox.shrink();
+    final perRow = math.sqrt(gridDim).ceil();
+    final sorted = notes.toList()..sort();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fontSize = (constraints.maxWidth / perRow) * 0.5;
+        return Padding(
+          padding: const EdgeInsets.all(1),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            children: [
+              for (final n in sorted)
+                SizedBox(
+                  width: constraints.maxWidth / perRow,
+                  child: Text(
+                    '$n',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: fontSize.clamp(6, 12),
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// How many columns the number pad should use for [constraints].
+  ///
+  /// A hardcoded six wrapped 1-9 onto two rows even in landscape, where the
+  /// second row cost the board vertical space the layout had plenty of width
+  /// to absorb instead. On a viewport wider than it is tall, spread the digits
+  /// across as many columns as still leave a tappable (44pt) tile — usually a
+  /// single row — and hand the height back to the grid.
+  int _padColumnsFor(BoxConstraints constraints) {
+    final dim = game!.gridDim;
+    final innerWidth = constraints.maxWidth - _kPadPadding * 2;
+    final fitsByWidth = math.max(
+      1,
+      ((innerWidth + _kPadSpacing) / (44.0 + _kPadSpacing)).floor(),
+    );
+    final preferred = constraints.maxWidth > constraints.maxHeight
+        ? dim
+        : math.min(6, dim);
+    return math.min(dim, math.min(fitsByWidth, preferred));
+  }
+
+  Widget _buildNumberPad(bool isTablet, int crossAxisCount) {
+    final maxNumber = game!.gridDim;
+    final primary = GameStats.current.primary;
+    const spacing = _kPadSpacing;
+
+    return Container(
+      padding: const EdgeInsets.all(_kPadPadding),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+      ),
+      // The number tiles must actually fit the available space and scale
+      // with it (previously buttonSize/fontSize only depended on the binary
+      // isTablet flag, completely disconnected from what GridView actually
+      // rendered — on a 4x4 board on a tablet that meant tiny digits in huge
+      // empty tiles, and on 12x12 boards, digits shrinking arbitrarily as
+      // more rows got squeezed into the same space). Deriving both from the
+      // real computed cell width keeps them proportionate on any device.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final rows = (maxNumber / crossAxisCount).ceil();
+          final cellWidth =
+              (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
+              crossAxisCount;
+          final cellHeight =
+              (constraints.maxHeight - spacing * (rows - 1)) / rows;
+          // Size the tiles to the SMALLER of the width- and height-derived
+          // dimensions so the pad always fits its box on any aspect ratio.
+          // Using width alone (childAspectRatio: 1 on a fixed column count)
+          // made the square tiles taller than the available height, turning
+          // the GridView into a scroll view that hid the digits.
+          final tileSize = math.max(0.0, math.min(cellWidth, cellHeight));
+          final buttonSize = tileSize;
+          // Proportional to the tile, with no floor that could exceed it: a
+          // `.clamp(12, 28)` floor pushed the digit past the height of a small
+          // tile, which is what left the numbers sitting off-centre and cut
+          // off. Every digit is additionally wrapped in a scaleDown FittedBox
+          // below, so overflow is impossible whatever the tile ends up being.
+          final fontSize = (buttonSize * 0.45).clamp(8.0, 32.0);
+          final gridWidth =
+              tileSize * crossAxisCount + spacing * (crossAxisCount - 1);
+          final gridHeight = tileSize * rows + spacing * (rows - 1);
+
+          return Center(
+            child: SizedBox(
+              width: gridWidth,
+              height: gridHeight,
+              child: GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: spacing,
+                  mainAxisSpacing: spacing,
+                ),
+                itemCount: maxNumber,
+                itemBuilder: (context, index) {
+                  final number = index + 1;
+                  return Draggable<int>(
+                    data: number,
+                    // Anchor the feedback's centre on the pointer so the floating
+                    // tile stays under the finger/cursor (and thus over the
+                    // highlighted target cell). The default
+                    // childDragAnchorStrategy offsets it by the grab point within
+                    // the number-pad cell, which is sized independently of the
+                    // fixed-size feedback and pushed it off-cursor.
+                    dragAnchorStrategy: (draggable, context, position) =>
+                        Offset(buttonSize / 2, buttonSize / 2),
+                    feedback: Container(
+                      width: buttonSize,
+                      height: buttonSize,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '$number',
+                            style: TextStyle(
+                              fontSize: fontSize,
+                              fontWeight: FontWeight.bold,
+                              color: primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    childWhenDragging: ElevatedButton(
+                      onPressed: null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.5),
+                        foregroundColor: primary.withValues(alpha: 0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 4,
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$number',
+                          style: TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () => _inputNumber(number),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 8,
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$number',
+                          style: TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
