@@ -294,7 +294,7 @@ class VariantEngine {
     return cages;
   }
 
-  /// Generate a uniquely-solvable Killer puzzle. Reuses [SudokuGame.generate]
+  /// Generate a uniquely-solvable Killer puzzle. Reuses [SudokuGame.generateBlueprint]
   /// for the base solution + regions, partitions the grid into connected cages,
   /// computes each cage sum from the solution, and verifies uniqueness via
   /// dart_csp. If a pure-cage puzzle is not unique, it re-rolls the partition a
@@ -311,15 +311,14 @@ class VariantEngine {
     final rng = math.Random(effectiveSeed);
 
     // Base full solution + box regions (reuse the existing engine).
-    final base = SudokuGame.generate(
-      difficulty,
+    final base = SudokuGame.generateBlueprint(
       gridSize,
       GridShape.classic,
       seed: effectiveSeed,
     );
-    final gridDim = base.gridDim;
-    final solution = base.solution.map((row) => List<int>.from(row)).toList();
-    final regions = base.regions.map((row) => List<int>.from(row)).toList();
+    final gridDim = gridDimensionFor(gridSize);
+    final solution = base.solutionGrid;
+    final regions = base.regions;
     final maxCageSize = _maxCageSizeFor(difficulty);
 
     final empty = List.generate(gridDim, (_) => List<int>.filled(gridDim, 0));

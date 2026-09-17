@@ -151,6 +151,22 @@ class PuzzleBlueprint {
   Map<String, dynamic> toJson() => _$PuzzleBlueprintToJson(this);
 }
 
+/// Limits for all uniqueness searches in one hole-digging pass.
+///
+/// Exhaustion keeps the last proven-unique puzzle, possibly with more clues
+/// than requested. Steps count recursive visits across *all* removal attempts;
+/// the elapsed-time limit is also checked inside recursion. Defaults retain the
+/// existing 2.5-second limit and leave ordinary seeded boards unchanged.
+class GenerationBudget {
+  final int maxSteps;
+  final Duration timeLimit;
+
+  const GenerationBudget({
+    this.maxSteps = 2000000,
+    this.timeLimit = const Duration(milliseconds: 2500),
+  }) : assert(maxSteps >= 0);
+}
+
 // ---------------------------------------------------------------------------
 // Smart hint
 // ---------------------------------------------------------------------------
@@ -218,9 +234,6 @@ class SudokuGame {
   /// Stack of reversible edits for [undo].
   final List<_UndoEntry> _history = [];
 
-  /// How long hole-digging may spend trying to preserve a unique solution.
-  static const Duration _digBudget = Duration(milliseconds: 2500);
-
   SudokuGame._(this.difficulty, {math.Random? rng})
     : _rng = rng ?? math.Random();
 
@@ -231,6 +244,7 @@ class SudokuGame {
     GridShape gridShape, {
     int? seed,
     SudokuVariant variant = SudokuVariant.classic,
+    GenerationBudget uniquenessBudget = const GenerationBudget(),
   }) {
     final game = SudokuGame._(
       difficulty,
@@ -238,7 +252,29 @@ class SudokuGame {
     );
     game.variant = variant;
     game._build(gridSize, gridShape);
+    game._puzzlify(uniquenessBudget);
     return game;
+  }
+
+  /// Generate only a complete classic-rule solution and its regions, without
+  /// digging holes or initializing gameplay. Uses the same seeded fill as
+  /// [SudokuGame.generate]; suitable for caches and Killer cage generation.
+  static PuzzleBlueprint generateBlueprint(
+    GridSize gridSize,
+    GridShape gridShape, {
+    int? seed,
+  }) {
+    final game = SudokuGame._(
+      SudokuDifficulty.easy,
+      rng: seed == null ? null : math.Random(seed),
+    );
+    game._build(gridSize, gridShape);
+    return PuzzleBlueprint(
+      solutionGrid: game.grid,
+      regions: game.regions,
+      gridSize: gridSize,
+      gridShape: gridShape,
+    );
   }
 
   /// Asynchronous generation in a dedicated background isolate with a hard
@@ -326,6 +362,7 @@ class SudokuGame {
     PuzzleBlueprint blueprint,
     SudokuDifficulty difficulty, {
     math.Random? rng,
+    GenerationBudget uniquenessBudget = const GenerationBudget(),
   }) {
     final game = SudokuGame._(difficulty, rng: rng);
     final dim = gridDimensionFor(blueprint.gridSize);
@@ -343,7 +380,7 @@ class SudokuGame {
       game.gridDim,
       (_) => List.filled(game.gridDim, false),
     );
-    game._puzzlify();
+    game._puzzlify(uniquenessBudget);
     return game;
   }
 
@@ -404,7 +441,6 @@ class SudokuGame {
       throw StateError('Failed to generate a complete $gridDim×$gridDim grid.');
     }
 
-    _puzzlify();
   }
 
   // --- Region layout -----------------------------------------------------
@@ -651,7 +687,7 @@ class SudokuGame {
 
   // --- Hole digging that preserves a unique solution ---------------------
 
-  void _puzzlify() {
+  void _puzzlify(GenerationBudget uniquenessBudget) {
     // Snapshot the full grid as the canonical solution.
     for (var r = 0; r < gridDim; r++) {
       for (var c = 0; c < gridDim; c++) {
@@ -659,7 +695,7 @@ class SudokuGame {
       }
     }
 
-    _digHoles(_cellsToRemove(difficulty));
+    _digHoles(_cellsToRemove(difficulty), uniquenessBudget);
 
     for (var r = 0; r < gridDim; r++) {
       for (var c = 0; c < gridDim; c++) {
@@ -688,8 +724,8 @@ class SudokuGame {
   }
 
   /// Remove up to [target] cells while keeping the solution unique. Bounded by
-  /// [_digBudget] so large/expert boards never hang.
-  void _digHoles(int target) {
+  /// a shared step/deadline budget, including each recursive search.
+  void _digHoles(int target, GenerationBudget limits) {
     final positions = <List<int>>[];
     for (var r = 0; r < gridDim; r++) {
       for (var c = 0; c < gridDim; c++) {
@@ -698,30 +734,30 @@ class SudokuGame {
     }
     positions.shuffle(_rng);
 
-    final stopwatch = Stopwatch()..start();
+    final budget = _SearchBudget(limits);
     var removed = 0;
     for (final pos in positions) {
-      if (removed >= target || stopwatch.elapsed > _digBudget) break;
+      if (removed >= target || budget.exhausted) break;
       final r = pos[0];
       final c = pos[1];
       final backup = grid[r][c];
       if (backup == 0) continue;
 
       grid[r][c] = 0;
-      if (_hasUniqueSolution()) {
+      if (_hasUniqueSolution(budget)) {
         removed++;
       } else {
         grid[r][c] = backup; // keep this clue
       }
     }
     DebugLogger.log(
-      'Dug $removed/$target holes in ${stopwatch.elapsedMilliseconds}ms.',
+      'Dug $removed/$target holes in ${budget.stopwatch.elapsedMilliseconds}ms.',
     );
   }
 
   /// True iff the current [grid] (with holes) has exactly one completion.
   /// Solves in place using bitmasks and fully restores the grid afterwards.
-  bool _hasUniqueSolution() {
+  bool _hasUniqueSolution(_SearchBudget budget) {
     final rowMask = List<int>.filled(gridDim, 0);
     final colMask = List<int>.filled(gridDim, 0);
     final regMask = List<int>.filled(gridDim, 0);
@@ -741,17 +777,21 @@ class SudokuGame {
         }
       }
     }
-    return _countSolutions(rowMask, colMask, regMask, diagMask, 0, 2) == 1;
+    return _countSolutions(rowMask, colMask, regMask, diagMask, 0, 2, budget) == 1;
   }
 
-  int _countSolutions(
+  // null means unknown: even one completion found before exhaustion does not
+  // prove uniqueness. Always unwind grid and masks before propagating null.
+  int? _countSolutions(
     List<int> rowMask,
     List<int> colMask,
     List<int> regMask,
     List<int> diagMask,
     int found,
     int limit,
+    _SearchBudget budget,
   ) {
+    if (!budget.visit()) return null;
     var br = -1, bc = -1, bestCount = gridDim + 2, bestAllowed = 0;
     final full = _fullMask;
     outer:
@@ -789,13 +829,14 @@ class SudokuGame {
       regMask[reg] |= bit;
       if (onMain) diagMask[0] |= bit;
       if (onAnti) diagMask[1] |= bit;
-      found = _countSolutions(
+      final result = _countSolutions(
         rowMask,
         colMask,
         regMask,
         diagMask,
         found,
         limit,
+        budget,
       );
       grid[br][bc] = 0;
       rowMask[br] &= ~bit;
@@ -803,6 +844,8 @@ class SudokuGame {
       regMask[reg] &= ~bit;
       if (onMain) diagMask[0] &= ~bit;
       if (onAnti) diagMask[1] &= ~bit;
+      if (result == null) return null;
+      found = result;
       if (found >= limit) return found; // early-out: not unique
     }
     return found;
@@ -1080,6 +1123,23 @@ class SudokuGame {
       }
     }
     return regionCount == 1;
+  }
+}
+
+/// One shared deadline and recursive-visit allowance for hole digging.
+class _SearchBudget {
+  _SearchBudget(this.limits);
+  final GenerationBudget limits;
+  final Stopwatch stopwatch = Stopwatch()..start();
+  int _steps = 0;
+
+  bool get exhausted =>
+      _steps >= limits.maxSteps || stopwatch.elapsed >= limits.timeLimit;
+
+  bool visit() {
+    if (exhausted) return false;
+    _steps++;
+    return true;
   }
 }
 
