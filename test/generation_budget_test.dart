@@ -33,27 +33,33 @@ void main() {
     expect(game.grid.expand((row) => row), contains(0));
   });
 
-  test('Killer generates cages without discarded classic hole digging', () async {
-    final messages = <String>[];
-    final puzzle = await runZoned(
-      () => VariantEngine.generateKiller(
-        gridSize: GridSize.small,
-        difficulty: SudokuDifficulty.expert,
-        seed: 42,
-      ),
-      zoneSpecification: ZoneSpecification(
-        print: (_, _, _, message) => messages.add(message),
-      ),
-    );
-    expect(messages.where((message) => message.contains('Dug ')), isEmpty);
-    expect(cagesSatisfied(puzzle.cages, puzzle.solution), isTrue);
-    expect(await VariantEngine.killerHasUniqueSolution(
-      gridDim: puzzle.gridDim,
-      regions: puzzle.regions,
-      cages: puzzle.cages,
-      givens: puzzle.givens,
-    ), isTrue);
-  });
+  test(
+    'Killer generates cages without discarded classic hole digging',
+    () async {
+      final messages = <String>[];
+      final puzzle = await runZoned(
+        () => VariantEngine.generateKiller(
+          gridSize: GridSize.small,
+          difficulty: SudokuDifficulty.expert,
+          seed: 42,
+        ),
+        zoneSpecification: ZoneSpecification(
+          print: (_, _, _, message) => messages.add(message),
+        ),
+      );
+      expect(messages.where((message) => message.contains('Dug ')), isEmpty);
+      expect(cagesSatisfied(puzzle.cages, puzzle.solution), isTrue);
+      expect(
+        await VariantEngine.killerHasUniqueSolution(
+          gridDim: puzzle.gridDim,
+          regions: puzzle.regions,
+          cages: puzzle.cages,
+          givens: puzzle.givens,
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('the recursive step allowance is shared across removal attempts', () {
     for (final steps in [2, 3, 4]) {
@@ -107,8 +113,11 @@ void main() {
         seed: 7,
         uniquenessBudget: GenerationBudget(maxSteps: steps),
       );
-      expect(countSolutions(game.grid, game.regions, 4), 1,
-          reason: 'step budget $steps');
+      expect(
+        countSolutions(game.grid, game.regions, 4),
+        1,
+        reason: 'step budget $steps',
+      );
       expect(isValidFullSolution(game.solution, game.regions, 4), isTrue);
       for (var r = 0; r < 4; r++) {
         for (var c = 0; c < 4; c++) {

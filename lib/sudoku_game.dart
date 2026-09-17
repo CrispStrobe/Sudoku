@@ -440,7 +440,6 @@ class SudokuGame {
     if (!solved) {
       throw StateError('Failed to generate a complete $gridDim×$gridDim grid.');
     }
-
   }
 
   // --- Region layout -----------------------------------------------------
@@ -777,7 +776,8 @@ class SudokuGame {
         }
       }
     }
-    return _countSolutions(rowMask, colMask, regMask, diagMask, 0, 2, budget) == 1;
+    return _countSolutions(rowMask, colMask, regMask, diagMask, 0, 2, budget) ==
+        1;
   }
 
   // null means unknown: even one completion found before exhaustion does not
