@@ -200,6 +200,24 @@ abstract class AppLocalizations {
   /// **'Resume'**
   String get homeResumeButton;
 
+  /// No description provided for @replaceSavedGameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace saved game?'**
+  String get replaceSavedGameTitle;
+
+  /// No description provided for @replaceSavedGameBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only one game can be saved. Starting a new game will replace your saved progress.'**
+  String get replaceSavedGameBody;
+
+  /// No description provided for @startNewGameButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Start new game'**
+  String get startNewGameButton;
+
   /// No description provided for @classicSheetTitle.
   ///
   /// In en, this message translates to:

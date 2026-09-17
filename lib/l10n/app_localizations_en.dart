@@ -64,6 +64,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeResumeButton => 'Resume';
 
   @override
+  String get replaceSavedGameTitle => 'Replace saved game?';
+
+  @override
+  String get replaceSavedGameBody =>
+      'Only one game can be saved. Starting a new game will replace your saved progress.';
+
+  @override
+  String get startNewGameButton => 'Start new game';
+
+  @override
   String get classicSheetTitle => 'Classic Sudoku';
 
   @override

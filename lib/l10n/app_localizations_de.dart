@@ -65,6 +65,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get homeResumeButton => 'Fortsetzen';
 
   @override
+  String get replaceSavedGameTitle => 'Gespeichertes Spiel ersetzen?';
+
+  @override
+  String get replaceSavedGameBody =>
+      'Es kann nur ein Spiel gespeichert werden. Ein neues Spiel ersetzt deinen gespeicherten Fortschritt.';
+
+  @override
+  String get startNewGameButton => 'Neues Spiel starten';
+
+  @override
   String get classicSheetTitle => 'Klassisches Sudoku';
 
   @override
@@ -370,10 +380,10 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get techniqueNakedSingle => 'Nacktes Single';
+  String get techniqueNakedSingle => 'Nackter Einer';
 
   @override
-  String get techniqueHiddenSingle => 'Verstecktes Single';
+  String get techniqueHiddenSingle => 'Versteckter Einer';
 
   @override
   String get techniqueLockedCandidates => 'Gesperrte Kandidaten';
@@ -382,7 +392,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get techniqueNakedPair => 'Nacktes Paar';
 
   @override
-  String get techniqueNakedTriple => 'Nackter Drilling';
+  String get techniqueNakedTriple => 'Nacktes Tripel';
 
   @override
   String get techniqueHiddenPair => 'Verstecktes Paar';

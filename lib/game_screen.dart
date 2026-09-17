@@ -615,7 +615,7 @@ class _GameScreenState extends State<GameScreen>
           children: [
             const Icon(Icons.lightbulb, color: Colors.orange),
             const SizedBox(width: 10),
-            Text(l10n.smartHintsTitle),
+            Expanded(child: Text(l10n.smartHintsTitle)),
           ],
         ),
         content: SingleChildScrollView(

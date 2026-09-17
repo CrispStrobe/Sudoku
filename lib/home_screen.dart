@@ -883,6 +883,48 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  bool _startingGame = false;
+
+  /// Check storage, not just the asynchronously refreshed Resume button.
+  /// Keep the old slot until the replacement board has actually been built.
+  Future<void> _openNewGame(GameScreen screen) async {
+    if (_startingGame) return;
+    _startingGame = true;
+    try {
+      final saved = await SavedGameService().load();
+      if (!mounted) return;
+      if (saved != null) {
+        final l10n = AppLocalizations.of(context)!;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            scrollable: true,
+            title: Text(l10n.replaceSavedGameTitle),
+            content: Text(l10n.replaceSavedGameBody),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(l10n.cancelButton),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(l10n.startNewGameButton),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || confirmed != true) return;
+      }
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(builder: (_) => screen),
+      );
+      if (mounted) await _refreshSavedGame();
+    } finally {
+      _startingGame = false;
+    }
+  }
+
   void _startGame(
     SudokuDifficulty difficulty,
     GridSize gridSize,
@@ -890,39 +932,29 @@ class _HomeScreenState extends State<HomeScreen>
     GameMode gameMode, {
     SudokuVariant variant = SudokuVariant.classic,
   }) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => GameScreen(
-          difficulty: difficulty,
-          gridSize: gridSize,
-          gridShape: gridShape,
-          gameMode: gameMode,
-          variant: variant,
-        ),
+    _openNewGame(
+      GameScreen(
+        difficulty: difficulty,
+        gridSize: gridSize,
+        gridShape: gridShape,
+        gameMode: gameMode,
+        variant: variant,
       ),
-    ).then((_) {
-      _refreshSavedGame(); // refresh resume slot and stats
-    });
+    );
   }
 
   void _startDaily() {
     final now = DateTime.now();
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => GameScreen(
-          difficulty: kDailyDifficulty,
-          gridSize: kDailyGridSize,
-          gridShape: kDailyGridShape,
-          gameMode: GameMode.classic,
-          dailySeed: dailySeed(now),
-          dailyKey: dailyDateKey(now),
-        ),
+    _openNewGame(
+      GameScreen(
+        difficulty: kDailyDifficulty,
+        gridSize: kDailyGridSize,
+        gridShape: kDailyGridShape,
+        gameMode: GameMode.classic,
+        dailySeed: dailySeed(now),
+        dailyKey: dailyDateKey(now),
       ),
-    ).then((_) {
-      _refreshSavedGame(); // refresh resume slot and daily/stats
-    });
+    );
   }
 
   void _showJigsawOptions() {

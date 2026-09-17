@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:sudoku/about_screen.dart';
 import 'package:sudoku/l10n/app_localizations.dart';
@@ -11,6 +12,8 @@ import 'package:sudoku/services.dart';
 import 'package:sudoku/sudoku_game.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets('Home screen renders title and game modes', (tester) async {
     await tester.pumpWidget(const SudokuApp());
 

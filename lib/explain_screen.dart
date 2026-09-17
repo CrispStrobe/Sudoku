@@ -142,46 +142,57 @@ class _ExplainScreenState extends State<ExplainScreen> {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: _ExplainGrid(
-                        board: _boards[_index],
-                        regions: widget.regions,
-                        gridDim: widget.gridDim,
-                        jigsaw: widget.jigsaw,
-                        diagonal: widget.diagonal,
-                        highlight: step?.cell,
-                        eliminations: step?.eliminations ?? const [],
-                        scheme: scheme,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
+                  child: SingleChildScrollView(
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (step != null)
-                          Text(
-                            techniqueLabel(context, step.technique),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: scheme.primary,
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: AspectRatio(
+                              aspectRatio: 1,
+                              child: _ExplainGrid(
+                                board: _boards[_index],
+                                regions: widget.regions,
+                                gridDim: widget.gridDim,
+                                jigsaw: widget.jigsaw,
+                                diagonal: widget.diagonal,
+                                highlight: step?.cell,
+                                eliminations: step?.eliminations ?? const [],
+                                scheme: scheme,
+                              ),
                             ),
                           ),
-                        Text(caption, textAlign: TextAlign.center),
-                        if (finishedNote != null) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            finishedNote,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 12),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (step != null)
+                                  Text(
+                                    techniqueLabel(context, step.technique),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: scheme.primary,
+                                    ),
+                                  ),
+                                Text(caption, textAlign: TextAlign.center),
+                                if (finishedNote != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    finishedNote,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
