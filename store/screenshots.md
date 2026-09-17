@@ -23,6 +23,13 @@ class).
 These same PNGs work for **Google Play** phone screenshots (any portrait phone
 ratio is accepted). See "How to regenerate" below to recapture either set.
 
+## Behavior notes for release documentation
+- **Resume** keeps exactly one save slot game-wide (daily and freeplay share
+  it). Starting a new game asks for confirmation before overwriting it.
+- **Undo history is per-session only**: after force-quit + resume the undo
+  stack starts empty (board state, score, mistakes, hints and clock all
+  persist).
+
 **Known issue:** emoji (🐠🌊🔥❄️ etc. in the Themes sheet, 📅 on the Daily
 Challenge button) render as boxed "?" placeholder glyphs in these captures.
 Adding `fontFamilyFallback: ['Apple Color Emoji', 'Noto Color Emoji']` to

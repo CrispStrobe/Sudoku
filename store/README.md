@@ -59,7 +59,10 @@ Play**, ready to paste/upload.
       (drag it into the Runner group, tick the Runner target) so it ships in the
       bundle.
 - [x] **Screenshots** — 5 captured at 1320×2868 (`store/screenshots/`); see `screenshots.md` to add more or capture iPad sizes
-- [ ] **iOS signing** — Team, distribution certificate, provisioning profile
+- [x] **iOS signing (CI)** — the `iOS Release (App Store)` workflow builds and
+      signs from repo secrets (dry_run=true validates without uploading). The
+      local Mac still lacks an Xcode account, so on-device installs need the
+      certificate/provisioning-profile fix in Xcode → Settings → Accounts.
 - [ ] **Apple privacy** — answer "Data Not Collected"; **Play Data Safety** — "No
       data collected" (answers in `data-safety.md`)
 - [ ] **Age rating** questionnaires (no objectionable content → 4+ / Everyone)
