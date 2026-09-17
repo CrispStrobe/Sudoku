@@ -181,7 +181,8 @@ class SmartHint {
 
   String get title => titleFor('en');
   String get description => descriptionFor('en');
-  String titleFor(String languageCode) => message?.title(languageCode) ?? _title!;
+  String titleFor(String languageCode) =>
+      message?.title(languageCode) ?? _title!;
   String descriptionFor(String languageCode) =>
       message?.description(languageCode) ?? _description!;
   final int penalty;
