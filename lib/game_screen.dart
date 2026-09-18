@@ -277,8 +277,8 @@ class _GameScreenState extends State<GameScreen>
       ReadyPuzzle? ready;
       _cages = const [];
       if (widget.isKiller) {
-        // Killer is generated outside the bitmask engine (cage sums need the
-        // CSP solver). Fast enough (~100ms) to run inline behind the spinner.
+        // Killer uses the CSP solver for cage sums, without the classic cache.
+        // Search time depends on the partition and can take several seconds.
         final puzzle = await VariantEngine.generateKiller(
           gridSize: widget.gridSize,
           difficulty: widget.difficulty,

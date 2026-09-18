@@ -221,10 +221,9 @@ class VariantEngine {
       cages: cages,
       givens: givens,
     );
-    // A solution must exist AND there must not be a second one.
-    final first = await p.getSolution();
-    if (first is! Map) return false;
-    return !await p.hasMultipleSolutions();
+    // Enumerate once, stopping at the second solution. Unlike negating
+    // hasMultipleSolutions, this also rejects an empty (infeasible) search.
+    return (await p.getFirstNSolutions(2)).length == 1;
   }
 
   // --- Cage generation ----------------------------------------------------
@@ -299,14 +298,27 @@ class VariantEngine {
   /// computes each cage sum from the solution, and verifies uniqueness via
   /// dart_csp. If a pure-cage puzzle is not unique, it re-rolls the partition a
   /// few times and then, if still ambiguous, reveals a few random cells as
-  /// givens until unique (or an attempt cap is hit).
+  /// givens until unique. Throws [StateError] rather than returning an unproven
+  /// puzzle when an explicit [maxGivens] is exhausted. By default all cells
+  /// may be revealed, guaranteeing eventual uniqueness for the valid base
+  /// solution. [maxPartitionAttempts] must be at least one; [maxGivens], when
+  /// supplied, must be nonnegative. These limits bound partition retries and
+  /// clue reveals, not the duration of each CSP search.
   ///
-  /// Determinism: the same [seed] reproduces the same puzzle.
+  /// Determinism: the same [seed] and limits reproduce the same puzzle.
   static Future<KillerPuzzle> generateKiller({
     required GridSize gridSize,
     required SudokuDifficulty difficulty,
     int? seed,
+    int maxPartitionAttempts = 12,
+    int? maxGivens,
   }) async {
+    if (maxPartitionAttempts < 1) {
+      throw ArgumentError.value(maxPartitionAttempts, 'maxPartitionAttempts');
+    }
+    if (maxGivens != null && maxGivens < 0) {
+      throw ArgumentError.value(maxGivens, 'maxGivens');
+    }
     final effectiveSeed = seed ?? math.Random().nextInt(1 << 31);
     final rng = math.Random(effectiveSeed);
 
@@ -324,7 +336,6 @@ class VariantEngine {
     final empty = List.generate(gridDim, (_) => List<int>.filled(gridDim, 0));
 
     // Phase 1: try several pure-cage partitions; accept the first unique one.
-    const maxPartitionAttempts = 12;
     List<KillerCage>? chosen;
     for (var attempt = 0; attempt < maxPartitionAttempts; attempt++) {
       final cages = _partition(
@@ -364,19 +375,22 @@ class VariantEngine {
     }
     cells.shuffle(rng);
 
-    const maxGivens = 30;
-    var revealed = 0;
-    for (final cell in cells) {
-      if (revealed >= maxGivens) break;
-      final unique = await killerHasUniqueSolution(
+    // Phase 1 already proved this partition ambiguous without givens. Check
+    // after each reveal, including the last allowed one; never return an
+    // unproven puzzle merely because the reveal budget ran out.
+    var unique = false;
+    for (final cell in cells.take(maxGivens ?? cells.length)) {
+      givens[cell[0]][cell[1]] = solution[cell[0]][cell[1]];
+      unique = await killerHasUniqueSolution(
         gridDim: gridDim,
         regions: regions,
         cages: cages,
         givens: givens,
       );
       if (unique) break;
-      givens[cell[0]][cell[1]] = solution[cell[0]][cell[1]];
-      revealed++;
+    }
+    if (!unique) {
+      throw StateError('Killer uniqueness not established within reveal cap');
     }
 
     return KillerPuzzle(
