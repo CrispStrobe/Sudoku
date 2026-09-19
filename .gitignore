@@ -51,3 +51,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Golden-test diff output: written on every failing comparison, looked at once,
+# never committed.
+test/failures/
+# Screenshots from .github/scripts/render_check.js — a CI artifact, not source.
+render-check/
