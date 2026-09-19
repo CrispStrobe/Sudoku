@@ -94,12 +94,25 @@ jobs:
 
       # A deploy that reports success while serving a blank page is the failure
       # mode that matters here: Flutter web renders to canvas, so the shell can
-      # 200 with the app entirely broken. Check the entrypoint is really served.
+      # 200 with the app entirely broken. Check the entrypoint and the payload
+      # are really served.
+      #
+      # Note the doubled `assets/`: a bundled asset declared in pubspec as
+      # `assets/x.json` is served at `/assets/assets/x.json`, because Flutter
+      # roots the whole asset bundle under `assets/`. The SPA rewrite only
+      # catches paths with no dot, so a wrong path here 404s honestly rather
+      # than returning the app shell with a 200 — which is how this check
+      # earned its keep on its first run.
       - name: Smoke-check the deployment
         if: github.event_name != 'pull_request'
+        env:
+          SITE: https://sudoku-lac-five.vercel.app
         run: |
-          for path in / /main.dart.js /flutter_bootstrap.js /assets/killer_puzzles.json; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' -L "https://sudoku-lac-five.vercel.app$path")
+          for path in / /main.dart.js /flutter_bootstrap.js                       /assets/AssetManifest.bin.json                       /assets/assets/killer_puzzles.json                       /assets/assets/ready_puzzles.json; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L "$SITE$path")
             echo "$path -> $code"
             [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
           done
+          # 200 is not enough for the puzzle bundles: they are the thing that
+          # makes Killer instant, and an empty or truncated one would still 200.
+          curl -sL "$SITE/assets/assets/killer_puzzles.json"             | python3 -c 'import json,sys; d=json.load(sys.stdin); n=sum(len(v) for v in d.values()); print(f"killer bundle: {n} puzzles in {len(d)} configurations"); sys.exit(0 if n >= 32 else 1)'
