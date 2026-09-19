@@ -119,6 +119,10 @@ class AppLocalizationsDe extends AppLocalizations {
       'Beide Hauptdiagonalen müssen ebenfalls 1–N enthalten.';
 
   @override
+  String get variantKillerUnavailable =>
+      'Killer gibt es bis 9x9 — der Käfigsummen-Löser ist auf größeren Gittern nicht praktikabel.';
+
+  @override
   String get variantKillerNote =>
       'Keine Vorgaben — jeder gestrichelte Käfig muss ohne Wiederholungen die angegebene Summe ergeben.';
 

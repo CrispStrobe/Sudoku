@@ -9,6 +9,7 @@ import 'clock_format.dart';
 import 'explain_screen.dart';
 import 'game_clock.dart';
 import 'game_stats.dart';
+import 'killer_bundle.dart';
 import 'l10n/app_localizations.dart';
 import 'painters.dart';
 import 'particles.dart';
@@ -30,6 +31,14 @@ import 'variant_engine.dart';
 /// places is how the pad ends up sized for tiles it does not actually draw.
 const double _kPadSpacing = 8.0;
 const double _kPadPadding = 16.0;
+
+/// How long the live Killer generator may run before the screen gives up.
+///
+/// Only the fallback path uses it — a bundled board needs no search. There is
+/// no principled bound on a CSP uniqueness proof, so this is a UX limit, not a
+/// correctness one: past about half a minute a spinner reads as a hang, and
+/// "could not create a puzzle" is the more honest outcome.
+const Duration _killerGenerationBudget = Duration(seconds: 30);
 
 /// The chrome metrics that surround the board, derived from the viewport.
 ///
@@ -388,12 +397,22 @@ class _GameScreenState extends State<GameScreen>
       ReadyPuzzle? ready;
       _cages = const [];
       if (widget.isKiller) {
-        // Killer uses the CSP solver for cage sums, without the classic cache.
-        // Search time depends on the partition and can take several seconds.
-        final puzzle = await VariantEngine.generateKiller(
+        // Prefer a bundled board. Proving that a set of cage sums admits
+        // exactly one solution is a CSP search with no useful upper bound —
+        // generating the 9x9 expert boards for the bundle took anywhere from
+        // 2.7s to 474s each — and on the web that runs on the main thread,
+        // because there is no `Isolate.spawn` there. A pre-generated board
+        // plays instantly and is already proven unique.
+        var puzzle = KillerPuzzleBundle().get(
+          widget.gridSize,
+          widget.difficulty,
+        );
+        // Only reached if the asset is missing or unreadable. Bound it: the
+        // numbers above are why an unbounded call here can look like a hang.
+        puzzle ??= await VariantEngine.generateKiller(
           gridSize: widget.gridSize,
           difficulty: widget.difficulty,
-        );
+        ).timeout(_killerGenerationBudget);
         if (!mounted) return;
         _cages = puzzle.cages;
         built = SudokuGame.fromState(
@@ -1837,32 +1856,69 @@ class _GameScreenState extends State<GameScreen>
   }
 
   /// Renders pencil-mark candidates as a compact grid inside an empty cell.
+  /// The pencil-mark grid drawn inside an empty cell.
+  ///
+  /// Every candidate gets a fixed slot, so a note sits in the same place
+  /// whatever else is written in the cell — that positional stability is the
+  /// whole point of pencil marks, and a `Wrap` over only the present values
+  /// does not give it.
+  ///
+  /// The font used to carry a `.clamp(6, 12)` — a *floor* of 6pt on a slot
+  /// that is `cellWidth / perRow` wide. On a 12x12 board on a 320pt phone the
+  /// cell is about 21pt, so each slot is about 5pt: the floor guaranteed a
+  /// glyph wider than the box it had to fit, and three rows of them taller
+  /// than the cell. (The number pad hit exactly this and fixed it the same
+  /// way — see `_buildNumberPad`.) Size from the slot and let scaleDown be the
+  /// backstop instead; a floor is not a favour when the box is genuinely that
+  /// small.
   Widget _buildNotes(Set<int> notes, int gridDim) {
     if (notes.isEmpty) return const SizedBox.shrink();
     final perRow = math.sqrt(gridDim).ceil();
-    final sorted = notes.toList()..sort();
+    final rows = (gridDim / perRow).ceil();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final fontSize = (constraints.maxWidth / perRow) * 0.5;
-        return Padding(
-          padding: const EdgeInsets.all(1),
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            children: [
-              for (final n in sorted)
-                SizedBox(
-                  width: constraints.maxWidth / perRow,
-                  child: Text(
-                    '$n',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: fontSize.clamp(6, 12),
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
+        final slotWidth = constraints.maxWidth / perRow;
+        final slotHeight = constraints.maxHeight / rows;
+        final fontSize = math.min(slotWidth, slotHeight) * 0.85;
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var r = 0; r < rows; r++)
+              SizedBox(
+                height: slotHeight,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var c = 0; c < perRow; c++)
+                      SizedBox(
+                        width: slotWidth,
+                        height: slotHeight,
+                        child: Builder(
+                          builder: (context) {
+                            final n = r * perRow + c + 1;
+                            if (n > gridDim || !notes.contains(n)) {
+                              return const SizedBox.shrink();
+                            }
+                            return Center(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '$n',
+                                  style: TextStyle(
+                                    fontSize: fontSize,
+                                    height: 1,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
                 ),
-            ],
-          ),
+              ),
+          ],
         );
       },
     );

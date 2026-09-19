@@ -1,0 +1,99 @@
+# Vercel: publishes the web build to sudoku-lac-five.vercel.app.
+#
+# Vercel's build image has no Flutter, so its git integration cannot build this
+# repo — it is deliberately disconnected (see `vercel git disconnect`). The app
+# is built here and the finished `build/web` is uploaded as a prebuilt static
+# deployment, which is what `deploy.sh` does by hand.
+#
+# Doing it by hand is the problem this replaces: Pages publishes only on a `v*`
+# tag and Vercel published only when someone with Flutter installed remembered
+# to run the script, so main could sit undeployed indefinitely and the two
+# hosts could disagree about what "live" meant.
+#
+# Every push to main goes to production. A pull request gets a preview URL and
+# never touches production.
+
+name: Vercel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A superseded deploy is wasted work, but never cancel one already uploading to
+# production — a half-cancelled deploy is the one state worse than a stale site.
+concurrency:
+  group: vercel-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Keep in step with ci.yml, release.yml and ios-release.yml.
+  FLUTTER_VERSION: '3.44.4'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Forks cannot read the secrets, and a deploy from an untrusted branch is
+    # not something to hand a production token to anyway.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # APP_VERSION feeds the About screen. On a tag build that is the tag; on
+      # main it is the short SHA, so a deployed build can always be traced back
+      # to a commit.
+      - name: Build web
+        run: |
+          flutter build web --release \
+            --dart-define=APP_VERSION=${{ github.ref_type == 'tag' && github.ref_name || format('main@{0}', github.sha) }}
+
+      # vercel.json and .vercel/project.json must sit in the directory being
+      # deployed, not the repo root — the CLI reads them from --cwd.
+      - name: Stage Vercel config
+        run: |
+          cp vercel.json build/web/vercel.json
+          mkdir -p build/web/.vercel
+          cat > build/web/.vercel/project.json <<JSON
+          {
+            "projectId": "${{ secrets.VERCEL_PROJECT_ID }}",
+            "orgId": "${{ secrets.VERCEL_ORG_ID }}"
+          }
+          JSON
+
+      - name: Deploy (production)
+        if: github.event_name != 'pull_request'
+        run: |
+          url=$(vercel deploy --cwd build/web --prod --yes \
+            --token "${{ secrets.VERCEL_TOKEN }}")
+          echo "Deployed: $url"
+          echo "### Vercel production: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy (preview)
+        if: github.event_name == 'pull_request'
+        run: |
+          url=$(vercel deploy --cwd build/web --yes \
+            --token "${{ secrets.VERCEL_TOKEN }}")
+          echo "Preview: $url"
+          echo "### Vercel preview: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      # A deploy that reports success while serving a blank page is the failure
+      # mode that matters here: Flutter web renders to canvas, so the shell can
+      # 200 with the app entirely broken. Check the entrypoint is really served.
+      - name: Smoke-check the deployment
+        if: github.event_name != 'pull_request'
+        run: |
+          for path in / /main.dart.js /flutter_bootstrap.js /assets/killer_puzzles.json; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L "https://sudoku-lac-five.vercel.app$path")
+            echo "$path -> $code"
+            [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
+          done

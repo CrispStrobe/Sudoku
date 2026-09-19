@@ -54,6 +54,7 @@
   "variantSudokuX": "⊗ Sudoku-X",
   "variantKiller": "🧮 Killer",
   "variantXNote": "Both main diagonals must also contain 1–N.",
+  "variantKillerUnavailable": "Killer is 9x9 and smaller — its cage-sum solver is not practical on a larger grid.",
   "variantKillerNote": "No givens — each dashed cage must sum to its number with no repeats.",
   "difficultyEasy": "EASY",
   "difficultyMedium": "MEDIUM",

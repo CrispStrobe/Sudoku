@@ -302,6 +302,12 @@ abstract class AppLocalizations {
   /// **'Both main diagonals must also contain 1–N.'**
   String get variantXNote;
 
+  /// No description provided for @variantKillerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Killer is 9x9 and smaller — its cage-sum solver is not practical on a larger grid.'**
+  String get variantKillerUnavailable;
+
   /// No description provided for @variantKillerNote.
   ///
   /// In en, this message translates to:

@@ -34,6 +34,7 @@
   "variantSudokuX": "⊗ Sudoku-X",
   "variantKiller": "🧮 Killer",
   "variantXNote": "Beide Hauptdiagonalen müssen ebenfalls 1–N enthalten.",
+  "variantKillerUnavailable": "Killer gibt es bis 9x9 — der Käfigsummen-Löser ist auf größeren Gittern nicht praktikabel.",
   "variantKillerNote": "Keine Vorgaben — jeder gestrichelte Käfig muss ohne Wiederholungen die angegebene Summe ergeben.",
   "difficultyEasy": "LEICHT",
   "difficultyMedium": "MITTEL",

@@ -21,6 +21,15 @@ enum GridShape { classic, jigsaw }
 /// Rule variant. `x` (Sudoku-X) additionally requires the two main diagonals to
 /// each contain 1..dim with no repeats. `killer` partitions the grid into
 /// summed cages (handled outside the bitmask engine, in `variant_engine.dart`).
+///
+/// **These names are persisted.** `SudokuVariant.name` is what gets written to
+/// the resume slot (`saved_game.dart`) and to the per-variant achievement
+/// counters in `stats.json`, and both are read back with `values.byName`.
+/// Renaming `x` to `diagonal` — the obvious tidy-up, since the Dart-side
+/// accessors are already called `diagonal`/`isDiagonal` — would silently
+/// invalidate every player's saved game and reset their Sudoku-X achievement
+/// progress. Add values freely; do not rename them. Pinned by
+/// `test/persisted_names_test.dart`.
 enum SudokuVariant { classic, x, killer }
 
 enum GameMode { classic }

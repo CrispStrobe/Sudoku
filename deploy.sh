@@ -43,33 +43,33 @@ fi
 if [[ "$WASM" == "1" ]]; then
   echo "==> flutter build web --release --wasm"
   flutter build web --release --wasm
-  # skwasm needs a cross-origin-isolated context (SharedArrayBuffer).
-  HEADERS=',
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
-      ]
-    }
-  ]'
 else
   echo "==> flutter build web --release"
   flutter build web --release
-  HEADERS=''
 fi
 
-echo "==> writing $OUT/vercel.json"
-cat > "$OUT/vercel.json" <<JSON
-{
-  "\$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
-  "rewrites": [
-    { "source": "/((?!.*\\\\.).*)", "destination": "/index.html" }
-  ]$HEADERS
-}
-JSON
+# vercel.json lives at the repo root so this script and the GitHub Actions
+# workflow deploy the same configuration — two copies of a rewrite rule is two
+# chances for the SPA fallback to differ between the two ways this ships.
+# `flutter build web` wipes build/web, so it must be copied in every run.
+echo "==> staging $OUT/vercel.json"
+cp vercel.json "$OUT/vercel.json"
+if [[ "$WASM" == "1" ]]; then
+  echo "==> adding COOP/COEP headers for skwasm"
+  python3 - "$OUT/vercel.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+config = json.load(open(path))
+config["headers"] = [{
+    "source": "/(.*)",
+    "headers": [
+        {"key": "Cross-Origin-Opener-Policy", "value": "same-origin"},
+        {"key": "Cross-Origin-Embedder-Policy", "value": "require-corp"},
+    ],
+}]
+json.dump(config, open(path, "w"), indent=2)
+PY
+fi
 
 echo "==> linking Vercel project '$PROJECT'"
 vercel link --cwd "$OUT" --project "$PROJECT" --yes ${TOKEN_ARG[@]+"${TOKEN_ARG[@]}"}

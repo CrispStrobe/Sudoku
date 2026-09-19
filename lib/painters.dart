@@ -20,10 +20,20 @@ class KillerCagePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final cell = size.width / gridDim;
-    const inset = 4.0;
+    // Everything here used to be a constant: a 4pt inset and a 1pt stroke,
+    // whatever the cell. That is proportionate on the ~50pt cell of a 9x9
+    // board on a tablet and absurd on the ~21pt cell of a 12x12 board on a
+    // 320pt phone, where 4pt off each side eats two fifths of the cell and
+    // leaves the cage outline a cramped box sitting inside the grid line.
+    // Scale with the cell, with floors so the dashes stay visible at all.
+    final inset = math.max(1.5, cell * 0.11);
+    final stroke = math.max(0.8, cell * 0.025);
+    // The sum label was `cell * 0.24` — about 5pt on that same 12x12 phone
+    // cell, which is not readable, and the sum is the entire clue in Killer.
+    final labelSize = math.max(7.0, cell * 0.3);
     final paint = Paint()
       ..color = Colors.black54
-      ..strokeWidth = 1.0
+      ..strokeWidth = stroke
       ..style = PaintingStyle.stroke;
 
     final cageOf = List.generate(gridDim, (_) => List.filled(gridDim, -1));
@@ -43,16 +53,22 @@ class KillerCagePainter extends CustomPainter {
         final right = (c + 1) * cell - inset;
         final bottom = (r + 1) * cell - inset;
         if (!same(r - 1, c, i)) {
-          _dash(canvas, Offset(left, top), Offset(right, top), paint);
+          _dash(canvas, Offset(left, top), Offset(right, top), paint, cell);
         }
         if (!same(r + 1, c, i)) {
-          _dash(canvas, Offset(left, bottom), Offset(right, bottom), paint);
+          _dash(
+            canvas,
+            Offset(left, bottom),
+            Offset(right, bottom),
+            paint,
+            cell,
+          );
         }
         if (!same(r, c - 1, i)) {
-          _dash(canvas, Offset(left, top), Offset(left, bottom), paint);
+          _dash(canvas, Offset(left, top), Offset(left, bottom), paint, cell);
         }
         if (!same(r, c + 1, i)) {
-          _dash(canvas, Offset(right, top), Offset(right, bottom), paint);
+          _dash(canvas, Offset(right, top), Offset(right, bottom), paint, cell);
         }
       }
       final anchor = cages[i].labelCell;
@@ -60,22 +76,34 @@ class KillerCagePainter extends CustomPainter {
         text: TextSpan(
           text: '${cages[i].sum}',
           style: TextStyle(
-            fontSize: cell * 0.24,
+            fontSize: labelSize,
+            height: 1,
             color: Colors.black87,
             fontWeight: FontWeight.bold,
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(
-        canvas,
-        Offset(anchor[1] * cell + inset + 1, anchor[0] * cell + inset),
+      // A small white pad behind the label: the sum is drawn on top of the
+      // cage's own dashed corner, and at a small cell size the two overlap
+      // into an unreadable smudge.
+      final origin = Offset(
+        anchor[1] * cell + inset * 0.5,
+        anchor[0] * cell + inset * 0.3,
       );
+      canvas.drawRect(
+        Rect.fromLTWH(origin.dx, origin.dy, tp.width + 1, tp.height),
+        Paint()..color = Colors.white.withValues(alpha: 0.85),
+      );
+      tp.paint(canvas, origin);
     }
   }
 
-  void _dash(Canvas canvas, Offset a, Offset b, Paint paint) {
-    const dash = 4.0, gap = 3.0;
+  void _dash(Canvas canvas, Offset a, Offset b, Paint paint, double cell) {
+    // Dash and gap scale too, so a small cell gets a few clear dashes rather
+    // than one long one, and a large cell does not look like a dotted line.
+    final dash = math.max(2.0, cell * 0.14);
+    final gap = math.max(1.5, cell * 0.1);
     final total = (b - a).distance;
     if (total == 0) return;
     final dir = (b - a) / total;

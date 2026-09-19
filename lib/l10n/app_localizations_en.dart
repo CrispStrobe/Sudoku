@@ -117,6 +117,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get variantXNote => 'Both main diagonals must also contain 1–N.';
 
   @override
+  String get variantKillerUnavailable =>
+      'Killer is 9x9 and smaller — its cage-sum solver is not practical on a larger grid.';
+
+  @override
   String get variantKillerNote =>
       'No givens — each dashed cage must sum to its number with no repeats.';
 

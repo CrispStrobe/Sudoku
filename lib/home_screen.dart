@@ -787,16 +787,23 @@ class _HomeScreenState extends State<HomeScreen>
                         onSelected: (_) =>
                             setSheetState(() => variant = SudokuVariant.x),
                       ),
-                      if (killerAllowed)
-                        ChoiceChip(
-                          label: Text(l10n.variantKiller),
-                          selected: variant == SudokuVariant.killer,
-                          onSelected: (_) => setSheetState(
-                            () => variant = SudokuVariant.killer,
-                          ),
-                        ),
+                      // Above 9x9 the chip is shown disabled rather than
+                      // omitted. Silently dropping it left anyone who had
+                      // played Killer at 9x9 wondering whether they had
+                      // mis-tapped; the note below says why it is not there.
+                      ChoiceChip(
+                        label: Text(l10n.variantKiller),
+                        selected: variant == SudokuVariant.killer,
+                        onSelected: killerAllowed
+                            ? (_) => setSheetState(
+                                () => variant = SudokuVariant.killer,
+                              )
+                            : null,
+                      ),
                     ],
                   ),
+                  if (!killerAllowed)
+                    _variantNote(l10n.variantKillerUnavailable),
                   if (variant == SudokuVariant.x)
                     _variantNote(l10n.variantXNote),
                   if (variant == SudokuVariant.killer)

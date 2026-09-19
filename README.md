@@ -73,6 +73,26 @@ dart run tool/generate_puzzles.dart [perKey]   # default 12
 Player-generated solutions are additionally cached in `shared_preferences`
 (cross-platform, incl. web).
 
+### Pre-built Killer puzzles
+
+Killer is the slow case: the base solution comes from the bitmask engine, but
+proving that a set of cage sums admits exactly one solution is a CSP search with
+no useful upper bound. Generating the bundle's 9×9 expert boards took between
+2.7s and **474s** each — and on the web that would run on the main thread, since
+there is no `Isolate.spawn` there. So they are generated offline too:
+
+```bash
+dart run tool/generate_killer_puzzles.dart [perConfig]   # default 4
+```
+
+`assets/killer_puzzles.json` holds four boards for each of the sixteen
+size/difficulty combinations Killer is offered at (4×4 to 9×9), keyed
+`<size>-<difficulty>`. `KillerPuzzleBundle` serves one instantly and avoids
+repeating the board it just served. The live generator remains the fallback if
+the asset is unreadable, bounded by a 30-second budget so it cannot look like a
+hang. `test/bundled_killer_test.dart` re-proves every bundled board uniquely
+solvable — the app trusts the bundle and does not re-check at runtime.
+
 ## Running
 
 ```bash
@@ -126,6 +146,11 @@ step (build → write `vercel.json` → link the `sudoku` project → deploy):
 
 Requires `vercel login` (or a `VERCEL_TOKEN` env var). Live at
 https://sudoku-lac-five.vercel.app
+
+Normally you should not need to run it: the `Vercel` workflow deploys every push
+to `main` to production and every pull request to a preview URL, using the same
+root `vercel.json` this script stages. `deploy.sh` is for deploying something
+that is not on `main` — or for `--wasm`, which CI does not build.
 
 ## Deploying (GitHub Pages)
 

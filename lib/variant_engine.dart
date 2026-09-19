@@ -55,6 +55,23 @@ class KillerCage {
     return false;
   }
 
+  Map<String, dynamic> toJson() => {'cells': cells, 'sum': sum};
+
+  factory KillerCage.fromJson(Map<String, dynamic> json) {
+    final cells = (json['cells'] as List)
+        .map((cell) => (cell as List).cast<int>().toList())
+        .toList();
+    if (cells.isEmpty) {
+      throw const FormatException('killer cage: no cells');
+    }
+    for (final cell in cells) {
+      if (cell.length != 2) {
+        throw const FormatException('killer cage: cell is not [row, col]');
+      }
+    }
+    return KillerCage(cells: cells, sum: json['sum'] as int);
+  }
+
   /// True when every cell is filled with distinct digits summing to [sum].
   bool isSatisfied(List<List<int>> grid) {
     final seen = <int>{};
@@ -88,6 +105,83 @@ class KillerPuzzle {
     required this.givens,
     required this.solution,
   });
+
+  Map<String, dynamic> toJson() => {
+    'gridDim': gridDim,
+    'regions': regions,
+    'cages': [for (final cage in cages) cage.toJson()],
+    'givens': givens,
+    'solution': solution,
+  };
+
+  /// Rebuild a puzzle from [json], validating it hard enough that a corrupt or
+  /// hand-edited bundle entry is rejected rather than played.
+  ///
+  /// Uniqueness is *not* re-checked here — proving it costs a CSP search, which
+  /// is the entire reason the bundle exists. It is checked once, offline, by
+  /// `tool/generate_killer_puzzles.dart`, and again in CI by
+  /// `test/bundled_killer_test.dart`.
+  factory KillerPuzzle.fromJson(Map<String, dynamic> json) {
+    final gridDim = json['gridDim'] as int;
+    List<List<int>> grid(String key) => (json[key] as List)
+        .map((row) => (row as List).cast<int>().toList())
+        .toList();
+
+    final puzzle = KillerPuzzle(
+      gridDim: gridDim,
+      regions: grid('regions'),
+      cages: [
+        for (final cage in json['cages'] as List)
+          KillerCage.fromJson(cage as Map<String, dynamic>),
+      ],
+      givens: grid('givens'),
+      solution: grid('solution'),
+    );
+
+    for (final g in [puzzle.regions, puzzle.givens, puzzle.solution]) {
+      if (g.length != gridDim || g.any((row) => row.length != gridDim)) {
+        throw const FormatException('killer puzzle: wrong dimensions');
+      }
+    }
+    // The cages must partition the grid exactly: every cell in exactly one.
+    final covered = List.generate(
+      gridDim,
+      (_) => List<bool>.filled(gridDim, false),
+    );
+    for (final cage in puzzle.cages) {
+      var total = 0;
+      for (final cell in cage.cells) {
+        final r = cell[0], c = cell[1];
+        if (r < 0 || r >= gridDim || c < 0 || c >= gridDim) {
+          throw const FormatException('killer puzzle: cage cell out of range');
+        }
+        if (covered[r][c]) {
+          throw const FormatException('killer puzzle: cages overlap');
+        }
+        covered[r][c] = true;
+        total += puzzle.solution[r][c];
+      }
+      if (total != cage.sum) {
+        throw const FormatException('killer puzzle: cage sum != solution');
+      }
+    }
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (!covered[r][c]) {
+          throw const FormatException('killer puzzle: cages leave a gap');
+        }
+        final value = puzzle.solution[r][c];
+        if (value < 1 || value > gridDim) {
+          throw const FormatException('killer puzzle: bad solution value');
+        }
+        final given = puzzle.givens[r][c];
+        if (given != 0 && given != value) {
+          throw const FormatException('killer puzzle: given != solution');
+        }
+      }
+    }
+    return puzzle;
+  }
 }
 
 class VariantEngine {
