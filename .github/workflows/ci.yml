@@ -37,3 +37,21 @@ jobs:
       - run: flutter test
       # Smoke-build for web so dart_csp / wasm-safety regressions are caught.
       - run: flutter build web --release
+
+      # A web build only proves the code *compiles* under dart2js. It does not
+      # run it, and the number semantics differ: `int` is a JS double and
+      # `Uint64List` cannot be allocated at all. That is how a crash inside the
+      # CSP solver shipped — every Killer generation threw in the browser, the
+      # screen fell back to a cage-less classic board, and both the full
+      # `flutter test` suite and this very build stayed green. Compile the real
+      # generator with dart2js and actually run it.
+      - name: Killer generation under dart2js
+        run: |
+          dart compile js -o /tmp/killer_probe.js tool/web_killer_probe.dart
+          out=$(node -e 'globalThis.self = globalThis; require("/tmp/killer_probe.js")')
+          echo "$out"
+          if echo "$out" | grep -q '^FAIL'; then
+            echo "::error::Killer generation fails under dart2js"
+            exit 1
+          fi
+          echo "$out" | grep -q 'all generations succeeded'
