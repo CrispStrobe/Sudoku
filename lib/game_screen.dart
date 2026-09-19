@@ -31,6 +31,104 @@ import 'variant_engine.dart';
 const double _kPadSpacing = 8.0;
 const double _kPadPadding = 16.0;
 
+/// The chrome metrics that surround the board, derived from the viewport.
+///
+/// On a roomy phone every one of these can afford its comfortable value. On a
+/// small/old iPhone (a 320x568 SE, a 375x667 6/7/8) they cannot: the padding,
+/// the inter-row gaps and the number pad were together eating roughly 300 of
+/// the 512 points below the app bar, which left the board — the only thing on
+/// the screen anyone is actually looking at — about 160 points to live in, half
+/// the available width, with slack it was not allowed to use. Every point these
+/// give back goes straight into [_GameScreenState._buildSudokuGrid].
+class _ChromeMetrics {
+  const _ChromeMetrics({
+    required this.isTablet,
+    required this.isCompact,
+    required this.outerPadding,
+    required this.gap,
+    required this.padPadding,
+    required this.padSpacing,
+    required this.idealPadTile,
+    required this.controlDiameter,
+    required this.controlIconSize,
+    required this.maxGridSize,
+  });
+
+  /// Chooses the metrics for a viewport of [size] (the whole window, which is
+  /// what the outer padding is applied to — the board's own box is measured
+  /// separately by its `LayoutBuilder`).
+  factory _ChromeMetrics.forViewport(Size size) {
+    final isTablet = size.width > 600;
+    // "Compact" is the small/old iPhone class and any short landscape window:
+    // not enough height to spend on chrome, and not enough width for the
+    // control row's five buttons at their comfortable size.
+    final isCompact =
+        !isTablet &&
+        (size.width < 400 || size.shortestSide < 360 || size.height < 700);
+    if (isTablet) {
+      return const _ChromeMetrics(
+        isTablet: true,
+        isCompact: false,
+        outerPadding: 24,
+        gap: 12,
+        padPadding: _kPadPadding,
+        padSpacing: _kPadSpacing,
+        idealPadTile: 64,
+        controlDiameter: 52,
+        controlIconSize: 24,
+        maxGridSize: 560,
+      );
+    }
+    if (isCompact) {
+      return const _ChromeMetrics(
+        isTablet: false,
+        isCompact: true,
+        outerPadding: 10,
+        // 6pt between blocks instead of 8/16/10: three gaps, ~22 points back.
+        gap: 6,
+        padPadding: 10,
+        padSpacing: 6,
+        // Still above Apple's 44pt minimum tap target.
+        idealPadTile: 46,
+        // A 40pt circle keeps the five-button row inside 320 points while
+        // staying tappable.
+        controlDiameter: 40,
+        controlIconSize: 20,
+        maxGridSize: 420,
+      );
+    }
+    return const _ChromeMetrics(
+      isTablet: false,
+      isCompact: false,
+      outerPadding: 16,
+      gap: 10,
+      padPadding: _kPadPadding,
+      padSpacing: _kPadSpacing,
+      idealPadTile: 52,
+      controlDiameter: 48,
+      controlIconSize: 24,
+      maxGridSize: 460,
+    );
+  }
+
+  final bool isTablet;
+  final bool isCompact;
+  final double outerPadding;
+  final double gap;
+  final double padPadding;
+  final double padSpacing;
+  final double idealPadTile;
+  final double controlDiameter;
+  final double controlIconSize;
+
+  /// Upper bound on the board's edge. It exists only to stop the board turning
+  /// into a wall-sized grid on a desktop window; on a phone the viewport is
+  /// always the binding constraint, so this must never be the thing that caps
+  /// a phone board (the old 320pt phone cap did exactly that on a 390pt or
+  /// 430pt iPhone).
+  final double maxGridSize;
+}
+
 class GameScreen extends StatefulWidget {
   final SudokuDifficulty difficulty;
   final GridSize gridSize;
@@ -197,6 +295,19 @@ class _GameScreenState extends State<GameScreen>
   }
 
   String _formatDuration(Duration d) => formatClock(d);
+
+  /// The variant's own name, for the app-bar title. Classic never reaches here
+  /// (the title omits the variant entirely for it).
+  String _variantLabel(AppLocalizations l10n) {
+    switch (widget.variant) {
+      case SudokuVariant.classic:
+        return l10n.variantClassic;
+      case SudokuVariant.x:
+        return l10n.variantSudokuX;
+      case SudokuVariant.killer:
+        return l10n.variantKiller;
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -369,6 +480,21 @@ class _GameScreenState extends State<GameScreen>
       }
     } catch (e, st) {
       if (!mounted) return;
+      if (widget.isKiller) {
+        // A Killer board without cages is not a Killer board — it is a classic
+        // puzzle wearing the label, with the hint and explain buttons disabled
+        // because the screen still believes it is Killer. That is strictly
+        // worse than an error: it looks like a working game and is not the one
+        // the player asked for, so it hid a dart2js crash in the CSP solver
+        // for an entire release. Surface the failure instead.
+        DebugLogger.error(
+          'Killer generation failed; no classic fallback.',
+          e,
+          st,
+        );
+        setState(() => _hasError = true);
+        return;
+      }
       DebugLogger.error('Generation failed; falling back to classic.', e, st);
       try {
         final SudokuGame fallback = kIsWeb
@@ -1017,15 +1143,27 @@ class _GameScreenState extends State<GameScreen>
     }
 
     final l10n = AppLocalizations.of(context)!;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth > 600;
+    final metrics = _ChromeMetrics.forViewport(MediaQuery.of(context).size);
     final scheme = GameStats.current;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          '${widget.gridSize.name.toUpperCase()} '
-          '${widget.gridShape.name.toUpperCase()}',
+        // The title competed with three actions for a 320pt bar and lost,
+        // ellipsising to a single "S…". Let it shrink to fit instead, and give
+        // it a flexible share rather than its intrinsic width.
+        titleSpacing: metrics.isCompact ? 8 : NavigationToolbar.kMiddleSpacing,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            // The shape alone read "STANDARD CLASSIC" on a Killer board — the
+            // one screen where knowing the variant matters, since Killer is
+            // also why the hint and explain buttons are disabled.
+            '${widget.gridSize.name.toUpperCase()} '
+            '${widget.gridShape.name.toUpperCase()}'
+            '${widget.variant == SudokuVariant.classic ? '' : ' · ${_variantLabel(l10n)}'}',
+            maxLines: 1,
+          ),
         ),
         backgroundColor: scheme.primary,
         foregroundColor: Colors.white,
@@ -1034,15 +1172,19 @@ class _GameScreenState extends State<GameScreen>
           IconButton(
             onPressed: _goToMainMenu,
             icon: const Icon(Icons.home),
+            iconSize: metrics.isCompact ? 22 : 24,
+            visualDensity: metrics.isCompact
+                ? VisualDensity.compact
+                : VisualDensity.standard,
             tooltip: l10n.mainMenuTooltip,
           ),
           Center(
             child: Padding(
-              padding: const EdgeInsets.only(right: 8),
+              padding: EdgeInsets.only(right: metrics.isCompact ? 6 : 8),
               child: Text(
                 l10n.scoreLabel(score),
-                style: const TextStyle(
-                  fontSize: 16,
+                style: TextStyle(
+                  fontSize: metrics.isCompact ? 13 : 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1050,13 +1192,13 @@ class _GameScreenState extends State<GameScreen>
           ),
           Center(
             child: Padding(
-              padding: const EdgeInsets.only(right: 16),
+              padding: EdgeInsets.only(right: metrics.isCompact ? 10 : 16),
               child: ValueListenableBuilder<Duration>(
                 valueListenable: _clock.elapsed,
                 builder: (context, value, _) => Text(
                   _formatDuration(value),
-                  style: const TextStyle(
-                    fontSize: 16,
+                  style: TextStyle(
+                    fontSize: metrics.isCompact ? 13 : 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1078,7 +1220,7 @@ class _GameScreenState extends State<GameScreen>
             children: [
               Positioned.fill(child: ParticleLayer(key: _particleKey)),
               Padding(
-                padding: EdgeInsets.all(isTablet ? 24 : 16),
+                padding: EdgeInsets.all(metrics.outerPadding),
                 // A fixed flex split (3:1 on tablet, 2:1 on phone) starved the
                 // number pad on short viewports: its share worked out to a
                 // couple of dozen pixels per tile, so the digits shrank to the
@@ -1090,25 +1232,25 @@ class _GameScreenState extends State<GameScreen>
                 // remainder.
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final padCols = _padColumnsFor(constraints);
+                    final padCols = _padColumnsFor(constraints, metrics);
                     final padRows = (game!.gridDim / padCols).ceil();
-                    // 44pt is Apple's minimum tap target; go a little above it
-                    // where there is room.
-                    final idealTile = isTablet ? 64.0 : 52.0;
                     final wanted =
-                        padRows * idealTile +
-                        (padRows - 1) * _kPadSpacing +
-                        _kPadPadding * 2;
+                        padRows * metrics.idealPadTile +
+                        (padRows - 1) * metrics.padSpacing +
+                        metrics.padPadding * 2;
                     // Never let the pad crowd out the board on a short window.
+                    // The share is tighter when compact: on a 568pt screen 42%
+                    // of the body is 200 points for two rows of digits, which
+                    // is space the board needs far more than the pad does.
                     final padHeight = math.min(
                       wanted,
-                      constraints.maxHeight * 0.42,
+                      constraints.maxHeight * (metrics.isCompact ? 0.3 : 0.42),
                     );
 
                     return Column(
                       children: [
-                        _buildStatusStrip(),
-                        const SizedBox(height: 8),
+                        _buildStatusStrip(metrics),
+                        SizedBox(height: metrics.gap),
                         Expanded(
                           child: Center(
                             child: AnimatedBuilder(
@@ -1117,16 +1259,16 @@ class _GameScreenState extends State<GameScreen>
                                 offset: Offset(_shakeAnimation.value, 0),
                                 child: child,
                               ),
-                              child: _buildSudokuGrid(isTablet, scheme),
+                              child: _buildSudokuGrid(metrics, scheme),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        _buildControls(scheme),
-                        const SizedBox(height: 10),
+                        SizedBox(height: metrics.gap),
+                        _buildControls(scheme, metrics),
+                        SizedBox(height: metrics.gap),
                         SizedBox(
                           height: padHeight,
-                          child: _buildNumberPad(isTablet, padCols),
+                          child: _buildNumberPad(metrics, padCols),
                         ),
                       ],
                     );
@@ -1146,30 +1288,33 @@ class _GameScreenState extends State<GameScreen>
   /// The status row above the grid: the logic-rating pill (when known) beside
   /// the mistakes strip. Wrapped in a scaleDown FittedBox so both fit on a
   /// narrow phone without overflowing.
-  Widget _buildStatusStrip() {
+  Widget _buildStatusStrip(_ChromeMetrics metrics) {
     return FittedBox(
       fit: BoxFit.scaleDown,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_logicRating != null) ...[
-            _buildLogicPill(),
+            _buildLogicPill(metrics),
             const SizedBox(width: 8),
           ],
-          _buildMistakesIndicator(),
+          _buildMistakesIndicator(metrics),
         ],
       ),
     );
   }
 
-  Widget _buildLogicPill() {
+  Widget _buildLogicPill(_ChromeMetrics metrics) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: metrics.isCompact ? 10 : 14,
+          vertical: metrics.isCompact ? 4 : 6,
+        ),
         child: Text(
           AppLocalizations.of(
             context,
@@ -1184,7 +1329,7 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _buildMistakesIndicator() {
+  Widget _buildMistakesIndicator(_ChromeMetrics metrics) {
     final unlimited = GameStats.unlimitedMistakes;
     final atRisk = !unlimited && mistakes >= _maxMistakes - 1;
     final accent = atRisk ? Colors.red.shade300 : Colors.white;
@@ -1195,7 +1340,10 @@ class _GameScreenState extends State<GameScreen>
         borderRadius: BorderRadius.circular(20),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: metrics.isCompact ? 10 : 14,
+          vertical: metrics.isCompact ? 4 : 6,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1236,62 +1384,85 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _buildControls(EnvironmentalTheme scheme) {
+  Widget _buildControls(EnvironmentalTheme scheme, _ChromeMetrics metrics) {
     final l10n = AppLocalizations.of(context)!;
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            // Logic hints don't model cage sums, so they're off for Killer.
-            onPressed: (!widget.isKiller && _hintsRemaining > 0)
-                ? _showHint
-                : null,
-            icon: const Icon(Icons.lightbulb),
-            label: Text(
-              widget.isKiller
-                  ? l10n.hintButtonLabel
-                  : (_hintsRemaining > 0
-                        ? l10n.hintButtonWithCount(_hintsRemaining)
-                        : l10n.noHintsLabel),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade400,
-              disabledForegroundColor: Colors.white70,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+    final gap = metrics.isCompact ? 6.0 : 8.0;
+    // On a 320pt screen four 48pt circles plus their gaps leave the hint
+    // button about 50 points, of which the icon takes 24 — so its label wrapped
+    // one character per line and the button grew to five lines tall, stealing
+    // the height from the board underneath. Pin the row to one line: the label
+    // scales down inside whatever width is left, and never wraps.
+    return SizedBox(
+      height: metrics.controlDiameter,
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              // Logic hints don't model cage sums, so they're off for Killer.
+              onPressed: (!widget.isKiller && _hintsRemaining > 0)
+                  ? _showHint
+                  : null,
+              icon: Icon(Icons.lightbulb, size: metrics.controlIconSize),
+              label: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.isKiller
+                      ? l10n.hintButtonLabel
+                      : (_hintsRemaining > 0
+                            ? l10n.hintButtonWithCount(_hintsRemaining)
+                            : l10n.noHintsLabel),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade400,
+                disabledForegroundColor: Colors.white70,
+                padding: EdgeInsets.symmetric(
+                  horizontal: metrics.isCompact ? 8 : 16,
+                ),
+                minimumSize: Size(0, metrics.controlDiameter),
+                fixedSize: Size.fromHeight(metrics.controlDiameter),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        _circleButton(
-          icon: Icons.edit,
-          tooltip: l10n.notesModeTooltip,
-          active: _notesMode,
-          activeColor: scheme.primary,
-          onPressed: _toggleNotesMode,
-        ),
-        const SizedBox(width: 8),
-        _circleButton(
-          icon: Icons.undo,
-          tooltip: l10n.undoTooltip,
-          onPressed: (game?.canUndo ?? false) ? _undo : null,
-        ),
-        const SizedBox(width: 8),
-        _circleButton(
-          icon: Icons.clear,
-          tooltip: l10n.eraseTooltip,
-          activeColor: Colors.red,
-          active: true,
-          onPressed: _clearCell,
-        ),
-        const SizedBox(width: 8),
-        _circleButton(
-          icon: Icons.school,
-          tooltip: l10n.explainSolveTooltip,
-          onPressed: (game == null || widget.isKiller) ? null : _openExplain,
-        ),
-      ],
+          SizedBox(width: gap),
+          _circleButton(
+            metrics: metrics,
+            icon: Icons.edit,
+            tooltip: l10n.notesModeTooltip,
+            active: _notesMode,
+            activeColor: scheme.primary,
+            onPressed: _toggleNotesMode,
+          ),
+          SizedBox(width: gap),
+          _circleButton(
+            metrics: metrics,
+            icon: Icons.undo,
+            tooltip: l10n.undoTooltip,
+            onPressed: (game?.canUndo ?? false) ? _undo : null,
+          ),
+          SizedBox(width: gap),
+          _circleButton(
+            metrics: metrics,
+            icon: Icons.clear,
+            tooltip: l10n.eraseTooltip,
+            activeColor: Colors.red,
+            active: true,
+            onPressed: _clearCell,
+          ),
+          SizedBox(width: gap),
+          _circleButton(
+            metrics: metrics,
+            icon: Icons.school,
+            tooltip: l10n.explainSolveTooltip,
+            onPressed: (game == null || widget.isKiller) ? null : _openExplain,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1322,6 +1493,7 @@ class _GameScreenState extends State<GameScreen>
   }
 
   Widget _circleButton({
+    required _ChromeMetrics metrics,
     required IconData icon,
     required String tooltip,
     required VoidCallback? onPressed,
@@ -1330,23 +1502,27 @@ class _GameScreenState extends State<GameScreen>
   }) {
     return Tooltip(
       message: tooltip,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: active ? activeColor : Colors.white,
-          foregroundColor: active ? Colors.white : Colors.black87,
-          shape: const CircleBorder(),
-          padding: const EdgeInsets.all(12),
+      child: SizedBox.square(
+        dimension: metrics.controlDiameter,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: active ? activeColor : Colors.white,
+            foregroundColor: active ? Colors.white : Colors.black87,
+            shape: const CircleBorder(),
+            padding: EdgeInsets.zero,
+            minimumSize: Size.square(metrics.controlDiameter),
+          ),
+          child: Icon(icon, size: metrics.controlIconSize),
         ),
-        child: Icon(icon),
       ),
     );
   }
 
-  Widget _buildSudokuGrid(bool isTablet, EnvironmentalTheme scheme) {
+  Widget _buildSudokuGrid(_ChromeMetrics metrics, EnvironmentalTheme scheme) {
     final g = game!;
     final gridDim = g.gridDim;
-    final maxGridSize = isTablet ? 450.0 : 320.0;
+    final maxGridSize = metrics.maxGridSize;
 
     // Both width AND height must be consulted: the old version only read
     // MediaQuery's screen width, so on a wide-but-height-constrained viewport
@@ -1567,29 +1743,35 @@ class _GameScreenState extends State<GameScreen>
   /// to absorb instead. On a viewport wider than it is tall, spread the digits
   /// across as many columns as still leave a tappable (44pt) tile — usually a
   /// single row — and hand the height back to the grid.
-  int _padColumnsFor(BoxConstraints constraints) {
+  int _padColumnsFor(BoxConstraints constraints, _ChromeMetrics metrics) {
     final dim = game!.gridDim;
-    final innerWidth = constraints.maxWidth - _kPadPadding * 2;
+    final innerWidth = constraints.maxWidth - metrics.padPadding * 2;
     final fitsByWidth = math.max(
       1,
-      ((innerWidth + _kPadSpacing) / (44.0 + _kPadSpacing)).floor(),
+      ((innerWidth + metrics.padSpacing) / (44.0 + metrics.padSpacing)).floor(),
     );
     final preferred = constraints.maxWidth > constraints.maxHeight
         ? dim
         : math.min(6, dim);
-    return math.min(dim, math.min(fitsByWidth, preferred));
+    final cols = math.min(dim, math.min(fitsByWidth, preferred));
+    // Balance the rows. Six columns for nine digits is 6 + 3, which leaves half
+    // the last row as a hole; the same two rows spread as 5 + 4 fill it. Take
+    // the row count the column count implies, then use the narrowest columns
+    // that still need only that many rows.
+    final rows = (dim / cols).ceil();
+    return math.max(1, (dim / rows).ceil());
   }
 
-  Widget _buildNumberPad(bool isTablet, int crossAxisCount) {
+  Widget _buildNumberPad(_ChromeMetrics metrics, int crossAxisCount) {
     final maxNumber = game!.gridDim;
     final primary = GameStats.current.primary;
-    const spacing = _kPadSpacing;
+    final spacing = metrics.padSpacing;
 
     return Container(
-      padding: const EdgeInsets.all(_kPadPadding),
+      padding: EdgeInsets.all(metrics.padPadding),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(metrics.isCompact ? 14 : 20),
         border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       // The number tiles must actually fit the available space and scale

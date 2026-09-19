@@ -42,6 +42,17 @@ if the puzzle still has exactly one solution** (bounded by a time budget). On
 native platforms generation runs in a **killable background isolate**; the web has
 no `Isolate.spawn`, so it generates inline (fast enough for all sizes).
 
+### Small-screen layout
+
+The game screen derives its chrome — outer padding, the gaps between blocks,
+the number-pad tile size and the control row's button diameter — from the
+viewport rather than from constants, and treats a small/old iPhone (a 320×568
+SE, a 375×667 6/7/8) as its own case. There the chrome yields: on a 320pt
+screen the board went from roughly half the screen width to filling it, because
+the pad no longer claims 42% of the body and the hint button's label scales down
+instead of wrapping one character per line. `test/board_layout_test.dart` pins
+the floor for each phone class.
+
 ### Pre-built puzzle database
 
 `assets/puzzles.json` ships a set of pre-solved blueprints (generated offline) that
@@ -116,6 +127,23 @@ manually via *Run workflow*). Pages serves from a subpath, so that build passes
 `--base-href /Sudoku/`; it also copies `index.html` to `404.html`, which is how
 a static Pages site gets the SPA deep-link fallback Vercel does with a rewrite.
 Live at https://crispstrobe.github.io/Sudoku/
+
+## Checking the web build's number semantics
+
+`flutter test` runs on the Dart VM, where `int` is a true 64-bit integer.
+dart2js compiles `int` to a JS double and cannot allocate a `Uint64List` at all,
+so engine code that is correct under `flutter test` can still throw in a
+browser. The Killer generator leans on the `dart_csp` solver, which is where
+that bit us, so there is a probe that compiles the real generator with dart2js
+and runs it:
+
+```bash
+dart compile js -o /tmp/probe.js tool/web_killer_probe.dart
+node -e 'globalThis.self = globalThis; require("/tmp/probe.js")'
+```
+
+Every line should say `OK`. A `FAIL` there means Killer is broken on the web
+even when the whole Flutter suite is green.
 
 ## Regenerating serialization code
 

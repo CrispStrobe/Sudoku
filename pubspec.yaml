@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.0+11
+version: 1.2.0+12
 
 environment:
   sdk: ^3.9.0
@@ -38,12 +38,17 @@ dependencies:
   shared_preferences: ^2.5.5
   package_info_plus: ^8.0.0 # app version shown on the About screen
   url_launcher: ^6.2.0 # contact/license links on the About screen
-  # Pure-Dart CSP solver (dart2js/wasm-safe ref) — used for the Killer-cage
-  # variant, whose cage-sum arithmetic the bitmask engine can't express.
+  # Pure-Dart CSP solver — used for the Killer-cage variant, whose cage-sum
+  # arithmetic the bitmask engine can't express.
+  #
+  # Pinned at or past ce10138: earlier refs promote an interval domain to a
+  # `Uint64List`-backed bitset, which dart2js cannot allocate, so every Killer
+  # generation threw in the browser and the screen fell back to a cage-less
+  # classic board. `tool/web_killer_probe.dart` re-checks this under dart2js.
   dart_csp:
     git:
       url: https://github.com/CrispStrobe/dart_csp.git
-      ref: "605ba00315a9f916a91b69b368240e66cab4b242"
+      ref: "ce10138a4bc857847429b9cfa3d4071854a5bbca"
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2

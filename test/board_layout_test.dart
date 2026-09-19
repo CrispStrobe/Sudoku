@@ -170,4 +170,100 @@ void main() {
     expectPadTilesUsable(tester);
     await tester.pumpWidget(const SizedBox());
   });
+
+  /// The board's edge, in logical pixels, as actually laid out.
+  double boardEdge(WidgetTester tester) {
+    return tester
+        .renderObject<RenderBox>(
+          find
+              .byWidgetPredicate(
+                (w) => w is CustomPaint && w.painter is SudokuGridPainter,
+              )
+              .first,
+        )
+        .size
+        .width;
+  }
+
+  /// A small/old iPhone is the worst case and the one that regressed: the
+  /// chrome (outer padding, three inter-block gaps, a five-button control row
+  /// whose hint label wrapped one character per line, and a number pad claiming
+  /// 42% of the body) squeezed the board down to roughly half the screen width
+  /// while empty gradient sat around it. The board is the screen; pin the floor
+  /// so it cannot be given away again.
+  ///
+  /// The fractions are deliberately below what the current layout achieves —
+  /// they are a regression floor, not a spec of the exact size.
+  for (final (label, size, minFraction) in <(String, Size, double)>[
+    ('iPhone SE / 5s (320x568)', const Size(320, 568), 0.8),
+    ('iPhone 6/7/8/SE2 (375x667)', const Size(375, 667), 0.85),
+    ('iPhone 14 (390x844)', const Size(390, 844), 0.9),
+  ]) {
+    testWidgets('$label gives the board most of the width', (tester) async {
+      final game = await pumpGame(tester, size);
+      expect(tester.takeException(), isNull);
+
+      final edge = boardEdge(tester);
+      expect(
+        edge,
+        greaterThanOrEqualTo(size.width * minFraction),
+        reason:
+            'board is ${edge.toStringAsFixed(1)}pt on a ${size.width.toInt()}pt '
+            'screen — the chrome is eating the board again',
+      );
+      // And it must still fit: never wider than the screen, never taller than
+      // the space above the pad.
+      expect(edge, lessThanOrEqualTo(size.width));
+
+      expectDigitsScaleToCells(tester, game);
+      expectPadTilesUsable(tester);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  /// The hint button's label used to wrap one character per line when the
+  /// control row ran out of width, turning a 48pt button into a 100pt one and
+  /// taking the difference out of the board.
+  testWidgets('control row stays one row tall on a 320pt screen', (
+    tester,
+  ) async {
+    await pumpGame(tester, const Size(320, 568));
+    expect(tester.takeException(), isNull);
+
+    final hint = tester.renderObject<RenderBox>(
+      find.ancestor(
+        of: find.byIcon(Icons.lightbulb),
+        matching: find.byType(ElevatedButton),
+      ),
+    );
+    expect(
+      hint.size.height,
+      lessThanOrEqualTo(56.0),
+      reason:
+          'hint button is ${hint.size.height.toStringAsFixed(1)}pt tall — its '
+          'label is wrapping instead of scaling down',
+    );
+
+    // Every control must remain a usable tap target.
+    for (final icon in [
+      Icons.lightbulb,
+      Icons.edit,
+      Icons.undo,
+      Icons.clear,
+      Icons.school,
+    ]) {
+      final box = tester.renderObject<RenderBox>(
+        find.ancestor(
+          of: find.byIcon(icon),
+          matching: find.byType(ElevatedButton),
+        ),
+      );
+      expect(
+        box.size.shortestSide,
+        greaterThanOrEqualTo(40.0),
+        reason: '$icon control collapsed to ${box.size.shortestSide}pt',
+      );
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
 }
