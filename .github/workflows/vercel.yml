@@ -49,6 +49,12 @@ jobs:
 
       - run: flutter pub get
 
+      # ubuntu-latest ships Node but not the Vercel CLI. Pinned to a major so
+      # a CLI release cannot change deploy behaviour under a green pipeline —
+      # keep in step with whatever deploy.sh is used with locally.
+      - name: Install the Vercel CLI
+        run: npm install -g vercel@54
+
       # APP_VERSION feeds the About screen. On a tag build that is the tag; on
       # main it is the short SHA, so a deployed build can always be traced back
       # to a commit.
