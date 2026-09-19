@@ -62,6 +62,30 @@ class SudokuApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
+          // Resolve the platform's locale ourselves rather than trusting the
+          // default algorithm with it.
+          //
+          // A browser can report `C` — the bare POSIX locale, which is what a
+          // container or a Linux box with no LANG set hands over — and `C` is
+          // not a language tag. It reached `Intl.canonicalizedLocale`, which
+          // threw `Incorrect locale information provided` during startup, and
+          // a Flutter web app that throws while starting renders nothing at
+          // all: a blank blue rectangle, with every asset served correctly and
+          // a 200 on every request. Found by the deploy render check on a CI
+          // runner, which is exactly the kind of machine that reports `C`.
+          //
+          // Match by language code, then fall back to the first supported
+          // locale. Never let an unrecognised tag through.
+          localeResolutionCallback: (locale, supported) {
+            if (locale != null) {
+              for (final candidate in supported) {
+                if (candidate.languageCode == locale.languageCode) {
+                  return candidate;
+                }
+              }
+            }
+            return supported.first;
+          },
           home: const HomeScreen(),
           debugShowCheckedModeBanner: false,
         );

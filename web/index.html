@@ -31,6 +31,55 @@
 
   <title>CrispSudoku</title>
   <link rel="manifest" href="manifest.json">
+
+  <script>
+    // Guard against a browser locale that is not a language tag.
+    //
+    // A container, a CI runner, or a Linux box with no LANG set reports the
+    // bare POSIX locale `C`. The browser's own Intl API rejects it —
+    // `new Intl.DateTimeFormat('C')` throws `RangeError: Invalid language
+    // tag: C` — and the Flutter engine reads navigator.language during
+    // startup, so the app died before painting a single frame: a blank white
+    // page, with every asset served and a 200 on every request.
+    //
+    // This has to run before flutter_bootstrap.js, and it has to be here
+    // rather than in Dart: by the time any Dart code runs, the engine has
+    // already read the value. Rewrite anything Intl will not accept to a tag
+    // it will, and leave every real locale untouched.
+    (function () {
+      function usable(tag) {
+        try {
+          return typeof tag === 'string' &&
+                 Intl.getCanonicalLocales(tag).length > 0;
+        } catch (e) {
+          return false;
+        }
+      }
+      var fallback = 'en-US';
+      var languages = (navigator.languages || []).filter(usable);
+      var language = usable(navigator.language) ? navigator.language : null;
+      if (language === null || languages.length === 0) {
+        if (!language) language = languages[0] || fallback;
+        if (languages.length === 0) languages = [language];
+        try {
+          Object.defineProperty(navigator, 'language', {
+            get: function () { return language; },
+            configurable: true,
+          });
+          Object.defineProperty(navigator, 'languages', {
+            get: function () { return languages; },
+            configurable: true,
+          });
+          console.warn(
+            'CrispSudoku: browser reported an unusable locale; using ' +
+            language + '.');
+        } catch (e) {
+          // Non-configurable in some engine; nothing more we can do here, and
+          // the Dart-side localeResolutionCallback still guards the UI.
+        }
+      }
+    })();
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

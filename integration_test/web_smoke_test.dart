@@ -19,6 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:sudoku/l10n/app_localizations.dart';
 import 'package:sudoku/main.dart';
 import 'package:sudoku/painters.dart';
 import 'package:sudoku/services.dart';
@@ -61,6 +62,13 @@ void main() {
 
     await tester.pumpWidget(
       const MaterialApp(
+        // The delegates are not optional: GameScreen reads
+        // `AppLocalizations.of(context)!` on its first build, and without them
+        // that is a null check on null — which surfaces as "multiple
+        // exceptions during the test" rather than anything that names the
+        // cause.
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: GameScreen(
           difficulty: SudokuDifficulty.easy,
           gridSize: GridSize.standard,
