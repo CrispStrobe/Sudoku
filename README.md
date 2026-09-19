@@ -53,6 +53,13 @@ the pad no longer claims 42% of the body and the hint button's label scales down
 instead of wrapping one character per line. `test/board_layout_test.dart` pins
 the floor for each phone class.
 
+In landscape the stacked layout is the wrong shape entirely: the board and the
+chrome compete for height, the scarce axis, while width sits empty either side.
+There the chrome moves into a panel beside the board, sized from whatever width
+the (height-bound, square) board leaves over — on a 568×320 phone that takes the
+board from about 90pt to 244pt and the number pad from 29pt tiles to 46pt ones.
+The same layout is what a desktop browser window gets.
+
 ### Pre-built puzzle database
 
 `assets/puzzles.json` ships a set of pre-solved blueprints (generated offline) that

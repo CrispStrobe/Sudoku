@@ -1232,46 +1232,17 @@ class _GameScreenState extends State<GameScreen>
                 // remainder.
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final padCols = _padColumnsFor(constraints, metrics);
-                    final padRows = (game!.gridDim / padCols).ceil();
-                    final wanted =
-                        padRows * metrics.idealPadTile +
-                        (padRows - 1) * metrics.padSpacing +
-                        metrics.padPadding * 2;
-                    // Never let the pad crowd out the board on a short window.
-                    // The share is tighter when compact: on a 568pt screen 42%
-                    // of the body is 200 points for two rows of digits, which
-                    // is space the board needs far more than the pad does.
-                    final padHeight = math.min(
-                      wanted,
-                      constraints.maxHeight * (metrics.isCompact ? 0.3 : 0.42),
-                    );
-
-                    return Column(
-                      children: [
-                        _buildStatusStrip(metrics),
-                        SizedBox(height: metrics.gap),
-                        Expanded(
-                          child: Center(
-                            child: AnimatedBuilder(
-                              animation: _shakeAnimation,
-                              builder: (context, child) => Transform.translate(
-                                offset: Offset(_shakeAnimation.value, 0),
-                                child: child,
-                              ),
-                              child: _buildSudokuGrid(metrics, scheme),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: metrics.gap),
-                        _buildControls(scheme, metrics),
-                        SizedBox(height: metrics.gap),
-                        SizedBox(
-                          height: padHeight,
-                          child: _buildNumberPad(metrics, padCols),
-                        ),
-                      ],
-                    );
+                    // Stacking everything vertically is right when the window
+                    // is taller than it is wide. In landscape it is the worst
+                    // possible choice: the board competes with the chrome for
+                    // the scarce axis (on a 568x320 phone that left it ~90pt)
+                    // while the plentiful one sits empty on both sides. Put
+                    // the chrome beside the board there instead.
+                    final landscape =
+                        constraints.maxWidth > constraints.maxHeight * 1.1;
+                    return landscape
+                        ? _buildLandscapeBody(constraints, metrics, scheme)
+                        : _buildPortraitBody(constraints, metrics, scheme);
                   },
                 ),
               ),
@@ -1279,6 +1250,140 @@ class _GameScreenState extends State<GameScreen>
           ),
         ),
       ),
+    );
+  }
+
+  /// The height the number pad gets for [padRows] rows: what those rows want
+  /// at [metrics]' ideal tile size, capped at [ceilingFraction] of the
+  /// available height so the pad can never crowd the board out of a short
+  /// window.
+  double _padHeightFor(
+    int padRows,
+    BoxConstraints constraints,
+    _ChromeMetrics metrics, {
+    required double ceilingFraction,
+  }) {
+    final wanted =
+        padRows * metrics.idealPadTile +
+        (padRows - 1) * metrics.padSpacing +
+        metrics.padPadding * 2;
+    return math.min(wanted, constraints.maxHeight * ceilingFraction);
+  }
+
+  /// Portrait: status strip, board, controls, pad — top to bottom.
+  ///
+  /// A fixed flex split (3:1 on tablet, 2:1 on phone) used to starve the
+  /// number pad on short viewports: its share worked out to a couple of dozen
+  /// pixels per tile, so the digits shrank to the clamp floor and stopped
+  /// being either legible or tappable, while the board sat centred in slack it
+  /// could not use. The pad's height is not a proportion of the screen — it is
+  /// whatever its rows need at a sane tile size — so derive it, and let the
+  /// board take the remainder.
+  Widget _buildPortraitBody(
+    BoxConstraints constraints,
+    _ChromeMetrics metrics,
+    EnvironmentalTheme scheme,
+  ) {
+    final padCols = _padColumnsFor(constraints, metrics);
+    final padRows = (game!.gridDim / padCols).ceil();
+    // The ceiling is tighter when compact: on a 568pt screen 42% of the body
+    // is 200 points for two rows of digits, which is space the board needs far
+    // more than the pad does.
+    final padHeight = _padHeightFor(
+      padRows,
+      constraints,
+      metrics,
+      ceilingFraction: metrics.isCompact ? 0.3 : 0.42,
+    );
+
+    return Column(
+      children: [
+        _buildStatusStrip(metrics),
+        SizedBox(height: metrics.gap),
+        Expanded(child: Center(child: _shakeableGrid(metrics, scheme))),
+        SizedBox(height: metrics.gap),
+        _buildControls(scheme, metrics),
+        SizedBox(height: metrics.gap),
+        SizedBox(height: padHeight, child: _buildNumberPad(metrics, padCols)),
+      ],
+    );
+  }
+
+  /// Landscape: board on the left, the whole chrome stack beside it.
+  ///
+  /// Height is the scarce axis here, and it is the axis the board needs, so
+  /// nothing but the board may spend it. Everything else moves into a side
+  /// panel and spends width, of which there is a surplus by definition.
+  Widget _buildLandscapeBody(
+    BoxConstraints constraints,
+    _ChromeMetrics metrics,
+    EnvironmentalTheme scheme,
+  ) {
+    // The board is square and, in landscape, bounded by height — so every
+    // point of width beyond its edge is width the board cannot use anyway.
+    // Give all of it to the panel rather than a fixed fraction: on a 568x320
+    // phone that is the difference between a 3-column pad of 29pt tiles and a
+    // 5-column one of 46pt tiles, and it costs the board nothing. The upper
+    // clamp is for desktop windows, where the leftover is enormous.
+    final gutter = metrics.gap * 2;
+    final boardEdge = math.min(metrics.maxGridSize, constraints.maxHeight);
+    final panelWidth = (constraints.maxWidth - boardEdge - gutter)
+        .clamp(math.min(240.0, constraints.maxWidth / 2), 380.0)
+        .toDouble();
+    final padCols = _padColumnsFor(
+      BoxConstraints(maxWidth: panelWidth, maxHeight: constraints.maxHeight),
+      metrics,
+    );
+    final padRows = (game!.gridDim / padCols).ceil();
+    final padWanted =
+        padRows * metrics.idealPadTile +
+        (padRows - 1) * metrics.padSpacing +
+        metrics.padPadding * 2;
+
+    return Row(
+      children: [
+        Expanded(child: Center(child: _shakeableGrid(metrics, scheme))),
+        SizedBox(width: gutter),
+        SizedBox(
+          width: panelWidth,
+          child: Column(
+            // Centre the group against the board beside it. `Flexible` is
+            // loose, so when the pad wants less than the slack (a desktop
+            // window) there is leftover for this to distribute.
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildStatusStrip(metrics),
+              SizedBox(height: metrics.gap),
+              _buildControls(scheme, metrics, stacked: true),
+              SizedBox(height: metrics.gap),
+              // The pad takes what its rows want, or what is left, whichever
+              // is smaller. A plain SizedBox(height: wanted) overflowed the
+              // column on a 320pt-tall window, where what it wants is more
+              // than what is there.
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: padWanted),
+                  child: SizedBox.expand(
+                    child: _buildNumberPad(metrics, padCols),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The board, wrapped in the wrong-answer shake.
+  Widget _shakeableGrid(_ChromeMetrics metrics, EnvironmentalTheme scheme) {
+    return AnimatedBuilder(
+      animation: _shakeAnimation,
+      builder: (context, child) => Transform.translate(
+        offset: Offset(_shakeAnimation.value, 0),
+        child: child,
+      ),
+      child: _buildSudokuGrid(metrics, scheme),
     );
   }
 
@@ -1384,9 +1489,69 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _buildControls(EnvironmentalTheme scheme, _ChromeMetrics metrics) {
+  /// The control row: the hint button plus four circular actions.
+  ///
+  /// With [stacked] the hint button gets its own full-width row above the
+  /// circles. That is for the landscape side panel, which is only ~200pt wide:
+  /// four 40pt circles and their gaps already fill it, so sharing a row left
+  /// the hint button about 20pt — an unreadable orange stub, and on a slightly
+  /// narrower panel nothing at all.
+  Widget _buildControls(
+    EnvironmentalTheme scheme,
+    _ChromeMetrics metrics, {
+    bool stacked = false,
+  }) {
     final l10n = AppLocalizations.of(context)!;
     final gap = metrics.isCompact ? 6.0 : 8.0;
+    final circles = <Widget>[
+      _circleButton(
+        metrics: metrics,
+        icon: Icons.edit,
+        tooltip: l10n.notesModeTooltip,
+        active: _notesMode,
+        activeColor: scheme.primary,
+        onPressed: _toggleNotesMode,
+      ),
+      _circleButton(
+        metrics: metrics,
+        icon: Icons.undo,
+        tooltip: l10n.undoTooltip,
+        onPressed: (game?.canUndo ?? false) ? _undo : null,
+      ),
+      _circleButton(
+        metrics: metrics,
+        icon: Icons.clear,
+        tooltip: l10n.eraseTooltip,
+        activeColor: Colors.red,
+        active: true,
+        onPressed: _clearCell,
+      ),
+      _circleButton(
+        metrics: metrics,
+        icon: Icons.school,
+        tooltip: l10n.explainSolveTooltip,
+        onPressed: (game == null || widget.isKiller) ? null : _openExplain,
+      ),
+    ];
+    final hintButton = _buildHintButton(l10n, metrics);
+
+    if (stacked) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: double.infinity, child: hintButton),
+          SizedBox(height: gap),
+          SizedBox(
+            height: metrics.controlDiameter,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: circles,
+            ),
+          ),
+        ],
+      );
+    }
+
     // On a 320pt screen four 48pt circles plus their gaps leave the hint
     // button about 50 points, of which the icon takes 24 — so its label wrapped
     // one character per line and the button grew to five lines tall, stealing
@@ -1396,72 +1561,39 @@ class _GameScreenState extends State<GameScreen>
       height: metrics.controlDiameter,
       child: Row(
         children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              // Logic hints don't model cage sums, so they're off for Killer.
-              onPressed: (!widget.isKiller && _hintsRemaining > 0)
-                  ? _showHint
-                  : null,
-              icon: Icon(Icons.lightbulb, size: metrics.controlIconSize),
-              label: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  widget.isKiller
-                      ? l10n.hintButtonLabel
-                      : (_hintsRemaining > 0
-                            ? l10n.hintButtonWithCount(_hintsRemaining)
-                            : l10n.noHintsLabel),
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.clip,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.grey.shade400,
-                disabledForegroundColor: Colors.white70,
-                padding: EdgeInsets.symmetric(
-                  horizontal: metrics.isCompact ? 8 : 16,
-                ),
-                minimumSize: Size(0, metrics.controlDiameter),
-                fixedSize: Size.fromHeight(metrics.controlDiameter),
-              ),
-            ),
-          ),
-          SizedBox(width: gap),
-          _circleButton(
-            metrics: metrics,
-            icon: Icons.edit,
-            tooltip: l10n.notesModeTooltip,
-            active: _notesMode,
-            activeColor: scheme.primary,
-            onPressed: _toggleNotesMode,
-          ),
-          SizedBox(width: gap),
-          _circleButton(
-            metrics: metrics,
-            icon: Icons.undo,
-            tooltip: l10n.undoTooltip,
-            onPressed: (game?.canUndo ?? false) ? _undo : null,
-          ),
-          SizedBox(width: gap),
-          _circleButton(
-            metrics: metrics,
-            icon: Icons.clear,
-            tooltip: l10n.eraseTooltip,
-            activeColor: Colors.red,
-            active: true,
-            onPressed: _clearCell,
-          ),
-          SizedBox(width: gap),
-          _circleButton(
-            metrics: metrics,
-            icon: Icons.school,
-            tooltip: l10n.explainSolveTooltip,
-            onPressed: (game == null || widget.isKiller) ? null : _openExplain,
-          ),
+          Expanded(child: hintButton),
+          for (final circle in circles) ...[SizedBox(width: gap), circle],
         ],
+      ),
+    );
+  }
+
+  Widget _buildHintButton(AppLocalizations l10n, _ChromeMetrics metrics) {
+    return ElevatedButton.icon(
+      // Logic hints don't model cage sums, so they're off for Killer.
+      onPressed: (!widget.isKiller && _hintsRemaining > 0) ? _showHint : null,
+      icon: Icon(Icons.lightbulb, size: metrics.controlIconSize),
+      label: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          widget.isKiller
+              ? l10n.hintButtonLabel
+              : (_hintsRemaining > 0
+                    ? l10n.hintButtonWithCount(_hintsRemaining)
+                    : l10n.noHintsLabel),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.clip,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.orange,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: Colors.grey.shade400,
+        disabledForegroundColor: Colors.white70,
+        padding: EdgeInsets.symmetric(horizontal: metrics.isCompact ? 8 : 16),
+        minimumSize: Size(0, metrics.controlDiameter),
+        fixedSize: Size.fromHeight(metrics.controlDiameter),
       ),
     );
   }

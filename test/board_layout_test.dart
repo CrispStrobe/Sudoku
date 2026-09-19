@@ -221,6 +221,36 @@ void main() {
     });
   }
 
+  /// Landscape is the shape where stacking everything vertically is worst:
+  /// the board competes with the chrome for the scarce axis while the
+  /// plentiful one sits empty on both sides. On a 568x320 phone that left the
+  /// board about 90pt. The chrome belongs beside the board there.
+  for (final (label, size) in <(String, Size)>[
+    ('phone landscape (568x320)', const Size(568, 320)),
+    ('larger phone landscape (667x375)', const Size(667, 375)),
+  ]) {
+    testWidgets('$label puts the board on the tall axis', (tester) async {
+      final game = await pumpGame(tester, size);
+      expect(tester.takeException(), isNull);
+
+      final edge = boardEdge(tester);
+      // The board should be limited by the window's height, not squeezed into
+      // a fraction of it by chrome stacked above and below.
+      expect(
+        edge,
+        greaterThanOrEqualTo(size.height * 0.6),
+        reason:
+            'board is ${edge.toStringAsFixed(1)}pt in a ${size.height.toInt()}pt'
+            '-tall landscape window — the chrome is still stacked vertically',
+      );
+      expect(edge, lessThanOrEqualTo(size.height));
+
+      expectDigitsScaleToCells(tester, game);
+      expectPadTilesUsable(tester);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   /// The hint button's label used to wrap one character per line when the
   /// control row ran out of width, turning a 48pt button into a 100pt one and
   /// taking the difference out of the board.
