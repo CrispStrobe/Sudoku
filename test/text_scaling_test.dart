@@ -182,4 +182,82 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  /// The status strip's worst case.
+  ///
+  /// It is a single scaleDown `FittedBox` holding a rating pill and a mistakes
+  /// row whose pip count scales with difficulty. At 12x12 expert in German at
+  /// a large text setting on the narrowest phone, that is the most it will
+  /// ever be asked to hold — and scaleDown has no floor, so the failure mode
+  /// is not an overflow but a strip too small to read.
+  testWidgets('status strip stays legible at its worst case', (tester) async {
+    tester.view.physicalSize = const Size(280, 653);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final seeded = SudokuGame.generate(
+      SudokuDifficulty.expert,
+      GridSize.mega,
+      GridShape.classic,
+      seed: 9,
+    );
+    // ignore: unawaited_futures
+    PuzzleCache().set(
+      PuzzleBlueprint(
+        solutionGrid: seeded.solution,
+        regions: seeded.regions,
+        gridSize: GridSize.mega,
+        gridShape: GridShape.classic,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('de'),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.6)),
+          child: child!,
+        ),
+        home: const GameScreen(
+          difficulty: SudokuDifficulty.expert,
+          gridSize: GridSize.mega,
+          gridShape: GridShape.classic,
+          gameMode: GameMode.classic,
+        ),
+      ),
+    );
+    dynamic state;
+    for (var i = 0; i < 400; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      state = tester.state(find.byType(GameScreen));
+      if (state.game != null) break;
+    }
+    expect(state.game, isNotNull);
+    expect(tester.takeException(), isNull, reason: 'status strip overflowed');
+
+    // The strip scales down to fit; check what it scaled *to*. Below about a
+    // third of its natural size the pips and the count stop being readable,
+    // and the player cannot tell how many lives are left.
+    final fitted = tester.widgetList<FittedBox>(find.byType(FittedBox));
+    expect(fitted, isNotEmpty);
+    final box = tester.renderObject<RenderBox>(find.byType(FittedBox).first);
+    expect(
+      box.size.height,
+      greaterThanOrEqualTo(12.0),
+      reason:
+          'status strip collapsed to ${box.size.height.toStringAsFixed(1)}pt '
+          'tall at 12x12 expert, German, 1.6x text on a 280pt screen',
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 }

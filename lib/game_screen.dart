@@ -40,6 +40,11 @@ const double _kPadPadding = 16.0;
 /// "could not create a puzzle" is the more honest outcome.
 const Duration _killerGenerationBudget = Duration(seconds: 30);
 
+/// Set by golden tests to make the particle layer reproducible. Null in every
+/// real build, where confetti should be confetti.
+@visibleForTesting
+int? debugParticleSeed;
+
 /// The chrome metrics that surround the board, derived from the viewport.
 ///
 /// On a roomy phone every one of these can afford its comfortable value. On a
@@ -839,7 +844,7 @@ class _GameScreenState extends State<GameScreen>
             borderRadius: BorderRadius.circular(20),
           ),
           title: Text(l10n.noStepFoundTitle),
-          content: Text(l10n.noStepFoundBody),
+          content: SingleChildScrollView(child: Text(l10n.noStepFoundBody)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -856,7 +861,9 @@ class _GameScreenState extends State<GameScreen>
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(techniqueLabel(context, step.technique)),
-        content: Text(step.explanationFor(l10n.localeName)),
+        content: SingleChildScrollView(
+          child: Text(step.explanationFor(l10n.localeName)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -905,7 +912,9 @@ class _GameScreenState extends State<GameScreen>
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(hint.titleFor(l10n.localeName)),
-        content: Text(l10n.useHintConfirm(hint.penalty)),
+        content: SingleChildScrollView(
+          child: Text(l10n.useHintConfirm(hint.penalty)),
+        ),
         actions: [
           TextButton(
             child: Text(l10n.cancelButton),
@@ -1004,27 +1013,47 @@ class _GameScreenState extends State<GameScreen>
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l10n.scoreResult(finalScore),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            Text(l10n.timeResult(_formatDuration(time), timeBonus)),
-            if (_logicRating != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  l10n.logicRatingResult(_ratingLabel(context, _logicRating!)),
+        // Scrollable, like the hint dialog above it. An `AlertDialog` hands
+        // its content a bounded box, and a bare `Column` in there has nowhere
+        // to put the overflow: at the 2x an accessibility text setting can
+        // reach, these four lines overran a 320x568 screen by 439 points, and
+        // on a 280pt-tall landscape window even at 1.0x they overran by 9.
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.scoreResult(finalScore),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
+                textAlign: TextAlign.center,
               ),
-            if (widget.isDaily)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(l10n.dailyComeBackNote),
+              Text(
+                l10n.timeResult(_formatDuration(time), timeBonus),
+                textAlign: TextAlign.center,
               ),
-          ],
+              if (_logicRating != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    l10n.logicRatingResult(
+                      _ratingLabel(context, _logicRating!),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              if (widget.isDaily)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    l10n.dailyComeBackNote,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1072,17 +1101,24 @@ class _GameScreenState extends State<GameScreen>
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l10n.reachedMistakesMessage(_maxMistakes),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(l10n.streakResetMessage, textAlign: TextAlign.center),
-          ],
+        // Scrollable for the same reason as the win dialog: a bare Column in
+        // an AlertDialog has nowhere to put its overflow.
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.reachedMistakesMessage(_maxMistakes),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(l10n.streakResetMessage, textAlign: TextAlign.center),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1264,7 +1300,13 @@ class _GameScreenState extends State<GameScreen>
         child: SafeArea(
           child: Stack(
             children: [
-              Positioned.fill(child: ParticleLayer(key: _particleKey)),
+              Positioned.fill(
+                child: ParticleLayer(
+                  key: _particleKey,
+                  randomSeed: debugParticleSeed,
+                  ambient: debugParticleSeed == null,
+                ),
+              ),
               Padding(
                 padding: EdgeInsets.all(metrics.outerPadding),
                 // A fixed flex split (3:1 on tablet, 2:1 on phone) starved the

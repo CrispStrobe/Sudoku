@@ -112,7 +112,17 @@ class _ParticleFade {
 /// skipping the widget, element and layout work that a `setState` per frame
 /// used to redo for every live particle.
 class ParticleLayer extends StatefulWidget {
-  const ParticleLayer({super.key});
+  const ParticleLayer({super.key, this.randomSeed, this.ambient = true});
+
+  /// Fixes the particle RNG. Only golden tests pass this: drifting confetti
+  /// makes every rendered frame different, which is the difference between a
+  /// golden image that catches layout regressions and one that cries wolf.
+  final int? randomSeed;
+
+  /// Whether to keep spawning ambient particles. Golden tests turn it off for
+  /// the same reason — a seeded RNG still produces a different picture at
+  /// every point in time.
+  final bool ambient;
 
   @override
   State<ParticleLayer> createState() => ParticleLayerState();
@@ -121,7 +131,7 @@ class ParticleLayer extends StatefulWidget {
 class ParticleLayerState extends State<ParticleLayer>
     with SingleTickerProviderStateMixin {
   final List<Particle> _particles = [];
-  final math.Random _random = math.Random();
+  late final math.Random _random = math.Random(widget.randomSeed);
 
   /// Bumped once per tick; the painter listens to it instead of us calling
   /// `setState`.
@@ -138,9 +148,11 @@ class ParticleLayerState extends State<ParticleLayer>
       duration: const Duration(milliseconds: 16),
       vsync: this,
     )..addListener(_tick);
-    _spawnTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (mounted) _spawnAmbient();
-    });
+    if (widget.ambient) {
+      _spawnTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (mounted) _spawnAmbient();
+      });
+    }
   }
 
   void _ensureRunning() {

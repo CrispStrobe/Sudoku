@@ -34,7 +34,11 @@ jobs:
       - run: flutter pub get
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
-      - run: flutter test
+      # `--exclude-tags golden`: golden images are pixel comparisons, valid
+      # only against the toolchain that produced them. The baseline in
+      # test/goldens/ is generated locally and reviewed by eye; see
+      # dart_test.yaml.
+      - run: flutter test --exclude-tags golden
       # Smoke-build for web so dart_csp / wasm-safety regressions are caught.
       - run: flutter build web --release
 
@@ -55,3 +59,52 @@ jobs:
             exit 1
           fi
           echo "$out" | grep -q 'all generations succeeded'
+
+  # The app's own widgets, in a real browser.
+  #
+  # `flutter test` is a VM runner: 64-bit ints, dart:io present, Skia into an
+  # offscreen surface. The shipped web build has none of those. A crash that
+  # only happens under dart2js therefore passes the whole suite — which is
+  # exactly what happened to Killer generation in v1.1.0, with `flutter build
+  # web` green beside it, because a build compiles the code without running it.
+  #
+  # tool/web_killer_probe.dart covers the engine and the Vercel workflow's
+  # render check covers the deployed page. This covers the gap between them.
+  web-integration:
+    name: Integration tests (Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # Chrome and chromedriver have to be the same major version or the
+      # session never starts.
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+
+      - name: Start chromedriver
+        run: |
+          "${{ steps.chrome.outputs.chromedriver-path }}" --port=4444 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:4444/status >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:4444/status
+
+      - name: Drive the app in Chrome
+        env:
+          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          flutter drive \
+            --driver=test_driver/integration_test.dart \
+            --target=integration_test/web_smoke_test.dart \
+            -d web-server --browser-name=chrome --headless

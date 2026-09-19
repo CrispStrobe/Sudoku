@@ -116,3 +116,25 @@ jobs:
           # 200 is not enough for the puzzle bundles: they are the thing that
           # makes Killer instant, and an empty or truncated one would still 200.
           curl -sL "$SITE/assets/assets/killer_puzzles.json"             | python3 -c 'import json,sys; d=json.load(sys.stdin); n=sum(len(v) for v in d.values()); print(f"killer bundle: {n} puzzles in {len(d)} configurations"); sys.exit(0 if n >= 32 else 1)'
+
+      # Serving the right bytes is not the same as rendering. Flutter web
+      # paints to a canvas, so the shell can 200 with every asset present and
+      # the app still be a blank blue rectangle — a dart2js exception during
+      # startup looks exactly like that, and curl cannot tell the difference.
+      # Drive a real browser at the sizes that have actually broken here.
+      - name: Render-check the deployment
+        if: github.event_name != 'pull_request'
+        env:
+          SITE: https://sudoku-lac-five.vercel.app
+        run: |
+          npm install --no-save playwright@1.56
+          npx playwright install --with-deps chromium
+          node .github/scripts/render_check.js "$SITE"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name != 'pull_request'
+        with:
+          name: render-check-screenshots
+          path: render-check/
+          if-no-files-found: ignore
+          retention-days: 14

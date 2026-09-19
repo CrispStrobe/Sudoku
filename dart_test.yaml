@@ -1,0 +1,15 @@
+# Golden tests compare rendered pixels, so they are only meaningful against the
+# toolchain that produced the baseline — a different Flutter version, font
+# stack or text shaper moves pixels for no reason anyone cares about. This repo
+# pins FLUTTER_VERSION across every workflow, so a baseline generated on that
+# version is reproducible; anything else is not.
+#
+# CI therefore runs `flutter test --exclude-tags golden`, and the goldens are
+# checked deliberately:
+#
+#   flutter test --tags golden                    # compare
+#   flutter test --tags golden --update-goldens   # accept the new output
+#
+# Look at the images in test/failures/ before accepting a change.
+tags:
+  golden:
