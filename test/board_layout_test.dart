@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -247,6 +249,61 @@ void main() {
 
       expectDigitsScaleToCells(tester, game);
       expectPadTilesUsable(tester);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  /// Real device sizes, including the ones that are nobody's idea of a phone.
+  ///
+  /// A folded Galaxy Fold in landscape is 653x280, and `isTablet` used to be
+  /// `size.width > 600` — width alone — so it was classified a tablet and
+  /// handed 24pt padding, 12pt gaps and 52pt controls to spend inside 224
+  /// points of height. The number pad got what was left: about five points,
+  /// with no digits in it, on a screen the game otherwise rendered perfectly.
+  /// A device's class is its *narrow* dimension, and that does not change when
+  /// you turn it sideways.
+  for (final (label, size) in <(String, Size)>[
+    ('Galaxy Fold folded (280x653)', const Size(280, 653)),
+    ('Galaxy Fold folded, landscape (653x280)', const Size(653, 280)),
+    ('Galaxy S8 (360x740)', const Size(360, 740)),
+    ('Surface Duo (540x720)', const Size(540, 720)),
+    ('iPhone 15 Pro Max (430x932)', const Size(430, 932)),
+    ('iPad mini (744x1133)', const Size(744, 1133)),
+    ('iPad Pro 11 landscape (1194x834)', const Size(1194, 834)),
+    ('desktop (1920x1080)', const Size(1920, 1080)),
+  ]) {
+    testWidgets('$label lays out a playable board and pad', (tester) async {
+      final game = await pumpGame(tester, size);
+      expect(tester.takeException(), isNull);
+
+      final edge = boardEdge(tester);
+      expect(
+        edge,
+        greaterThanOrEqualTo(math.min(size.width, size.height) * 0.5),
+        reason:
+            'board is ${edge.toStringAsFixed(1)}pt on a '
+            '${size.width.toInt()}x${size.height.toInt()} screen',
+      );
+      expectDigitsScaleToCells(tester, game);
+      expectPadTilesUsable(tester);
+
+      // Every pad digit must actually be on screen. A pad squeezed to a
+      // sliver still "renders" — its tiles are just too short to show a digit,
+      // which is what made the folded-Fold landscape case unplayable while
+      // throwing no exception and failing no other assertion.
+      for (var n = 1; n <= game.gridDim; n++) {
+        final tile = find.descendant(
+          of: find.byType(GridView),
+          matching: find.text('$n'),
+        );
+        expect(tile, findsOneWidget, reason: 'pad is missing the $n tile');
+        final box = tester.renderObject<RenderBox>(tile);
+        expect(
+          box.size.height,
+          greaterThan(0),
+          reason: 'pad digit $n collapsed to zero height',
+        );
+      }
       await tester.pumpWidget(const SizedBox());
     });
   }

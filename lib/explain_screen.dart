@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'game_stats.dart';
@@ -111,6 +113,35 @@ class _ExplainScreenState extends State<ExplainScreen> {
               : l10n.explainStuckNote)
         : null;
 
+    // Hoisted so the landscape body can put them beside the board instead of
+    // in a full-width row underneath it. On a 280pt-tall window that row costs
+    // about 60 points the board badly needs.
+    final landscapeBody =
+        MediaQuery.of(context).size.width >
+        MediaQuery.of(context).size.height * 1.1;
+    final stepControls = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        IconButton.filled(
+          onPressed: _index > 0 ? () => _go(_index - 1) : null,
+          icon: const Icon(Icons.skip_previous),
+          tooltip: l10n.explainPreviousTooltip,
+        ),
+        IconButton.filled(
+          onPressed: _stepCount == 0 ? null : _toggleAutoplay,
+          icon: Icon(_autoplay == null ? Icons.play_arrow : Icons.pause),
+          tooltip: _autoplay == null
+              ? l10n.explainPlayTooltip
+              : l10n.explainPauseTooltip,
+        ),
+        IconButton.filled(
+          onPressed: _index < _stepCount ? () => _go(_index + 1) : null,
+          icon: const Icon(Icons.skip_next),
+          tooltip: l10n.explainNextTooltip,
+        ),
+      ],
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.explainAppBarTitle),
@@ -142,88 +173,113 @@ class _ExplainScreenState extends State<ExplainScreen> {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 420),
-                            child: AspectRatio(
-                              aspectRatio: 1,
-                              child: _ExplainGrid(
-                                board: _boards[_index],
-                                regions: widget.regions,
-                                gridDim: widget.gridDim,
-                                jigsaw: widget.jigsaw,
-                                diagonal: widget.diagonal,
-                                highlight: step?.cell,
-                                eliminations: step?.eliminations ?? const [],
-                                scheme: scheme,
+                  // The board is square, but inside a vertical
+                  // SingleChildScrollView it only ever knew its *width*: the
+                  // scroll view offers unbounded height, so `AspectRatio(1)`
+                  // took the full width in both axes. On a 653x280 landscape
+                  // phone that made a 420pt board in a 190pt viewport — two of
+                  // nine rows visible, and the caption explaining the
+                  // deduction pushed entirely off-screen. Consult both axes,
+                  // and in landscape put the caption beside the board rather
+                  // than under it, as the game screen does.
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final landscape =
+                          constraints.maxWidth > constraints.maxHeight * 1.1;
+                      final boardSize = landscape
+                          ? math.min(
+                              constraints.maxHeight,
+                              math.min(constraints.maxWidth * 0.55, 420.0),
+                            )
+                          : math.min(
+                              math.min(constraints.maxWidth, 420.0),
+                              constraints.maxHeight * 0.72,
+                            );
+                      final board = SizedBox.square(
+                        dimension: math.max(0, boardSize),
+                        child: _ExplainGrid(
+                          board: _boards[_index],
+                          regions: widget.regions,
+                          gridDim: widget.gridDim,
+                          jigsaw: widget.jigsaw,
+                          diagonal: widget.diagonal,
+                          highlight: step?.cell,
+                          eliminations: step?.eliminations ?? const [],
+                          scheme: scheme,
+                        ),
+                      );
+                      final captionCard = Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (step != null)
+                                Text(
+                                  techniqueLabel(context, step.technique),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: scheme.primary,
+                                  ),
+                                ),
+                              Text(caption, textAlign: TextAlign.center),
+                              if (finishedNote != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  finishedNote,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+
+                      if (landscape) {
+                        return Row(
+                          children: [
+                            // Two halves. `Center(child: board)` alone sized
+                            // itself to the board and left it hugging the far
+                            // left of a wide window.
+                            Expanded(child: Center(child: board)),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Flexible(
+                                    child: SingleChildScrollView(
+                                      child: captionCard,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  stepControls,
+                                ],
                               ),
                             ),
-                          ),
+                          ],
+                        );
+                      }
+                      return SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            Center(child: board),
+                            const SizedBox(height: 12),
+                            captionCard,
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (step != null)
-                                  Text(
-                                    techniqueLabel(context, step.technique),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: scheme.primary,
-                                    ),
-                                  ),
-                                Text(caption, textAlign: TextAlign.center),
-                                if (finishedNote != null) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    finishedNote,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    IconButton.filled(
-                      onPressed: _index > 0 ? () => _go(_index - 1) : null,
-                      icon: const Icon(Icons.skip_previous),
-                      tooltip: l10n.explainPreviousTooltip,
-                    ),
-                    IconButton.filled(
-                      onPressed: _stepCount == 0 ? null : _toggleAutoplay,
-                      icon: Icon(
-                        _autoplay == null ? Icons.play_arrow : Icons.pause,
-                      ),
-                      tooltip: _autoplay == null
-                          ? l10n.explainPlayTooltip
-                          : l10n.explainPauseTooltip,
-                    ),
-                    IconButton.filled(
-                      onPressed: _index < _stepCount
-                          ? () => _go(_index + 1)
-                          : null,
-                      icon: const Icon(Icons.skip_next),
-                      tooltip: l10n.explainNextTooltip,
-                    ),
-                  ],
-                ),
+                // In landscape these live in the side panel instead.
+                if (!landscapeBody) ...[
+                  const SizedBox(height: 12),
+                  stepControls,
+                ],
               ],
             ),
           ),

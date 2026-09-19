@@ -67,7 +67,14 @@ class _ChromeMetrics {
   /// what the outer padding is applied to — the board's own box is measured
   /// separately by its `LayoutBuilder`).
   factory _ChromeMetrics.forViewport(Size size) {
-    final isTablet = size.width > 600;
+    // `shortestSide`, not `width`. Width alone called a 653x280 landscape phone
+    // (a folded Galaxy Fold) a tablet and handed it 24pt padding, 12pt gaps and
+    // 52pt controls to spend inside 224 points of height — which left the
+    // number pad a five-point sliver with no digits in it, and the game
+    // unplayable. A device's *class* is its narrow dimension; that does not
+    // change when you turn it sideways, and it is what Flutter's own
+    // `shortestSide` convention exists for.
+    final isTablet = size.shortestSide > 600;
     // "Compact" is the small/old iPhone class and any short landscape window:
     // not enough height to spend on chrome, and not enough width for the
     // control row's five buttons at their comfortable size.
@@ -1197,28 +1204,48 @@ class _GameScreenState extends State<GameScreen>
                 : VisualDensity.standard,
             tooltip: l10n.mainMenuTooltip,
           ),
-          Center(
-            child: Padding(
-              padding: EdgeInsets.only(right: metrics.isCompact ? 6 : 8),
-              child: Text(
-                l10n.scoreLabel(score),
-                style: TextStyle(
-                  fontSize: metrics.isCompact ? 13 : 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          // Score and clock share one bounded, scale-down box.
+          //
+          // As two plain `Text`s they honoured the OS text-size setting
+          // without limit, and an app bar's actions are not flexible: at the
+          // 2x an iOS or Android accessibility setting can reach, "Score: 1600"
+          // and "00:07" alone wanted 225 of the 272 points left beside the
+          // back arrow, and the bar overflowed by 156. They still scale — up to
+          // what there is room for, then no further. The board below is where
+          // legibility actually matters, and it is unaffected either way.
           Center(
             child: Padding(
               padding: EdgeInsets.only(right: metrics.isCompact ? 10 : 16),
-              child: ValueListenableBuilder<Duration>(
-                valueListenable: _clock.elapsed,
-                builder: (context, value, _) => Text(
-                  _formatDuration(value),
-                  style: TextStyle(
-                    fontSize: metrics.isCompact ? 13 : 16,
-                    fontWeight: FontWeight.bold,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.45,
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        l10n.scoreLabel(score),
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: metrics.isCompact ? 13 : 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: metrics.isCompact ? 6 : 8),
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _clock.elapsed,
+                        builder: (context, value, _) => Text(
+                          _formatDuration(value),
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: metrics.isCompact ? 13 : 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1359,6 +1386,18 @@ class _GameScreenState extends State<GameScreen>
         (padRows - 1) * metrics.padSpacing +
         metrics.padPadding * 2;
 
+    // Giving the hint button its own full-width row reads better, but it costs
+    // a whole control row of height, and height is the scarce axis here. On a
+    // 280pt-tall window that row is the difference between a usable pad and a
+    // squashed one, so spend it only when the pad still gets what it wants.
+    // Below that, hint and circles share a row as they do in portrait.
+    const stripHeight =
+        30.0; // the strip is a scaleDown FittedBox; this is its cap
+    final stackedChrome =
+        stripHeight + metrics.gap * 3 + metrics.controlDiameter * 2;
+    final stacked =
+        constraints.maxHeight - stackedChrome >= padWanted || panelWidth < 260;
+
     return Row(
       children: [
         Expanded(child: Center(child: _shakeableGrid(metrics, scheme))),
@@ -1373,7 +1412,7 @@ class _GameScreenState extends State<GameScreen>
             children: [
               _buildStatusStrip(metrics),
               SizedBox(height: metrics.gap),
-              _buildControls(scheme, metrics, stacked: true),
+              _buildControls(scheme, metrics, stacked: stacked),
               SizedBox(height: metrics.gap),
               // The pad takes what its rows want, or what is left, whichever
               // is smaller. A plain SizedBox(height: wanted) overflowed the
