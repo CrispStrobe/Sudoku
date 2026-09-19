@@ -10,6 +10,7 @@ import 'explain_screen.dart';
 import 'game_clock.dart';
 import 'game_stats.dart';
 import 'killer_bundle.dart';
+import 'thermo_bundle.dart';
 import 'l10n/app_localizations.dart';
 import 'painters.dart';
 import 'particles.dart';
@@ -192,6 +193,14 @@ class GameScreen extends StatefulWidget {
   bool get isDaily => dailyKey != null;
   bool get isDiagonal => variant == SudokuVariant.x;
   bool get isKiller => variant == SudokuVariant.killer;
+  bool get isThermo => variant == SudokuVariant.thermo;
+
+  /// Variants the human-technique solver does not model, so the hint and
+  /// explain-the-solve features cannot speak about them. Killer's arithmetic
+  /// and Thermo's ordering are both outside what `technique_solver.dart`
+  /// reasons about; offering a "next logical step" that ignores half the rules
+  /// would be worse than offering none.
+  bool get hasUnmodelledRules => isKiller || isThermo;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -222,6 +231,7 @@ class _GameScreenState extends State<GameScreen>
 
   /// Killer cages for the current board (empty unless the Killer variant).
   List<KillerCage> _cages = const [];
+  List<ThermoLine> _thermos = const [];
 
   /// Score cost of revealing the next logical step.
   static const int _nextStepPenalty = 40;
@@ -309,6 +319,7 @@ class _GameScreenState extends State<GameScreen>
           dailyKey: widget.dailyKey,
           rating: _logicRating,
           cages: _cages,
+          thermos: _thermos,
           notesMode: _notesMode,
         ),
       ),
@@ -327,6 +338,8 @@ class _GameScreenState extends State<GameScreen>
         return l10n.variantSudokuX;
       case SudokuVariant.killer:
         return l10n.variantKiller;
+      case SudokuVariant.thermo:
+        return l10n.variantThermo;
     }
   }
 
@@ -408,7 +421,28 @@ class _GameScreenState extends State<GameScreen>
       SudokuGame? built;
       ReadyPuzzle? ready;
       _cages = const [];
-      if (widget.isKiller) {
+      if (widget.isThermo) {
+        // Same shape as Killer below: a bundled board plays instantly and is
+        // already proven unique; the live generator is the bounded fallback
+        // for a configuration the bundle does not cover.
+        var puzzle = ThermoPuzzleBundle().get(
+          widget.gridSize,
+          widget.difficulty,
+        );
+        puzzle ??= await VariantEngine.generateThermo(
+          gridSize: widget.gridSize,
+          difficulty: widget.difficulty,
+        ).timeout(_killerGenerationBudget);
+        if (!mounted) return;
+        _thermos = puzzle.thermos;
+        built = SudokuGame.fromState(
+          givens: puzzle.givens,
+          solution: puzzle.solution,
+          regions: puzzle.regions,
+          difficulty: widget.difficulty,
+          variant: SudokuVariant.thermo,
+        );
+      } else if (widget.isKiller) {
         // Prefer a bundled board. Proving that a set of cage sums admits
         // exactly one solution is a CSP search with no useful upper bound —
         // generating the 9x9 expert boards for the bundle took anywhere from
@@ -511,6 +545,17 @@ class _GameScreenState extends State<GameScreen>
       }
     } catch (e, st) {
       if (!mounted) return;
+      if (widget.isThermo) {
+        // Same rule as Killer below: a Thermo board without thermometers is a
+        // classic board wearing the label.
+        DebugLogger.error(
+          'Thermo generation failed; no classic fallback.',
+          e,
+          st,
+        );
+        setState(() => _hasError = true);
+        return;
+      }
       if (widget.isKiller) {
         // A Killer board without cages is not a Killer board — it is a classic
         // puzzle wearing the label, with the hint and explain buttons disabled
@@ -581,8 +626,11 @@ class _GameScreenState extends State<GameScreen>
   /// (a few ms); recomputed whenever a new board is built.
   void _updateLogicRating() {
     final g = game;
-    // The technique solver doesn't model cage sums, so it can't rate Killer.
-    if (g == null || widget.isKiller) {
+    // The technique solver models neither cage sums nor thermometer ordering,
+    // so a rating computed from it would describe a puzzle the player is not
+    // playing. It showed "Expert" on an easy Thermo board — rating the grid as
+    // if the lines were decoration — which is worse than showing nothing.
+    if (g == null || widget.hasUnmodelledRules) {
       _logicRating = null;
       return;
     }
@@ -707,7 +755,9 @@ class _GameScreenState extends State<GameScreen>
   bool _isWon() {
     final g = game;
     if (g == null || !g.isSolved()) return false;
-    return !widget.isKiller || cagesSatisfied(_cages, g.grid);
+    if (widget.isKiller) return cagesSatisfied(_cages, g.grid);
+    if (widget.isThermo) return thermosSatisfied(_thermos, g.grid);
+    return true;
   }
 
   /// Conflict highlight for a cell: standard conflicts, plus a Killer cage that
@@ -718,6 +768,11 @@ class _GameScreenState extends State<GameScreen>
     if (widget.isKiller) {
       final cage = _cageAt(row, col);
       if (cage != null && cage.hasError(g.grid)) return true;
+    }
+    if (widget.isThermo) {
+      for (final thermo in _thermos) {
+        if (thermo.contains(row, col) && thermo.hasError(g.grid)) return true;
+      }
     }
     return false;
   }
@@ -1630,7 +1685,9 @@ class _GameScreenState extends State<GameScreen>
         metrics: metrics,
         icon: Icons.school,
         tooltip: l10n.explainSolveTooltip,
-        onPressed: (game == null || widget.isKiller) ? null : _openExplain,
+        onPressed: (game == null || widget.hasUnmodelledRules)
+            ? null
+            : _openExplain,
       ),
     ];
     final hintButton = _buildHintButton(l10n, metrics);
@@ -1671,12 +1728,14 @@ class _GameScreenState extends State<GameScreen>
   Widget _buildHintButton(AppLocalizations l10n, _ChromeMetrics metrics) {
     return ElevatedButton.icon(
       // Logic hints don't model cage sums, so they're off for Killer.
-      onPressed: (!widget.isKiller && _hintsRemaining > 0) ? _showHint : null,
+      onPressed: (!widget.hasUnmodelledRules && _hintsRemaining > 0)
+          ? _showHint
+          : null,
       icon: Icon(Icons.lightbulb, size: metrics.controlIconSize),
       label: FittedBox(
         fit: BoxFit.scaleDown,
         child: Text(
-          widget.isKiller
+          widget.hasUnmodelledRules
               ? l10n.hintButtonLabel
               : (_hintsRemaining > 0
                     ? l10n.hintButtonWithCount(_hintsRemaining)
@@ -1797,6 +1856,19 @@ class _GameScreenState extends State<GameScreen>
                     jigsaw: widget.gridShape == GridShape.jigsaw,
                   ),
                 ),
+                // Under the cells, unlike the Killer cage painter above them:
+                // a thermometer is a thick bar through the middle of the cell,
+                // exactly where the digit goes. Cells on a line render their
+                // background translucent so this shows through.
+                if (widget.isThermo)
+                  CustomPaint(
+                    size: Size(gridPixels, gridPixels),
+                    painter: ThermoPainter(
+                      _thermos,
+                      gridDim,
+                      color: Colors.blueGrey.shade200,
+                    ),
+                  ),
                 for (int row = 0; row < gridDim; row++)
                   for (int col = 0; col < gridDim; col++)
                     Positioned(
@@ -1914,6 +1986,20 @@ class _GameScreenState extends State<GameScreen>
     if (selectedRow == row && selectedCol == col) return scheme.accent;
     if (selectedRow == row || selectedCol == col) return Colors.grey.shade200;
 
+    // A cell on a thermometer shows its background translucently so the bar
+    // painted underneath comes through. The selection and row/column highlights
+    // above deliberately win — knowing what you have selected matters more than
+    // seeing a decoration you can already trace from its neighbours.
+    if (widget.isThermo && _isOnThermo(row, col)) {
+      return _baseCellColor(row, col, scheme).withValues(alpha: 0.35);
+    }
+    return _baseCellColor(row, col, scheme);
+  }
+
+  bool _isOnThermo(int row, int col) =>
+      _thermos.any((t) => t.contains(row, col));
+
+  Color _baseCellColor(int row, int col, EnvironmentalTheme scheme) {
     // Faint tint marks the two diagonals so the Sudoku-X constraint is visible.
     if (widget.isDiagonal) {
       final dim = game!.gridDim;

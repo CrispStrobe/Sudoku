@@ -77,6 +77,13 @@ class GameStats {
   static int solvedAt(SudokuDifficulty d) => solvedByDifficulty[d.name] ?? 0;
 
   /// Every rule variant beaten at least once, jigsaw included.
+  ///
+  /// Reads `SudokuVariant.values`, so adding a variant raises the bar for this
+  /// achievement — deliberately: it is called "every variant". Players who
+  /// already earned it keep it, because `unlockedAchievements` is persisted and
+  /// only ever appended to; the new requirement applies to anyone who has not
+  /// unlocked it yet. If you add a variant, `achievements_test.dart` will fail
+  /// until you beat that one too, which is the reminder working.
   static bool get hasBeatenEveryVariant =>
       SudokuVariant.values.every((v) => (solvedByVariant[v.name] ?? 0) > 0) &&
       jigsawSolved > 0;

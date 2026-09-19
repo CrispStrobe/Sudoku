@@ -30,6 +30,16 @@ class SavedGame {
     for (final c in _get<List<dynamic>>('cages').cast<Map<String, dynamic>>())
       KillerCage(cells: _grid(c['cells']), sum: c['sum'] as int),
   ];
+
+  /// Thermometers, for a saved Thermo run. Absent from slots written before
+  /// the variant existed, which is why this tolerates a missing key where
+  /// [cages] (present since the schema's first version) does not.
+  List<ThermoLine> get thermos => [
+    for (final t
+        in (toJson()['thermos'] as List<dynamic>? ?? const [])
+            .cast<Map<String, dynamic>>())
+      ThermoLine(_grid(t['cells'])),
+  ];
   static List<List<int>> _grid(dynamic value) => [
     for (final row in value as List) (row as List).cast<int>().toList(),
   ];
@@ -47,6 +57,7 @@ class SavedGame {
     String? dailyKey,
     SudokuDifficulty? rating,
     List<KillerCage> cages = const [],
+    List<ThermoLine> thermos = const [],
     bool notesMode = false,
   }) => SavedGame._({
     'version': schemaVersion,
@@ -77,6 +88,9 @@ class SavedGame {
     'dailySeed': dailySeed,
     'dailyKey': dailyKey,
     'notesMode': notesMode,
+    'thermos': [
+      for (final thermo in thermos) {'cells': thermo.cells},
+    ],
     'cages': [
       for (final cage in cages) {'cells': cage.cells, 'sum': cage.sum},
     ],
@@ -164,11 +178,28 @@ class SavedGame {
     } else {
       require(cages.isEmpty);
     }
+    final thermos = saved.thermos;
+    if (saved.variant == SudokuVariant.thermo) {
+      require(thermos.isNotEmpty);
+      for (final thermo in thermos) {
+        require(thermo.cells.length >= 2);
+        for (final cell in thermo.cells) {
+          require(cell.length == 2 && cell.every((v) => v >= 0 && v < dim));
+        }
+        // The saved solution must actually satisfy the lines it carries — a
+        // slot whose clues contradict its own answer is unplayable.
+        require(thermo.isSatisfied(solution));
+      }
+    } else {
+      require(thermos.isEmpty);
+    }
     final restored = saved.createGame();
     require(
       !restored.isSolved() ||
           (saved.variant == SudokuVariant.killer &&
-              !cagesSatisfied(cages, grid)),
+              !cagesSatisfied(cages, grid)) ||
+          (saved.variant == SudokuVariant.thermo &&
+              !thermosSatisfied(thermos, grid)),
     );
     return saved;
   }

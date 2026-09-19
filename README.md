@@ -1,7 +1,8 @@
 # CrispSudoku
 
 A Flutter Sudoku game with classic, **jigsaw** (irregular-region), **Sudoku-X**
-(diagonal) and **Killer** (summed-cage) variants across six grid sizes (4×4, 6×6,
+(diagonal), **Killer** (summed-cage) and **Thermo** (increasing-line) variants
+across six grid sizes (4×4, 6×6,
 8×8, 9×9, 10×10, 12×12) and four difficulties. Features
 a **daily challenge** (same board for everyone each day), a **logic difficulty
 rating** and a step-by-step **"explain the solve"** walkthrough (both powered by a
@@ -72,6 +73,37 @@ dart run tool/generate_puzzles.dart [perKey]   # default 12
 
 Player-generated solutions are additionally cached in `shared_preferences`
 (cross-platform, incl. web).
+
+### Pre-built Thermo puzzles
+
+Thermo is the cheapest interesting variant to add — one `addStrictlyAscending`
+per line and the Killer pipeline does the rest — and the most expensive to
+generate *well*. A good Thermo board has no givens at all: the thermometers
+alone pin the grid down. Those come from drawing line shapes and asking the CSP
+for a grid that fits, and most random layouts turn out contradictory, so the
+generator runs two phases:
+
+1. **Shapes first.** Draw lines with no reference to any grid; if the CSP finds
+   exactly one solution, ship it with zero givens. This is how the puzzles are
+   built by hand.
+2. **Solution first.** If no drawn layout works, lay lines over a grid we
+   already have — always satisfiable, never contradictory — and reveal digits
+   until it is unique. Weaker as a puzzle, but it always terminates.
+
+```bash
+dart run tool/generate_thermo_puzzles.dart [perConfig]   # default 4
+```
+
+`assets/thermo_puzzles.json` covers the sixteen size/difficulty combinations
+Thermo is offered at (4×4 to 9×9; `VariantEngine.thermoSupports` is the cap, and
+it exists because the uniqueness search stops being bounded on a larger grid).
+Phase 1 succeeds almost always up to 6×6 and rarely at 9×9 — a random layout
+over eighty-one cells is nearly always contradictory — so the small boards ship
+with no givens and the 9×9s carry some. That is a weakness of the layout
+heuristic, not of the pipeline: a smarter draw (lines chosen to cross boxes,
+say) would push phase 1 further up. The attempt budget scales down with grid
+size for the same reason, since each failed attempt at 9×9 costs a full
+enumeration.
 
 ### Pre-built Killer puzzles
 

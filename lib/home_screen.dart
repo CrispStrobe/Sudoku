@@ -8,6 +8,7 @@ import 'game_screen.dart';
 import 'game_stats.dart';
 import 'l10n/app_localizations.dart';
 import 'sudoku_game.dart';
+import 'variant_engine.dart';
 import 'saved_game.dart';
 import 'saved_game_service.dart';
 
@@ -712,6 +713,7 @@ class _HomeScreenState extends State<HomeScreen>
   }) {
     var variant = SudokuVariant.classic;
     final killerAllowed = gridDimensionFor(gridSize) <= 9;
+    final thermoAllowed = VariantEngine.thermoSupports(gridSize);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -800,10 +802,23 @@ class _HomeScreenState extends State<HomeScreen>
                               )
                             : null,
                       ),
+                      ChoiceChip(
+                        label: Text(l10n.variantThermo),
+                        selected: variant == SudokuVariant.thermo,
+                        onSelected: thermoAllowed
+                            ? (_) => setSheetState(
+                                () => variant = SudokuVariant.thermo,
+                              )
+                            : null,
+                      ),
                     ],
                   ),
                   if (!killerAllowed)
                     _variantNote(l10n.variantKillerUnavailable),
+                  if (!thermoAllowed)
+                    _variantNote(l10n.variantThermoUnavailable),
+                  if (variant == SudokuVariant.thermo)
+                    _variantNote(l10n.variantThermoNote),
                   if (variant == SudokuVariant.x)
                     _variantNote(l10n.variantXNote),
                   if (variant == SudokuVariant.killer)

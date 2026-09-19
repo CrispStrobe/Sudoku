@@ -127,6 +127,17 @@ class AppLocalizationsDe extends AppLocalizations {
       'Keine Vorgaben — jeder gestrichelte Käfig muss ohne Wiederholungen die angegebene Summe ergeben.';
 
   @override
+  String get variantThermo => '🌡️ Thermo';
+
+  @override
+  String get variantThermoNote =>
+      'Die Ziffern steigen von der Kugel bis zur Spitze jedes Thermometers.';
+
+  @override
+  String get variantThermoUnavailable =>
+      'Thermo gibt es bis 9x9 — der Linien-Löser ist auf größeren Gittern nicht praktikabel.';
+
+  @override
   String get difficultyEasy => 'LEICHT';
 
   @override

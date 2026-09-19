@@ -28,8 +28,16 @@ import 'package:sudoku/l10n/app_localizations.dart';
 /// Regenerate whenever a layout change is intended, and *look at the diff* in
 /// `test/failures/` when one is not.
 void main() {
-  setUp(() => debugParticleSeed = 7);
-  tearDown(() => debugParticleSeed = null);
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    debugParticleSeed = 7;
+    ThermoPuzzleBundle.debugSeed = 7;
+  });
+  tearDown(() {
+    debugParticleSeed = null;
+    ThermoPuzzleBundle.debugSeed = null;
+  });
 
   Future<void> pumpGame(
     WidgetTester tester,
@@ -115,6 +123,46 @@ void main() {
     await expectLater(
       find.byType(GameScreen),
       matchesGoldenFile('goldens/game_12x12_iphone-se.png'),
+    );
+  });
+
+  /// Thermo, whose painter draws under the cells rather than over them and
+  /// relies on translucent cell backgrounds to show through. That interaction
+  /// is invisible to every assertion and obvious in a picture.
+  testWidgets('golden: Thermo on an iPhone SE', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // Load the bundle, or the screen falls through to live generation with a
+    // random seed and draws a different board every run.
+    await ThermoPuzzleBundle().initialize();
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GameScreen(
+          difficulty: SudokuDifficulty.easy,
+          gridSize: GridSize.small,
+          gridShape: GridShape.classic,
+          gameMode: GameMode.classic,
+          variant: SudokuVariant.thermo,
+        ),
+      ),
+    );
+    for (var i = 0; i < 400; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      if ((tester.state(find.byType(GameScreen)) as dynamic).game != null) {
+        break;
+      }
+    }
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    await expectLater(
+      find.byType(GameScreen),
+      matchesGoldenFile('goldens/game_thermo_iphone-se.png'),
     );
   });
 

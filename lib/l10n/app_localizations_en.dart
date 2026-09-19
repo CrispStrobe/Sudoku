@@ -125,6 +125,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'No givens — each dashed cage must sum to its number with no repeats.';
 
   @override
+  String get variantThermo => '🌡️ Thermo';
+
+  @override
+  String get variantThermoNote =>
+      'Digits increase from each bulb to the tip of its thermometer.';
+
+  @override
+  String get variantThermoUnavailable =>
+      'Thermo is 9x9 and smaller — its line solver is not practical on a larger grid.';
+
+  @override
   String get difficultyEasy => 'EASY';
 
   @override

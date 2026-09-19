@@ -121,6 +121,62 @@ class KillerCagePainter extends CustomPainter {
       old.cages != cages || old.gridDim != gridDim;
 }
 
+/// Draws Thermo thermometers: a filled bulb at the start of each line and a
+/// rounded bar running through the cells to the tip.
+///
+/// Painted *under* the cells rather than over them, which is the opposite of
+/// [KillerCagePainter]. A cage is a thin dashed outline near the cell edges and
+/// can sit on top without hiding anything; a thermometer is a thick bar through
+/// the middle of the cell, exactly where the digit goes. Cells on a line render
+/// their background translucent so this shows through (see
+/// `_GameScreenState._getCellColor`), and the digits stay fully opaque on top.
+class ThermoPainter extends CustomPainter {
+  final List<ThermoLine> thermos;
+  final int gridDim;
+  final Color color;
+
+  ThermoPainter(this.thermos, this.gridDim, {required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cell = size.width / gridDim;
+    // Everything scales with the cell, for the reason recorded in
+    // KillerCagePainter: a constant looks right at one grid size only.
+    final barWidth = cell * 0.42;
+    final bulbRadius = cell * 0.32;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = barWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final bulbPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    Offset centre(List<int> c) =>
+        Offset((c[1] + 0.5) * cell, (c[0] + 0.5) * cell);
+
+    for (final thermo in thermos) {
+      if (thermo.cells.length < 2) continue;
+      final path = Path()
+        ..moveTo(centre(thermo.cells.first).dx, centre(thermo.cells.first).dy);
+      for (final c in thermo.cells.skip(1)) {
+        final o = centre(c);
+        path.lineTo(o.dx, o.dy);
+      }
+      canvas.drawPath(path, paint);
+      // The bulb marks which end is the small one — without it the line is
+      // ambiguous, and a thermometer read backwards is a different puzzle.
+      canvas.drawCircle(centre(thermo.cells.first), bulbRadius, bulbPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant ThermoPainter old) =>
+      old.thermos != thermos || old.gridDim != gridDim || old.color != color;
+}
+
 class SudokuGridPainter extends CustomPainter {
   final int gridDim;
   final List<List<int>> regions;

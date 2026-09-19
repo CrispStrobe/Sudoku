@@ -86,6 +86,178 @@ class KillerCage {
   }
 }
 
+/// A thermometer: an ordered path of cells whose digits strictly increase from
+/// the bulb (`cells.first`) to the tip (`cells.last`).
+///
+/// Unlike a Killer cage, a thermometer is *ordered* — reversing it is a
+/// different constraint — and it carries no arithmetic, only comparisons. That
+/// makes it the cheapest interesting variant to add: one `addStrictlyAscending`
+/// per line and the existing pipeline does the rest.
+class ThermoLine {
+  final List<List<int>> cells; // each [row, col], bulb first
+  const ThermoLine(this.cells);
+
+  /// The bulb, drawn as a filled disc.
+  List<int> get bulb => cells.first;
+
+  bool contains(int row, int col) =>
+      cells.any((c) => c[0] == row && c[1] == col);
+
+  /// True if the filled cells so far already break the increase — a strictly
+  /// increasing sequence read left to right, ignoring gaps.
+  ///
+  /// Gaps matter: with cells `[_, 5, _, 3]` the 3 is already wrong even though
+  /// the cells between them are empty, because everything after the 5 must
+  /// exceed it. Comparing only adjacent *filled* pairs catches exactly that.
+  bool hasError(List<List<int>> grid) {
+    var previous = 0;
+    var previousIndex = -1;
+    for (var i = 0; i < cells.length; i++) {
+      final v = grid[cells[i][0]][cells[i][1]];
+      if (v == 0) continue;
+      if (previousIndex >= 0) {
+        // Each step along the path must add at least one, so cells that are
+        // `gap` apart must differ by at least `gap`.
+        if (v - previous < i - previousIndex) return true;
+      }
+      previous = v;
+      previousIndex = i;
+    }
+    return false;
+  }
+
+  /// True when every cell is filled and strictly increasing bulb to tip.
+  bool isSatisfied(List<List<int>> grid) {
+    var previous = 0;
+    for (final cell in cells) {
+      final v = grid[cell[0]][cell[1]];
+      if (v == 0 || v <= previous) return false;
+      previous = v;
+    }
+    return true;
+  }
+
+  Map<String, dynamic> toJson() => {'cells': cells};
+
+  factory ThermoLine.fromJson(Map<String, dynamic> json) {
+    final cells = (json['cells'] as List)
+        .map((cell) => (cell as List).cast<int>().toList())
+        .toList();
+    if (cells.length < 2) {
+      throw const FormatException('thermometer: needs at least two cells');
+    }
+    for (final cell in cells) {
+      if (cell.length != 2) {
+        throw const FormatException('thermometer: cell is not [row, col]');
+      }
+    }
+    return ThermoLine(cells);
+  }
+}
+
+/// True if every thermometer in [thermos] is satisfied for [grid] (the extra
+/// win condition for Thermo, on top of the standard full-and-consistent check).
+bool thermosSatisfied(List<ThermoLine> thermos, List<List<int>> grid) =>
+    thermos.every((t) => t.isSatisfied(grid));
+
+/// A generated Thermo puzzle.
+class ThermoPuzzle {
+  final int gridDim;
+  final List<List<int>> regions;
+  final List<ThermoLine> thermos;
+  final List<List<int>> givens;
+  final List<List<int>> solution;
+  const ThermoPuzzle({
+    required this.gridDim,
+    required this.regions,
+    required this.thermos,
+    required this.givens,
+    required this.solution,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'gridDim': gridDim,
+    'regions': regions,
+    'thermos': [for (final t in thermos) t.toJson()],
+    'givens': givens,
+    'solution': solution,
+  };
+
+  /// Rebuild from [json], validating hard enough that a corrupt or hand-edited
+  /// bundle entry is rejected rather than played.
+  ///
+  /// Uniqueness is *not* re-checked here: proving it costs a CSP search, which
+  /// is why the bundle exists. `tool/generate_thermo_puzzles.dart` proves it
+  /// once offline and `test/bundled_thermo_test.dart` proves it again in CI.
+  factory ThermoPuzzle.fromJson(Map<String, dynamic> json) {
+    final gridDim = json['gridDim'] as int;
+    List<List<int>> grid(String key) => (json[key] as List)
+        .map((row) => (row as List).cast<int>().toList())
+        .toList();
+
+    final puzzle = ThermoPuzzle(
+      gridDim: gridDim,
+      regions: grid('regions'),
+      thermos: [
+        for (final t in json['thermos'] as List)
+          ThermoLine.fromJson(t as Map<String, dynamic>),
+      ],
+      givens: grid('givens'),
+      solution: grid('solution'),
+    );
+
+    for (final g in [puzzle.regions, puzzle.givens, puzzle.solution]) {
+      if (g.length != gridDim || g.any((row) => row.length != gridDim)) {
+        throw const FormatException('thermo puzzle: wrong dimensions');
+      }
+    }
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        final value = puzzle.solution[r][c];
+        if (value < 1 || value > gridDim) {
+          throw const FormatException('thermo puzzle: bad solution value');
+        }
+        if (puzzle.regions[r][c] < 0 || puzzle.regions[r][c] >= gridDim) {
+          throw const FormatException('thermo puzzle: bad region id');
+        }
+        final given = puzzle.givens[r][c];
+        if (given != 0 && given != value) {
+          throw const FormatException('thermo puzzle: given != solution');
+        }
+      }
+    }
+    // Thermometers must be orthogonally connected paths that actually
+    // increase in the solution — a clue that contradicts its own answer is
+    // worse than no clue.
+    for (final t in puzzle.thermos) {
+      for (var i = 0; i < t.cells.length; i++) {
+        final cell = t.cells[i];
+        if (cell[0] < 0 ||
+            cell[0] >= gridDim ||
+            cell[1] < 0 ||
+            cell[1] >= gridDim) {
+          throw const FormatException('thermo puzzle: cell out of range');
+        }
+        if (i > 0) {
+          final previous = t.cells[i - 1];
+          final dr = (cell[0] - previous[0]).abs();
+          final dc = (cell[1] - previous[1]).abs();
+          if (dr + dc != 1) {
+            throw const FormatException('thermo puzzle: path is not connected');
+          }
+          if (puzzle.solution[cell[0]][cell[1]] <=
+              puzzle.solution[previous[0]][previous[1]]) {
+            throw const FormatException(
+              'thermo puzzle: solution does not increase along a thermometer',
+            );
+          }
+        }
+      }
+    }
+    return puzzle;
+  }
+}
+
 /// True if every cage in [cages] is satisfied for [grid] (used as the extra
 /// win condition for Killer, on top of the standard full-and-consistent check).
 bool cagesSatisfied(List<KillerCage> cages, List<List<int>> grid) =>
@@ -318,6 +490,470 @@ class VariantEngine {
     // Enumerate once, stopping at the second solution. Unlike negating
     // hasMultipleSolutions, this also rejects an empty (infeasible) search.
     return (await p.getFirstNSolutions(2)).length == 1;
+  }
+
+  // --- Thermo -------------------------------------------------------------
+
+  /// Build a [Problem] for a Thermo puzzle: the standard row/column/region
+  /// all-different constraints plus one strictly-ascending chain per
+  /// thermometer.
+  ///
+  /// That single `addStrictlyAscending` is the whole variant. It is also why
+  /// Thermo is the cheapest one to add: no arithmetic, no new solver feature,
+  /// and the same uniqueness/dig pipeline Killer already uses.
+  static Problem _buildThermoProblem({
+    required int gridDim,
+    required List<List<int>> regions,
+    required List<ThermoLine> thermos,
+    required List<List<int>> givens,
+  }) {
+    final p = Problem();
+    final fullDomain = [for (var v = 1; v <= gridDim; v++) v];
+    String name(int r, int c) => 'r${r}c$c';
+
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        final g = givens[r][c];
+        p.addVariable(name(r, c), g != 0 ? [g] : List<int>.from(fullDomain));
+      }
+    }
+    for (var i = 0; i < gridDim; i++) {
+      final rowVars = <String>[];
+      final colVars = <String>[];
+      for (var j = 0; j < gridDim; j++) {
+        rowVars.add(name(i, j));
+        colVars.add(name(j, i));
+      }
+      p.addAllDifferent(rowVars, label: 'row$i');
+      p.addAllDifferent(colVars, label: 'col$i');
+    }
+    final regionVars = <int, List<String>>{};
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        regionVars.putIfAbsent(regions[r][c], () => <String>[]).add(name(r, c));
+      }
+    }
+    for (final entry in regionVars.entries) {
+      p.addAllDifferent(entry.value, label: 'region${entry.key}');
+    }
+    for (var i = 0; i < thermos.length; i++) {
+      p.addStrictlyAscending([
+        for (final cell in thermos[i].cells) name(cell[0], cell[1]),
+      ], label: 'thermo$i');
+    }
+    return p;
+  }
+
+  /// True if [thermos] + [givens] admit exactly one completion.
+  static Future<bool> thermoHasUniqueSolution({
+    required int gridDim,
+    required List<List<int>> regions,
+    required List<ThermoLine> thermos,
+    required List<List<int>> givens,
+  }) async {
+    final p = _buildThermoProblem(
+      gridDim: gridDim,
+      regions: regions,
+      thermos: thermos,
+      givens: givens,
+    );
+    return (await p.getFirstNSolutions(2)).length == 1;
+  }
+
+  /// Longest thermometer allowed, by difficulty.
+  ///
+  /// This runs opposite to Killer's cage size. A long thermometer is a *strong*
+  /// clue — a five-cell line in a 9x9 pins its bulb to at most 5 and its tip to
+  /// at least 5 before a single digit is written — so long lines make an easier
+  /// board and short ones a harder board, at the same coverage.
+  static int _maxThermoLengthFor(SudokuDifficulty difficulty) {
+    switch (difficulty) {
+      case SudokuDifficulty.easy:
+        return 5;
+      case SudokuDifficulty.medium:
+        return 4;
+      case SudokuDifficulty.hard:
+        return 4;
+      case SudokuDifficulty.expert:
+        return 3;
+    }
+  }
+
+  /// Default layout attempts before falling back to a board with givens.
+  ///
+  /// Generous on purpose. Every attempt that fails costs one enumeration, but
+  /// these boards are generated offline into `assets/thermo_puzzles.json` and
+  /// served instantly — the same trade the Killer bundle makes, where a single
+  /// 9x9 expert board took up to 474 seconds to prove. Spending a minute here
+  /// to ship a no-givens board is the right way round.
+  static int _thermoLayoutAttemptsFor(int gridDim) {
+    // Phase 1 (draw shapes, let the solver find a grid) almost always wins on a
+    // small board and almost never on a 9x9, where a random layout over
+    // eighty-one cells is nearly always contradictory. Each failed attempt
+    // there costs a full enumeration — measured at ~20 seconds — so twenty-five
+    // of them is nine minutes spent to reach the fallback anyway. Spend the
+    // attempts where they pay.
+    if (gridDim <= 6) return 30;
+    if (gridDim <= 8) return 12;
+    return 6;
+  }
+
+  /// Grid sizes Thermo is offered at.
+  ///
+  /// Capped at 9x9, like Killer, and for a related reason: an
+  /// under-constrained layout makes the uniqueness check *enumerate*, and on a
+  /// 10x10 or 12x12 that search stops being bounded in any useful way — 25
+  /// seconds and still counting, against under a second at 9x9. The cap is a
+  /// property of the search, not of the rules.
+  static bool thermoSupports(GridSize size) => gridDimensionFor(size) <= 9;
+
+  /// How much of the grid to cover with thermometers, by difficulty.
+  ///
+  /// Kept high everywhere, and the range is narrow on purpose. Thinning the
+  /// coverage to make a board "harder" is a trap: fewer thermometers means less
+  /// constraint, which means the generator has to reveal more digits to reach a
+  /// unique solution — and a Thermo puzzle with thirty-five givens is not a
+  /// hard Thermo puzzle, it is a classic puzzle with decoration.
+  ///
+  /// These numbers come from sweeping coverage against line length on real 9x9
+  /// boards (`debugGenerateThermo`). Around 0.8 coverage with four-cell lines
+  /// is the configuration that reliably produces a board with **no givens at
+  /// all**; push either much higher and most layouts come out contradictory.
+  static double _thermoCoverageFor(SudokuDifficulty difficulty) {
+    switch (difficulty) {
+      case SudokuDifficulty.easy:
+        return 0.85;
+      case SudokuDifficulty.medium:
+        return 0.8;
+      case SudokuDifficulty.hard:
+        return 0.72;
+      case SudokuDifficulty.expert:
+        return 0.65;
+    }
+  }
+
+  /// Lay thermometer *shapes* with no reference to any grid: orthogonally
+  /// connected paths of 2..[maxLength] cells covering roughly [coverage] of the
+  /// board, never overlapping.
+  ///
+  /// This is how these puzzles are built by hand — the lines are the model, and
+  /// the grid is whatever satisfies them — and it is the only way to get the
+  /// no-givens boards the variant is known for. The catch is that a randomly
+  /// drawn layout is often contradictory, so the caller has to be willing to
+  /// throw one away and draw another.
+  static List<ThermoLine> _drawThermoShapes({
+    required int gridDim,
+    required int maxLength,
+    required double coverage,
+    required math.Random rng,
+  }) {
+    final used = List.generate(
+      gridDim,
+      (_) => List<bool>.filled(gridDim, false),
+    );
+    final thermos = <ThermoLine>[];
+    const dirs = [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ];
+    final starts = <List<int>>[
+      for (var r = 0; r < gridDim; r++)
+        for (var c = 0; c < gridDim; c++) [r, c],
+    ]..shuffle(rng);
+
+    final cap = math.min(maxLength, gridDim);
+    final target = (gridDim * gridDim * coverage).round();
+    var covered = 0;
+
+    for (final start in starts) {
+      if (covered >= target) break;
+      if (used[start[0]][start[1]]) continue;
+      final cells = <List<int>>[start];
+      used[start[0]][start[1]] = true;
+      final limit = 2 + rng.nextInt(math.max(1, cap - 1));
+      while (cells.length < limit) {
+        final head = cells.last;
+        final options = <List<int>>[];
+        for (final d in dirs) {
+          final nr = head[0] + d[0];
+          final nc = head[1] + d[1];
+          if (nr < 0 || nr >= gridDim || nc < 0 || nc >= gridDim) continue;
+          if (used[nr][nc]) continue;
+          options.add([nr, nc]);
+        }
+        if (options.isEmpty) break;
+        final pick = options[rng.nextInt(options.length)];
+        used[pick[0]][pick[1]] = true;
+        cells.add(pick);
+      }
+      if (cells.length < 2) {
+        used[start[0]][start[1]] = false;
+        continue;
+      }
+      thermos.add(ThermoLine(cells));
+      covered += cells.length;
+    }
+    return thermos;
+  }
+
+  /// Lay thermometers over [solution]: orthogonally connected paths whose
+  /// digits strictly increase, so the puzzle's own answer satisfies every line
+  /// it draws.
+  ///
+  /// Two approaches were tried and measured before this one.
+  ///
+  /// *Shapes first* — draw paths with no reference to any grid and let the CSP
+  /// find a grid that fits — is how these puzzles are constructed by hand, and
+  /// it does produce genuine no-givens boards. But most random layouts turn out
+  /// contradictory, and deciding that costs a full enumeration each time: at
+  /// 9x9 with five-cell lines every attempt failed, at 40 seconds apiece.
+  ///
+  /// *Greedy walk over a solution* is always satisfiable and fast, but a random
+  /// Latin square has few long ascending runs, so it produced two-cell stubs
+  /// and a board needing thirty givens.
+  ///
+  /// This keeps the guarantee and fixes the stubs: search for the **longest**
+  /// ascending path from each bulb rather than taking the first step that
+  /// works. Branching is at most three after the first cell and depth is capped
+  /// at [maxLength], so the whole search is a few hundred steps per bulb and
+  /// disappears next to one CSP call.
+  static List<ThermoLine> _layThermos({
+    required int gridDim,
+    required List<List<int>> solution,
+    required int maxLength,
+    required double coverage,
+    required math.Random rng,
+  }) {
+    final used = List.generate(
+      gridDim,
+      (_) => List<bool>.filled(gridDim, false),
+    );
+    final thermos = <ThermoLine>[];
+    const dirs = [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ];
+
+    // Bulbs hold the smallest digit on their line, so starting at low digits
+    // leaves the most room to climb. Shuffle first so equal digits are still
+    // visited in a seed-dependent order.
+    final starts = <List<int>>[
+      for (var r = 0; r < gridDim; r++)
+        for (var c = 0; c < gridDim; c++) [r, c],
+    ]..shuffle(rng);
+    starts.sort((a, b) => solution[a[0]][a[1]].compareTo(solution[b[0]][b[1]]));
+
+    final cap = math.min(maxLength, gridDim);
+    final target = (gridDim * gridDim * coverage).round();
+    var covered = 0;
+
+    for (final start in starts) {
+      if (covered >= target) break;
+      if (used[start[0]][start[1]]) continue;
+
+      // Depth-first search for the longest strictly ascending path, taking the
+      // neighbours in a seed-dependent order so two runs with different seeds
+      // pick different lines of the same length.
+      final path = <List<int>>[start];
+      var best = <List<int>>[start];
+
+      void explore() {
+        if (path.length > best.length) best = List.of(path);
+        if (path.length >= cap) return;
+        final head = path.last;
+        final value = solution[head[0]][head[1]];
+        final options = <List<int>>[];
+        for (final d in dirs) {
+          final nr = head[0] + d[0];
+          final nc = head[1] + d[1];
+          if (nr < 0 || nr >= gridDim || nc < 0 || nc >= gridDim) continue;
+          if (used[nr][nc]) continue;
+          if (solution[nr][nc] <= value) continue;
+          options.add([nr, nc]);
+        }
+        options.shuffle(rng);
+        for (final option in options) {
+          used[option[0]][option[1]] = true;
+          path.add(option);
+          explore();
+          path.removeLast();
+          used[option[0]][option[1]] = false;
+        }
+      }
+
+      used[start[0]][start[1]] = true;
+      explore();
+
+      // A one-cell "thermometer" constrains nothing; give the cell back.
+      if (best.length < 2) {
+        used[start[0]][start[1]] = false;
+        continue;
+      }
+      for (final cell in best) {
+        used[cell[0]][cell[1]] = true;
+      }
+      thermos.add(ThermoLine(best));
+      covered += best.length;
+    }
+
+    return thermos;
+  }
+
+  /// Generate a uniquely-solvable Thermo puzzle.
+  ///
+  /// Build a full solution with the bitmask engine, lay thermometers over it
+  /// (always satisfiable, by construction), then ask the CSP whether those
+  /// lines alone pin the grid down. If they do the board ships with no givens
+  /// at all, which is what a Thermo puzzle is supposed to look like; if they
+  /// do not, reveal digits until it does.
+  ///
+  /// Determinism: the same [seed] and limits reproduce the same puzzle.
+  static Future<ThermoPuzzle> generateThermo({
+    required GridSize gridSize,
+    required SudokuDifficulty difficulty,
+    int? seed,
+    int? maxLayoutAttempts,
+    int? maxGivens,
+  }) {
+    maxLayoutAttempts ??= _thermoLayoutAttemptsFor(gridDimensionFor(gridSize));
+    if (maxLayoutAttempts < 1) {
+      throw ArgumentError.value(maxLayoutAttempts, 'maxLayoutAttempts');
+    }
+    if (maxGivens != null && maxGivens < 0) {
+      throw ArgumentError.value(maxGivens, 'maxGivens');
+    }
+    return _generateThermo(
+      gridSize: gridSize,
+      seed: seed ?? math.Random().nextInt(1 << 31),
+      maxLength: _maxThermoLengthFor(difficulty),
+      coverage: _thermoCoverageFor(difficulty),
+      maxLayoutAttempts: maxLayoutAttempts,
+      maxGivens: maxGivens,
+    );
+  }
+
+  static Future<ThermoPuzzle> _generateThermo({
+    required GridSize gridSize,
+    required int seed,
+    required int maxLength,
+    required double coverage,
+    required int maxLayoutAttempts,
+    int? maxGivens,
+  }) async {
+    final rng = math.Random(seed);
+    final gridDim = gridDimensionFor(gridSize);
+    final base = SudokuGame.generateBlueprint(
+      gridSize,
+      GridShape.classic,
+      seed: seed,
+    );
+    final solution = base.solutionGrid;
+    final regions = base.regions;
+    final empty = List.generate(gridDim, (_) => List<int>.filled(gridDim, 0));
+
+    // Phase 1: draw shapes and let the solver find a grid for them. When a
+    // layout is both satisfiable and unique this yields a board with no givens
+    // at all — the real thing. Most draws are contradictory, so try several;
+    // each rejection costs one enumeration and is quick.
+    for (var attempt = 0; attempt < maxLayoutAttempts; attempt++) {
+      final thermos = _drawThermoShapes(
+        gridDim: gridDim,
+        maxLength: maxLength,
+        coverage: coverage,
+        rng: rng,
+      );
+      final drawn = await _buildThermoProblem(
+        gridDim: gridDim,
+        regions: regions,
+        thermos: thermos,
+        givens: empty,
+      ).getFirstNSolutions(2);
+      if (drawn.length == 1) {
+        return ThermoPuzzle(
+          gridDim: gridDim,
+          regions: regions,
+          thermos: thermos,
+          givens: empty,
+          solution: [
+            for (var r = 0; r < gridDim; r++)
+              [
+                for (var c = 0; c < gridDim; c++)
+                  drawn.first['r${r}c$c'] as int,
+              ],
+          ],
+        );
+      }
+    }
+
+    // Phase 2: the guaranteed route. Lay lines over a solution we already have,
+    // so the layout cannot be contradictory, and buy uniqueness with revealed
+    // digits. Weaker as a puzzle — a Thermo board wants few givens — but it
+    // always terminates, which phase 1 cannot promise.
+    List<ThermoLine>? fallback;
+    for (var attempt = 0; attempt < maxLayoutAttempts; attempt++) {
+      final thermos = _layThermos(
+        gridDim: gridDim,
+        solution: solution,
+        maxLength: maxLength,
+        coverage: coverage,
+        rng: rng,
+      );
+      if (await thermoHasUniqueSolution(
+        gridDim: gridDim,
+        regions: regions,
+        thermos: thermos,
+        givens: empty,
+      )) {
+        return ThermoPuzzle(
+          gridDim: gridDim,
+          regions: regions,
+          thermos: thermos,
+          givens: empty,
+          solution: solution,
+        );
+      }
+      // Keep the layout covering the most cells: more constraint means fewer
+      // digits have to be given away below.
+      if (fallback == null ||
+          thermos.fold<int>(0, (n, t) => n + t.cells.length) >
+              fallback.fold<int>(0, (n, t) => n + t.cells.length)) {
+        fallback = thermos;
+      }
+    }
+
+    final thermos = fallback!;
+    final givens = List.generate(gridDim, (_) => List<int>.filled(gridDim, 0));
+    final cells = <List<int>>[
+      for (var r = 0; r < gridDim; r++)
+        for (var c = 0; c < gridDim; c++) [r, c],
+    ]..shuffle(rng);
+
+    var unique = false;
+    for (final cell in cells.take(maxGivens ?? cells.length)) {
+      givens[cell[0]][cell[1]] = solution[cell[0]][cell[1]];
+      unique = await thermoHasUniqueSolution(
+        gridDim: gridDim,
+        regions: regions,
+        thermos: thermos,
+        givens: givens,
+      );
+      if (unique) break;
+    }
+    if (!unique) {
+      throw StateError('Thermo uniqueness not established within reveal cap');
+    }
+
+    return ThermoPuzzle(
+      gridDim: gridDim,
+      regions: regions,
+      thermos: thermos,
+      givens: givens,
+      solution: solution,
+    );
   }
 
   // --- Cage generation ----------------------------------------------------

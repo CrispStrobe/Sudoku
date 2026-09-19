@@ -314,6 +314,24 @@ abstract class AppLocalizations {
   /// **'No givens — each dashed cage must sum to its number with no repeats.'**
   String get variantKillerNote;
 
+  /// No description provided for @variantThermo.
+  ///
+  /// In en, this message translates to:
+  /// **'🌡️ Thermo'**
+  String get variantThermo;
+
+  /// No description provided for @variantThermoNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Digits increase from each bulb to the tip of its thermometer.'**
+  String get variantThermoNote;
+
+  /// No description provided for @variantThermoUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Thermo is 9x9 and smaller — its line solver is not practical on a larger grid.'**
+  String get variantThermoUnavailable;
+
   /// No description provided for @difficultyEasy.
   ///
   /// In en, this message translates to:

@@ -72,6 +72,36 @@ looks like a working game and is not the one they asked for. That is what hid
 the dart2js crash for a whole release. `test/killer_no_silent_fallback_test.dart`
 pins it.
 
+## Adding a variant
+
+Thermo is the worked example; copy it. A variant is a constraint, and the
+pipeline around it already exists:
+
+1. **Model** in `variant_engine.dart` — the clue type, `hasError` (is it wrong
+   *yet*), `isSatisfied` (is it complete), and `toJson`/`fromJson` with hard
+   validation, because the bundle is the only thing between a bad board and a
+   player.
+2. **Constraint** — one `Problem` builder plus a `…HasUniqueSolution`. Thermo's
+   whole rule is `addStrictlyAscending` per line. `dart_csp` also has
+   `addExactSum` (Arrow, Sandwich), `addInSet` (Odd/Even), `addLinearEquals`
+   (Kropki) and `addStringConstraint` (Anti-Knight).
+3. **Generator** — see the two-phase note in the README. Shapes first for a
+   no-givens board, solution-first as the guaranteed fallback.
+4. **Painter** in `painters.dart`, scaled to the cell (never a constant).
+5. **Enum value** — *append* to `SudokuVariant`, never rename, and add it to
+   `test/persisted_names_test.dart`.
+6. **Screen wiring** — `isThermo`, the generation branch, win condition,
+   conflict highlight, and `hasUnmodelledRules` if the technique solver cannot
+   reason about it (hints and explain must then be off, as for Killer).
+7. **Bundle** — `tool/generate_…_puzzles.dart` and a loader, if generation is
+   slow enough to matter. It is, for anything using the CSP.
+8. **Tests** — the rule's edge cases, generator invariants, JSON rejection of
+   corrupt input, a bundle validity test, and a no-silent-fallback guard.
+
+Thermo's `hasError` is the part worth reading twice: a gap between two filled
+cells still constrains them, because each step along the line must add at least
+one. `[_, 5, _, 3]` is already wrong.
+
 ## Generation cost is not uniform
 
 Proving a Killer puzzle uniquely solvable is a CSP search with no useful upper

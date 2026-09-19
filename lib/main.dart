@@ -4,12 +4,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'game_stats.dart';
 import 'home_screen.dart';
 import 'killer_bundle.dart';
+import 'thermo_bundle.dart';
 import 'l10n/app_localizations.dart';
 import 'ready_puzzle.dart';
 import 'services.dart';
 
 export 'game_stats.dart';
 export 'killer_bundle.dart';
+export 'thermo_bundle.dart';
 export 'achievements.dart';
 export 'particles.dart';
 export 'home_screen.dart';
@@ -23,6 +25,7 @@ void main() async {
   await PuzzleCache().initialize();
   await ReadyPuzzleCache().initialize();
   await KillerPuzzleBundle().initialize();
+  await ThermoPuzzleBundle().initialize();
   await GameStats.load();
   runApp(const SudokuApp());
 }
