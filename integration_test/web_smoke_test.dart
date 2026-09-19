@@ -78,11 +78,18 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle(const Duration(seconds: 3));
-
+    // NOT pumpAndSettle: the particle layer runs a repeating
+    // AnimationController for as long as the screen is mounted, so "wait for
+    // animations to stop" never returns. Pump a bounded number of frames and
+    // stop when the board exists.
     final painter = find.byWidgetPredicate(
       (w) => w is CustomPaint && w.painter is SudokuGridPainter,
     );
+    for (var i = 0; i < 200; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      if (painter.evaluate().isNotEmpty) break;
+    }
+
     expect(painter, findsWidgets, reason: 'the board did not paint');
     final box = tester.renderObject<RenderBox>(painter.first);
     expect(box.size.width, greaterThan(100));
