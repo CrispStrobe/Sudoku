@@ -83,17 +83,25 @@ jobs:
           cache: true
       - run: flutter pub get
 
-      # Chrome and chromedriver have to be the same major version or the
-      # session never starts.
-      - uses: browser-actions/setup-chrome@v1
-        id: chrome
-        with:
-          chrome-version: stable
-          install-chromedriver: true
+      # chromedriver must match the Chrome it launches, and it launches the
+      # *system* Chrome: `flutter drive` does not forward CHROME_EXECUTABLE
+      # into the WebDriver session, so installing a second Chrome elsewhere
+      # and pointing at it fails with "This version of ChromeDriver only
+      # supports Chrome version N" even when both are version N. Take the
+      # runner's preinstalled Chrome and fetch the driver that matches it.
+      - name: Match chromedriver to the runner's Chrome
+        run: |
+          version=$(google-chrome --version | grep -oP '[\d.]+')
+          echo "Chrome $version"
+          curl -fsSL -o /tmp/chromedriver.zip \
+            "https://storage.googleapis.com/chrome-for-testing-public/$version/linux64/chromedriver-linux64.zip"
+          unzip -q -o /tmp/chromedriver.zip -d /tmp
+          sudo install /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+          chromedriver --version
 
       - name: Start chromedriver
         run: |
-          "${{ steps.chrome.outputs.chromedriver-path }}" --port=4444 &
+          chromedriver --port=4444 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:4444/status >/dev/null && break
             sleep 1
@@ -101,8 +109,6 @@ jobs:
           curl -sf http://127.0.0.1:4444/status
 
       - name: Drive the app in Chrome
-        env:
-          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           flutter drive \
             --driver=test_driver/integration_test.dart \
