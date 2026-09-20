@@ -57,6 +57,72 @@ void main() {
     expect(puzzle.gridDim, 4);
   });
 
+  testWidgets('the KenKen bundle loads and its boards are real', (
+    tester,
+  ) async {
+    // The largest asset the app ships, at 133 KB — and the one whose size
+    // already caused a hang when it was read inside a fake-async widget test.
+    // Worth proving it decodes in a browser and not only on the VM.
+    final bundle = KenKenPuzzleBundle.isolated();
+    await bundle.initialize();
+
+    final puzzle = bundle.get(GridSize.standard, SudokuDifficulty.easy);
+    expect(puzzle, isNotNull, reason: 'no bundled KenKen puzzle on the web');
+    expect(puzzle!.cages, isNotEmpty);
+    expect(puzzle.gridDim, 9);
+    // A bundled board that does not satisfy its own clues would mean the
+    // arithmetic decoded differently here than it did when it was generated.
+    expect(kenKenCagesSatisfied(puzzle.cages, puzzle.solution), isTrue);
+  });
+
+  testWidgets('the KenKen generator runs under dart2js', (tester) async {
+    // KenKen is the only variant reaching addExactProduct and addTable, so
+    // Killer passing above says nothing about these code paths — which is
+    // exactly the shape of the gap that let v1.1.0 ship.
+    final puzzle = await VariantEngine.generateKenKen(
+      gridSize: GridSize.small,
+      difficulty: SudokuDifficulty.easy,
+      seed: 1,
+    );
+    expect(puzzle.cages, isNotEmpty);
+    expect(puzzle.gridDim, 4);
+    expect(kenKenCagesSatisfied(puzzle.cages, puzzle.solution), isTrue);
+  });
+
+  testWidgets('a KenKen screen paints its cages in a browser', (tester) async {
+    await KenKenPuzzleBundle().initialize();
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: GameScreen(
+          difficulty: SudokuDifficulty.easy,
+          gridSize: GridSize.small,
+          gridShape: GridShape.classic,
+          gameMode: GameMode.classic,
+          variant: SudokuVariant.kenken,
+        ),
+      ),
+    );
+
+    final cagePainter = find.byWidgetPredicate(
+      (w) => w is CustomPaint && w.painter is KenKenCagePainter,
+    );
+    for (var i = 0; i < 400; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+      if (cagePainter.evaluate().isNotEmpty) break;
+    }
+
+    // A KenKen board with no cages is not a degraded board, it is a blank
+    // grid: 89 of the 96 bundled boards carry no givens either.
+    expect(cagePainter, findsWidgets, reason: 'the cages did not paint');
+    final painter =
+        (cagePainter.evaluate().first.widget as CustomPaint).painter
+            as KenKenCagePainter;
+    expect(painter.cages, isNotEmpty);
+  });
+
   testWidgets('a game screen renders a board in a browser', (tester) async {
     await PuzzleCache().initialize();
 

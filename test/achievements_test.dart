@@ -101,6 +101,8 @@ void main() {
     solve(variant: SudokuVariant.killer);
     expect(GameStats.hasBeatenEveryVariant, isFalse, reason: 'thermo missing');
     solve(variant: SudokuVariant.thermo);
+    expect(GameStats.hasBeatenEveryVariant, isFalse, reason: 'kenken missing');
+    solve(variant: SudokuVariant.kenken);
     expect(GameStats.hasBeatenEveryVariant, isFalse, reason: 'jigsaw missing');
     solve(shape: GridShape.jigsaw);
     expect(GameStats.hasBeatenEveryVariant, isTrue);

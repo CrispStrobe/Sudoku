@@ -33,7 +33,7 @@ void main() {
     expectNames(
       'SudokuVariant',
       SudokuVariant.values.map((v) => v.name).toList(),
-      ['classic', 'x', 'killer', 'thermo'],
+      ['classic', 'x', 'killer', 'thermo', 'kenken'],
     );
   });
 

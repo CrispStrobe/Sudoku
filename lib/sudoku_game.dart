@@ -30,7 +30,7 @@ enum GridShape { classic, jigsaw }
 /// invalidate every player's saved game and reset their Sudoku-X achievement
 /// progress. Add values freely; do not rename them. Pinned by
 /// `test/persisted_names_test.dart`.
-enum SudokuVariant { classic, x, killer, thermo }
+enum SudokuVariant { classic, x, killer, thermo, kenken }
 
 enum GameMode { classic }
 

@@ -31,6 +31,15 @@ class SavedGame {
       KillerCage(cells: _grid(c['cells']), sum: c['sum'] as int),
   ];
 
+  /// KenKen cages, for a saved KenKen run. Absent from older slots, like
+  /// [thermos].
+  List<KenKenCage> get kenKenCages => [
+    for (final c
+        in (toJson()['kenKenCages'] as List<dynamic>? ?? const [])
+            .cast<Map<String, dynamic>>())
+      KenKenCage.fromJson(c),
+  ];
+
   /// Thermometers, for a saved Thermo run. Absent from slots written before
   /// the variant existed, which is why this tolerates a missing key where
   /// [cages] (present since the schema's first version) does not.
@@ -58,6 +67,7 @@ class SavedGame {
     SudokuDifficulty? rating,
     List<KillerCage> cages = const [],
     List<ThermoLine> thermos = const [],
+    List<KenKenCage> kenKenCages = const [],
     bool notesMode = false,
   }) => SavedGame._({
     'version': schemaVersion,
@@ -91,6 +101,7 @@ class SavedGame {
     'thermos': [
       for (final thermo in thermos) {'cells': thermo.cells},
     ],
+    'kenKenCages': [for (final cage in kenKenCages) cage.toJson()],
     'cages': [
       for (final cage in cages) {'cells': cage.cells, 'sum': cage.sum},
     ],
@@ -193,13 +204,32 @@ class SavedGame {
     } else {
       require(thermos.isEmpty);
     }
+    final kenKenCages = saved.kenKenCages;
+    if (saved.variant == SudokuVariant.kenken) {
+      require(kenKenCages.isNotEmpty);
+      final covered = <int>{};
+      for (final cage in kenKenCages) {
+        require(cage.cells.isNotEmpty);
+        for (final cell in cage.cells) {
+          require(cell.length == 2 && cell.every((v) => v >= 0 && v < dim));
+          require(covered.add(cell[0] * dim + cell[1]));
+        }
+        // The saved answer must satisfy the clues it carries.
+        require(cage.isSatisfied(solution));
+      }
+      require(covered.length == dim * dim);
+    } else {
+      require(kenKenCages.isEmpty);
+    }
     final restored = saved.createGame();
     require(
       !restored.isSolved() ||
           (saved.variant == SudokuVariant.killer &&
               !cagesSatisfied(cages, grid)) ||
           (saved.variant == SudokuVariant.thermo &&
-              !thermosSatisfied(thermos, grid)),
+              !thermosSatisfied(thermos, grid)) ||
+          (saved.variant == SudokuVariant.kenken &&
+              !kenKenCagesSatisfied(kenKenCages, grid)),
     );
     return saved;
   }

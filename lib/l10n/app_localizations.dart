@@ -332,6 +332,24 @@ abstract class AppLocalizations {
   /// **'Thermo is 9x9 and smaller — its line solver is not practical on a larger grid.'**
   String get variantThermoUnavailable;
 
+  /// No description provided for @variantKenKen.
+  ///
+  /// In en, this message translates to:
+  /// **'🔢 KenKen'**
+  String get variantKenKen;
+
+  /// No description provided for @variantKenKenNote.
+  ///
+  /// In en, this message translates to:
+  /// **'No boxes — rows and columns only. Each cage\'s digits must make its number with the shown operation.'**
+  String get variantKenKenNote;
+
+  /// No description provided for @variantKenKenUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'KenKen is 9x9 and smaller — proving a larger grid has one solution is not practical on a phone.'**
+  String get variantKenKenUnavailable;
+
   /// No description provided for @difficultyEasy.
   ///
   /// In en, this message translates to:

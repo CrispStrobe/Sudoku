@@ -136,6 +136,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Thermo is 9x9 and smaller — its line solver is not practical on a larger grid.';
 
   @override
+  String get variantKenKen => '🔢 KenKen';
+
+  @override
+  String get variantKenKenNote =>
+      'No boxes — rows and columns only. Each cage\'s digits must make its number with the shown operation.';
+
+  @override
+  String get variantKenKenUnavailable =>
+      'KenKen is 9x9 and smaller — proving a larger grid has one solution is not practical on a phone.';
+
+  @override
   String get difficultyEasy => 'EASY';
 
   @override
