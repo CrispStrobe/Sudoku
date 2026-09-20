@@ -1,8 +1,8 @@
 # CrispSudoku
 
 A Flutter Sudoku game with classic, **jigsaw** (irregular-region), **Sudoku-X**
-(diagonal), **Killer** (summed-cage) and **Thermo** (increasing-line) variants
-across six grid sizes (4×4, 6×6,
+(diagonal), **Killer** (summed-cage), **Thermo** (increasing-line) and
+**KenKen** (arithmetic-cage) variants across six grid sizes (4×4, 6×6,
 8×8, 9×9, 10×10, 12×12) and four difficulties. Features
 a **daily challenge** (same board for everyone each day), a **logic difficulty
 rating** and a step-by-step **"explain the solve"** walkthrough (both powered by a
@@ -104,6 +104,42 @@ heuristic, not of the pipeline: a smarter draw (lines chosen to cross boxes,
 say) would push phase 1 further up. The attempt budget scales down with grid
 size for the same reason, since each failed attempt at 9×9 costs a full
 enumeration.
+
+### Pre-built KenKen puzzles
+
+KenKen (also sold as Calcudoku) is the odd one out: it is not Sudoku with an
+extra rule, it is Sudoku with a rule *removed*. There are no boxes — the grid
+is a plain Latin square — and the whole puzzle is the cages, each carrying an
+arithmetic clue like `12×` or `3−` that its digits must produce.
+
+Two differences from Killer are easy to get wrong and both are pinned by
+`test/kenken_test.dart`:
+
+- **A cage may repeat a digit.** Only rows and columns forbid repeats. A cage
+  that bends around a corner can hold `2` twice.
+- **`−` and `÷` are order-independent and two-cell only.** The clue is the
+  absolute difference, or the larger divided by the smaller, and `5÷2` is not a
+  clue at all because the result is not a whole number.
+
+The no-boxes part is handled without a special case anywhere downstream: a
+KenKen puzzle's `regions` are the *row indices* (`KenKenPuzzle.latinRegions`),
+so the engine's region rule restates its row rule and does nothing, and the
+painter is told to draw only the outer edge. Everything that wants a region map
+— the engine, the saved-game schema, the grid painter — gets one.
+
+Generation is much cheaper than Killer or Thermo, because the cages are strong
+constraints: a random partition over a random Latin square is usually unique on
+the first try, and 89 of the 96 bundled boards need **no givens at all**. Most
+take tens of milliseconds. But "usually cheap" is not bounded — one 9×9 expert
+board took 80 seconds — so the boards still ship pre-built.
+
+```bash
+dart run tool/generate_kenken_puzzles.dart [perConfig]   # default 6
+```
+
+Cage size is what difficulty means here: at most 2 cells on easy, rising to 5
+on expert. Bigger cages carry weaker clues (more digit combinations satisfy
+them), which is also why the expert boards are the slow ones to prove unique.
 
 ### Pre-built Killer puzzles
 

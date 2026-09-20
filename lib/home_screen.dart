@@ -714,6 +714,7 @@ class _HomeScreenState extends State<HomeScreen>
     var variant = SudokuVariant.classic;
     final killerAllowed = gridDimensionFor(gridSize) <= 9;
     final thermoAllowed = VariantEngine.thermoSupports(gridSize);
+    final kenKenAllowed = VariantEngine.kenKenSupports(gridSize);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -811,14 +812,27 @@ class _HomeScreenState extends State<HomeScreen>
                               )
                             : null,
                       ),
+                      ChoiceChip(
+                        label: Text(l10n.variantKenKen),
+                        selected: variant == SudokuVariant.kenken,
+                        onSelected: kenKenAllowed
+                            ? (_) => setSheetState(
+                                () => variant = SudokuVariant.kenken,
+                              )
+                            : null,
+                      ),
                     ],
                   ),
                   if (!killerAllowed)
                     _variantNote(l10n.variantKillerUnavailable),
                   if (!thermoAllowed)
                     _variantNote(l10n.variantThermoUnavailable),
+                  if (!kenKenAllowed)
+                    _variantNote(l10n.variantKenKenUnavailable),
                   if (variant == SudokuVariant.thermo)
                     _variantNote(l10n.variantThermoNote),
+                  if (variant == SudokuVariant.kenken)
+                    _variantNote(l10n.variantKenKenNote),
                   if (variant == SudokuVariant.x)
                     _variantNote(l10n.variantXNote),
                   if (variant == SudokuVariant.killer)

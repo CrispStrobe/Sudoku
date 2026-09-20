@@ -138,6 +138,17 @@ class AppLocalizationsDe extends AppLocalizations {
       'Thermo gibt es bis 9x9 — der Linien-Löser ist auf größeren Gittern nicht praktikabel.';
 
   @override
+  String get variantKenKen => '🔢 KenKen';
+
+  @override
+  String get variantKenKenNote =>
+      'Keine Blöcke — nur Zeilen und Spalten. Die Ziffern jedes Käfigs müssen mit der angegebenen Rechenart seine Zahl ergeben.';
+
+  @override
+  String get variantKenKenUnavailable =>
+      'KenKen gibt es bis 9x9 — der Eindeutigkeitsbeweis ist auf größeren Gittern auf dem Telefon nicht praktikabel.';
+
+  @override
   String get difficultyEasy => 'LEICHT';
 
   @override

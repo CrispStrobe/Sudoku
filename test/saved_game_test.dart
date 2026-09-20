@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sudoku/saved_game.dart';
 import 'package:sudoku/saved_game_service.dart';
 import 'package:sudoku/sudoku_game.dart';
+import 'package:sudoku/variant_engine.dart';
 
 SudokuGame sampleGame() => SudokuGame.fromState(
   givens: [
@@ -41,7 +42,102 @@ SavedGame snapshot(SudokuGame game) => SavedGame.capture(
   rating: SudokuDifficulty.hard,
 );
 
+/// A 4x4 KenKen: a Latin square with no boxes, split into eight domino cages.
+/// The regions are the row indices, which is how a boxless variant travels
+/// through a schema that insists on a region map.
+SudokuGame sampleKenKenGame() => SudokuGame.fromState(
+  givens: [
+    [1, 0, 0, 4],
+    [0, 4, 1, 0],
+    [2, 0, 4, 0],
+    [0, 3, 0, 1],
+  ],
+  solution: [
+    [1, 2, 3, 4],
+    [3, 4, 1, 2],
+    [2, 1, 4, 3],
+    [4, 3, 2, 1],
+  ],
+  regions: KenKenPuzzle.latinRegions(4),
+  difficulty: SudokuDifficulty.medium,
+  // The variant travels on the game, not on `capture` — it is what gets
+  // written as the snapshot's `variant` field.
+  variant: SudokuVariant.kenken,
+);
+
+List<KenKenCage> sampleKenKenCages() => [
+  for (final row in [0, 1, 2, 3])
+    for (final half in [0, 2])
+      KenKenCage(
+        cells: [
+          [row, half],
+          [row, half + 1],
+        ],
+        op: KenKenOp.add,
+        // Each domino covers {1,2} or {3,4} in this solution.
+        target: (half == 0) == (row == 0 || row == 2) ? 3 : 7,
+      ),
+];
+
 void main() {
+  test('a KenKen snapshot survives a save and resume', () {
+    final saved = SavedGame.capture(
+      game: sampleKenKenGame(),
+      size: GridSize.small,
+      shape: GridShape.classic,
+      gameMode: GameMode.classic,
+      kenKenCages: sampleKenKenCages(),
+      elapsed: const Duration(seconds: 12),
+      score: 10,
+      mistakes: 0,
+      hintsUsed: 0,
+    );
+    final back = SavedGame.fromJson(
+      jsonDecode(jsonEncode(saved.toJson())) as Map<String, dynamic>,
+    );
+    expect(back.variant, SudokuVariant.kenken);
+    expect(back.kenKenCages.length, 8);
+    expect(back.kenKenCages.first.op, KenKenOp.add);
+    expect(
+      kenKenCagesSatisfied(back.kenKenCages, sampleKenKenGame().solution),
+      isTrue,
+    );
+  });
+
+  test('a KenKen snapshot with no cages is rejected', () {
+    // Resuming this would hand the player an empty Latin-square grid with no
+    // clue of any kind — the no-silent-fallback rule, applied to the save slot
+    // rather than to generation.
+    final valid = SavedGame.capture(
+      game: sampleKenKenGame(),
+      size: GridSize.small,
+      shape: GridShape.classic,
+      gameMode: GameMode.classic,
+      kenKenCages: sampleKenKenCages(),
+      elapsed: const Duration(seconds: 12),
+      score: 10,
+      mistakes: 0,
+      hintsUsed: 0,
+    ).toJson();
+
+    for (final mutate in <void Function(Map<String, dynamic>)>[
+      (j) => j['kenKenCages'] = [],
+      (j) => j.remove('kenKenCages'),
+      // One cage dropped: the cages no longer cover the grid.
+      (j) => (j['kenKenCages'] as List).removeLast(),
+      // A clue its own solution does not satisfy.
+      (j) => (j['kenKenCages'] as List)[0]['target'] = 99,
+    ]) {
+      final json = jsonDecode(jsonEncode(valid)) as Map<String, dynamic>;
+      mutate(json);
+      expect(
+        () => SavedGame.fromJson(json),
+        throwsA(anything),
+        reason: '$json',
+      );
+    }
+  });
+
   test('rejects old, corrupt, inconsistent and finished snapshots', () {
     final valid = snapshot(sampleGame()).toJson();
     for (final mutate in <void Function(Map<String, dynamic>)>[

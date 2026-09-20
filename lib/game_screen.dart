@@ -9,6 +9,7 @@ import 'clock_format.dart';
 import 'explain_screen.dart';
 import 'game_clock.dart';
 import 'game_stats.dart';
+import 'kenken_bundle.dart';
 import 'killer_bundle.dart';
 import 'thermo_bundle.dart';
 import 'l10n/app_localizations.dart';
@@ -194,13 +195,14 @@ class GameScreen extends StatefulWidget {
   bool get isDiagonal => variant == SudokuVariant.x;
   bool get isKiller => variant == SudokuVariant.killer;
   bool get isThermo => variant == SudokuVariant.thermo;
+  bool get isKenKen => variant == SudokuVariant.kenken;
 
   /// Variants the human-technique solver does not model, so the hint and
   /// explain-the-solve features cannot speak about them. Killer's arithmetic
   /// and Thermo's ordering are both outside what `technique_solver.dart`
   /// reasons about; offering a "next logical step" that ignores half the rules
   /// would be worse than offering none.
-  bool get hasUnmodelledRules => isKiller || isThermo;
+  bool get hasUnmodelledRules => isKiller || isThermo || isKenKen;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -232,6 +234,7 @@ class _GameScreenState extends State<GameScreen>
   /// Killer cages for the current board (empty unless the Killer variant).
   List<KillerCage> _cages = const [];
   List<ThermoLine> _thermos = const [];
+  List<KenKenCage> _kenKenCages = const [];
 
   /// Score cost of revealing the next logical step.
   static const int _nextStepPenalty = 40;
@@ -320,6 +323,7 @@ class _GameScreenState extends State<GameScreen>
           rating: _logicRating,
           cages: _cages,
           thermos: _thermos,
+          kenKenCages: _kenKenCages,
           notesMode: _notesMode,
         ),
       ),
@@ -340,6 +344,8 @@ class _GameScreenState extends State<GameScreen>
         return l10n.variantKiller;
       case SudokuVariant.thermo:
         return l10n.variantThermo;
+      case SudokuVariant.kenken:
+        return l10n.variantKenKen;
     }
   }
 
@@ -421,7 +427,30 @@ class _GameScreenState extends State<GameScreen>
       SudokuGame? built;
       ReadyPuzzle? ready;
       _cages = const [];
-      if (widget.isThermo) {
+      if (widget.isKenKen) {
+        // Same shape as Thermo and Killer: bundled board first, bounded live
+        // generation only if the asset is unusable.
+        var puzzle = KenKenPuzzleBundle().get(
+          widget.gridSize,
+          widget.difficulty,
+        );
+        puzzle ??= await VariantEngine.generateKenKen(
+          gridSize: widget.gridSize,
+          difficulty: widget.difficulty,
+        ).timeout(_killerGenerationBudget);
+        if (!mounted) return;
+        _kenKenCages = puzzle.cages;
+        built = SudokuGame.fromState(
+          givens: puzzle.givens,
+          solution: puzzle.solution,
+          // KenKen has no boxes: these "regions" are the rows, which makes
+          // the engine's region rule a duplicate of its row rule. See
+          // KenKenPuzzle.latinRegions.
+          regions: puzzle.regions,
+          difficulty: widget.difficulty,
+          variant: SudokuVariant.kenken,
+        );
+      } else if (widget.isThermo) {
         // Same shape as Killer below: a bundled board plays instantly and is
         // already proven unique; the live generator is the bounded fallback
         // for a configuration the bundle does not cover.
@@ -545,6 +574,17 @@ class _GameScreenState extends State<GameScreen>
       }
     } catch (e, st) {
       if (!mounted) return;
+      if (widget.isKenKen) {
+        // Same rule: a KenKen board without cages is a plain Latin square
+        // wearing the label, and an unsolvable one.
+        DebugLogger.error(
+          'KenKen generation failed; no classic fallback.',
+          e,
+          st,
+        );
+        setState(() => _hasError = true);
+        return;
+      }
       if (widget.isThermo) {
         // Same rule as Killer below: a Thermo board without thermometers is a
         // classic board wearing the label.
@@ -757,6 +797,7 @@ class _GameScreenState extends State<GameScreen>
     if (g == null || !g.isSolved()) return false;
     if (widget.isKiller) return cagesSatisfied(_cages, g.grid);
     if (widget.isThermo) return thermosSatisfied(_thermos, g.grid);
+    if (widget.isKenKen) return kenKenCagesSatisfied(_kenKenCages, g.grid);
     return true;
   }
 
@@ -772,6 +813,11 @@ class _GameScreenState extends State<GameScreen>
     if (widget.isThermo) {
       for (final thermo in _thermos) {
         if (thermo.contains(row, col) && thermo.hasError(g.grid)) return true;
+      }
+    }
+    if (widget.isKenKen) {
+      for (final cage in _kenKenCages) {
+        if (cage.contains(row, col) && cage.hasError(g.grid)) return true;
       }
     }
     return false;
@@ -1854,6 +1900,9 @@ class _GameScreenState extends State<GameScreen>
                     g.gridDim,
                     g.regions,
                     jigsaw: widget.gridShape == GridShape.jigsaw,
+                    // KenKen has no boxes; drawing them would show a rule the
+                    // puzzle does not have.
+                    latin: widget.isKenKen,
                   ),
                 ),
                 // Under the cells, unlike the Killer cage painter above them:
@@ -1878,6 +1927,21 @@ class _GameScreenState extends State<GameScreen>
                       height: cellSize,
                       child: _buildCell(row, col, cellSize, scheme),
                     ),
+                if (widget.isKenKen)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        size: Size(gridPixels, gridPixels),
+                        painter: KenKenCagePainter(
+                          _kenKenCages,
+                          gridDim,
+                          fontFamily: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.fontFamily,
+                        ),
+                      ),
+                    ),
+                  ),
                 if (widget.isKiller)
                   Positioned.fill(
                     child: IgnorePointer(
@@ -2011,6 +2075,14 @@ class _GameScreenState extends State<GameScreen>
       final dim = game!.gridDim;
       if (row == col || row + col == dim - 1) return const Color(0xFFEDE7F6);
     }
+
+    // KenKen has no boxes at all, and its `regions` are the row indices (see
+    // KenKenPuzzle.latinRegions) so that the engine's region rule restates its
+    // row rule harmlessly. The alternating shading below keys off exactly that
+    // region id, so without this the board comes out striped every other row —
+    // drawing a grouping the puzzle does not have, which is the one thing the
+    // no-boxes trick must never leak into.
+    if (widget.isKenKen) return Colors.white;
 
     final regionId = game!.regions[row][col];
     if (widget.gridShape == GridShape.jigsaw) {

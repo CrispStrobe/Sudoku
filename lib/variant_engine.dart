@@ -86,6 +86,305 @@ class KillerCage {
   }
 }
 
+/// The arithmetic a KenKen cage applies to its digits.
+///
+/// `none` is a one-cell cage: the clue is just the digit. Subtraction and
+/// division are order-independent and restricted to two cells — `3-` means the
+/// two digits differ by three, either way round — which is the standard rule
+/// and the only one that makes an unordered cage well defined.
+enum KenKenOp { none, add, subtract, multiply, divide }
+
+extension KenKenOpSymbol on KenKenOp {
+  String get symbol => switch (this) {
+    KenKenOp.none => '',
+    KenKenOp.add => '+',
+    KenKenOp.subtract => '−',
+    KenKenOp.multiply => '×',
+    KenKenOp.divide => '÷',
+  };
+
+  /// Cage sizes this operation accepts.
+  bool acceptsCellCount(int n) => switch (this) {
+    KenKenOp.none => n == 1,
+    KenKenOp.add || KenKenOp.multiply => n >= 2,
+    KenKenOp.subtract || KenKenOp.divide => n == 2,
+  };
+}
+
+/// A KenKen cage: connected cells whose digits combine under [op] to [target].
+///
+/// Note what is *absent*: a cage does not forbid repeated digits, unlike a
+/// Killer cage. Two cells of the same cage may hold the same digit as long as
+/// they are in different rows and columns, because in KenKen the only
+/// all-different rules are the row and the column. Getting this wrong makes
+/// perfectly good puzzles look unsolvable.
+class KenKenCage {
+  final List<List<int>> cells; // each [row, col]
+  final KenKenOp op;
+  final int target;
+  const KenKenCage({
+    required this.cells,
+    required this.op,
+    required this.target,
+  });
+
+  bool contains(int row, int col) =>
+      cells.any((c) => c[0] == row && c[1] == col);
+
+  /// The cell the clue is written in: top-most, then left-most.
+  List<int> get labelCell {
+    var best = cells.first;
+    for (final c in cells) {
+      if (c[0] < best[0] || (c[0] == best[0] && c[1] < best[1])) best = c;
+    }
+    return best;
+  }
+
+  /// `12+`, `3−`, `2÷`, or just `5` for a one-cell cage.
+  String get clue => op == KenKenOp.none ? '$target' : '$target${op.symbol}';
+
+  /// Apply [op] to [values]; null when the combination is not valid for it
+  /// (a division that does not divide evenly, say).
+  static int? combine(KenKenOp op, List<int> values) {
+    switch (op) {
+      case KenKenOp.none:
+        return values.length == 1 ? values.first : null;
+      case KenKenOp.add:
+        return values.reduce((a, b) => a + b);
+      case KenKenOp.multiply:
+        return values.reduce((a, b) => a * b);
+      case KenKenOp.subtract:
+        if (values.length != 2) return null;
+        return (values[0] - values[1]).abs();
+      case KenKenOp.divide:
+        if (values.length != 2) return null;
+        final hi = math.max(values[0], values[1]);
+        final lo = math.min(values[0], values[1]);
+        if (lo == 0 || hi % lo != 0) return null;
+        return hi ~/ lo;
+    }
+  }
+
+  /// True when every cell is filled and the arithmetic comes out.
+  bool isSatisfied(List<List<int>> grid) {
+    final values = <int>[];
+    for (final cell in cells) {
+      final v = grid[cell[0]][cell[1]];
+      if (v == 0) return false;
+      values.add(v);
+    }
+    return combine(op, values) == target;
+  }
+
+  /// True when the cage is already provably wrong.
+  ///
+  /// A partially filled cage is usually not decidable, so this is deliberately
+  /// conservative: it reports an error only where one is certain. Addition and
+  /// multiplication overshoot monotonically (every digit is at least one), so
+  /// a running total past the target is final; the two-cell operations can only
+  /// be judged once both cells are filled.
+  bool hasError(List<List<int>> grid) {
+    final values = <int>[];
+    var filled = 0;
+    for (final cell in cells) {
+      final v = grid[cell[0]][cell[1]];
+      if (v != 0) {
+        filled++;
+        values.add(v);
+      }
+    }
+    if (filled == cells.length) return combine(op, values) != target;
+    if (filled == 0) return false;
+    switch (op) {
+      case KenKenOp.add:
+        // The remaining cells add at least one each.
+        return values.fold(0, (a, b) => a + b) + (cells.length - filled) >
+            target;
+      case KenKenOp.multiply:
+        final product = values.fold(1, (a, b) => a * b);
+        return product > target || target % product != 0;
+      case KenKenOp.none:
+      case KenKenOp.subtract:
+      case KenKenOp.divide:
+        return false;
+    }
+  }
+
+  Map<String, dynamic> toJson() => {
+    'cells': cells,
+    'op': op.name,
+    'target': target,
+  };
+
+  factory KenKenCage.fromJson(Map<String, dynamic> json) {
+    final cells = (json['cells'] as List)
+        .map((cell) => (cell as List).cast<int>().toList())
+        .toList();
+    if (cells.isEmpty) {
+      throw const FormatException('kenken cage: no cells');
+    }
+    for (final cell in cells) {
+      if (cell.length != 2) {
+        throw const FormatException('kenken cage: cell is not [row, col]');
+      }
+    }
+    final op = KenKenOp.values.byName(json['op'] as String);
+    if (!op.acceptsCellCount(cells.length)) {
+      throw FormatException(
+        'kenken cage: ${op.name} does not take ${cells.length} cells',
+      );
+    }
+    return KenKenCage(cells: cells, op: op, target: json['target'] as int);
+  }
+}
+
+/// True if every cage in [cages] is satisfied for [grid] (the extra win
+/// condition for KenKen, on top of the standard full-and-consistent check).
+bool kenKenCagesSatisfied(List<KenKenCage> cages, List<List<int>> grid) =>
+    cages.every((cage) => cage.isSatisfied(grid));
+
+/// A generated KenKen puzzle.
+///
+/// There is no `regions` field, and that absence is the whole variant: KenKen
+/// is a Latin square with arithmetic cages, and has no boxes at all. The screen
+/// passes row indices where the engine wants regions, which makes the engine's
+/// region rule a duplicate of its row rule and therefore a no-op — see
+/// `latinRegions`.
+class KenKenPuzzle {
+  final int gridDim;
+  final List<KenKenCage> cages;
+  final List<List<int>> givens;
+  final List<List<int>> solution;
+  const KenKenPuzzle({
+    required this.gridDim,
+    required this.cages,
+    required this.givens,
+    required this.solution,
+  });
+
+  /// A `regions` grid that encodes "no regions".
+  ///
+  /// The engine and the saved-game schema both insist on one region id per
+  /// cell, with each region holding exactly `gridDim` cells. Numbering every
+  /// cell by its row satisfies that and makes the region all-different
+  /// identical to the row all-different the engine already applies — a
+  /// constraint that is always trivially met, which is exactly what a variant
+  /// with no boxes needs.
+  static List<List<int>> latinRegions(int gridDim) => [
+    for (var r = 0; r < gridDim; r++) List<int>.filled(gridDim, r),
+  ];
+
+  List<List<int>> get regions => latinRegions(gridDim);
+
+  Map<String, dynamic> toJson() => {
+    'gridDim': gridDim,
+    'cages': [for (final c in cages) c.toJson()],
+    'givens': givens,
+    'solution': solution,
+  };
+
+  /// Rebuild from [json], validating hard enough that a corrupt or hand-edited
+  /// bundle entry is rejected rather than played.
+  factory KenKenPuzzle.fromJson(Map<String, dynamic> json) {
+    final gridDim = json['gridDim'] as int;
+    List<List<int>> grid(String key) => (json[key] as List)
+        .map((row) => (row as List).cast<int>().toList())
+        .toList();
+
+    final puzzle = KenKenPuzzle(
+      gridDim: gridDim,
+      cages: [
+        for (final c in json['cages'] as List)
+          KenKenCage.fromJson(c as Map<String, dynamic>),
+      ],
+      givens: grid('givens'),
+      solution: grid('solution'),
+    );
+
+    for (final g in [puzzle.givens, puzzle.solution]) {
+      if (g.length != gridDim || g.any((row) => row.length != gridDim)) {
+        throw const FormatException('kenken puzzle: wrong dimensions');
+      }
+    }
+    // The cages must partition the grid, and each must be connected — a cage
+    // drawn in two pieces is not a cage.
+    final covered = List.generate(
+      gridDim,
+      (_) => List<bool>.filled(gridDim, false),
+    );
+    for (final cage in puzzle.cages) {
+      for (final cell in cage.cells) {
+        final r = cell[0], c = cell[1];
+        if (r < 0 || r >= gridDim || c < 0 || c >= gridDim) {
+          throw const FormatException('kenken puzzle: cage cell out of range');
+        }
+        if (covered[r][c]) {
+          throw const FormatException('kenken puzzle: cages overlap');
+        }
+        covered[r][c] = true;
+      }
+      if (!_connected(cage.cells)) {
+        throw const FormatException('kenken puzzle: cage is not connected');
+      }
+      if (!cage.isSatisfied(puzzle.solution)) {
+        throw const FormatException(
+          'kenken puzzle: a cage does not hold for its own solution',
+        );
+      }
+    }
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        if (!covered[r][c]) {
+          throw const FormatException('kenken puzzle: cages leave a gap');
+        }
+        final value = puzzle.solution[r][c];
+        if (value < 1 || value > gridDim) {
+          throw const FormatException('kenken puzzle: bad solution value');
+        }
+        final given = puzzle.givens[r][c];
+        if (given != 0 && given != value) {
+          throw const FormatException('kenken puzzle: given != solution');
+        }
+      }
+    }
+    // A Latin square: every row and column holds each digit once.
+    for (var i = 0; i < gridDim; i++) {
+      final row = <int>{}, col = <int>{};
+      for (var j = 0; j < gridDim; j++) {
+        if (!row.add(puzzle.solution[i][j]) ||
+            !col.add(puzzle.solution[j][i])) {
+          throw const FormatException(
+            'kenken puzzle: solution is not a Latin square',
+          );
+        }
+      }
+    }
+    return puzzle;
+  }
+
+  static bool _connected(List<List<int>> cells) {
+    if (cells.length <= 1) return true;
+    final remaining = {for (final c in cells) '${c[0]},${c[1]}'};
+    final queue = <List<int>>[cells.first];
+    remaining.remove('${cells.first[0]},${cells.first[1]}');
+    while (queue.isNotEmpty) {
+      final cell = queue.removeLast();
+      for (final d in const [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ]) {
+        final key = '${cell[0] + d[0]},${cell[1] + d[1]}';
+        if (remaining.remove(key)) {
+          queue.add([cell[0] + d[0], cell[1] + d[1]]);
+        }
+      }
+    }
+    return remaining.isEmpty;
+  }
+}
+
 /// A thermometer: an ordered path of cells whose digits strictly increase from
 /// the bulb (`cells.first`) to the tip (`cells.last`).
 ///
@@ -490,6 +789,305 @@ class VariantEngine {
     // Enumerate once, stopping at the second solution. Unlike negating
     // hasMultipleSolutions, this also rejects an empty (infeasible) search.
     return (await p.getFirstNSolutions(2)).length == 1;
+  }
+
+  // --- KenKen -------------------------------------------------------------
+
+  /// Build a [Problem] for a KenKen puzzle.
+  ///
+  /// Rows and columns all-different — and nothing else structural, because
+  /// KenKen has no boxes. Each cage then gets its arithmetic:
+  ///
+  /// * `+` and `×` map straight onto `addExactSum` / `addExactProduct`.
+  /// * `−` and `÷` are order-independent over two cells, which no single
+  ///   arithmetic constraint expresses. Enumerating the valid pairs into a
+  ///   table does express it, exactly, and a table over two variables of at
+  ///   most twelve values is trivially small.
+  ///
+  /// Note what is *not* here: no per-cage all-different. A KenKen cage may
+  /// repeat a digit where the row and column rules allow it, unlike a Killer
+  /// cage. Adding the Killer rule here would reject valid puzzles.
+  static Problem _buildKenKenProblem({
+    required int gridDim,
+    required List<KenKenCage> cages,
+    required List<List<int>> givens,
+  }) {
+    final p = Problem();
+    final fullDomain = [for (var v = 1; v <= gridDim; v++) v];
+    String name(int r, int c) => 'r${r}c$c';
+
+    for (var r = 0; r < gridDim; r++) {
+      for (var c = 0; c < gridDim; c++) {
+        final g = givens[r][c];
+        p.addVariable(name(r, c), g != 0 ? [g] : List<int>.from(fullDomain));
+      }
+    }
+    for (var i = 0; i < gridDim; i++) {
+      p.addAllDifferent([
+        for (var j = 0; j < gridDim; j++) name(i, j),
+      ], label: 'row$i');
+      p.addAllDifferent([
+        for (var j = 0; j < gridDim; j++) name(j, i),
+      ], label: 'col$i');
+    }
+
+    for (var k = 0; k < cages.length; k++) {
+      final cage = cages[k];
+      final vars = [for (final cell in cage.cells) name(cell[0], cell[1])];
+      final label = 'cage$k(${cage.clue})';
+      switch (cage.op) {
+        case KenKenOp.none:
+          // A one-cell cage is a given by another name.
+          p.addInSet(vars, {cage.target}, label: label);
+        case KenKenOp.add:
+          p.addExactSum(vars, cage.target, label: label);
+        case KenKenOp.multiply:
+          p.addExactProduct(vars, cage.target, label: label);
+        case KenKenOp.subtract:
+        case KenKenOp.divide:
+          final tuples = <List<int>>[];
+          for (var a = 1; a <= gridDim; a++) {
+            for (var b = 1; b <= gridDim; b++) {
+              if (KenKenCage.combine(cage.op, [a, b]) == cage.target) {
+                tuples.add([a, b]);
+              }
+            }
+          }
+          p.addTable(vars, tuples, label: label);
+      }
+    }
+    return p;
+  }
+
+  /// True if [cages] + [givens] admit exactly one completion.
+  static Future<bool> kenKenHasUniqueSolution({
+    required int gridDim,
+    required List<KenKenCage> cages,
+    required List<List<int>> givens,
+  }) async {
+    final p = _buildKenKenProblem(
+      gridDim: gridDim,
+      cages: cages,
+      givens: givens,
+    );
+    return (await p.getFirstNSolutions(2)).length == 1;
+  }
+
+  /// Grid sizes KenKen is offered at.
+  ///
+  /// KenKen needs no box factorisation — it is a Latin square — so every size
+  /// works by the rules. The cap is the search: with no boxes the cages carry
+  /// the entire puzzle, and proving uniqueness on a 10x10 or 12x12 costs more
+  /// than it is worth on a phone. Same reasoning, and the same cap, as Killer
+  /// and Thermo.
+  static bool kenKenSupports(GridSize size) => gridDimensionFor(size) <= 9;
+
+  /// Largest cage the partitioner will build, by difficulty.
+  ///
+  /// Bigger cages mean fewer, weaker clues and more to deduce. Unlike Killer,
+  /// where a large cage still pins a sum, a large KenKen cage with `×` can be
+  /// satisfied many ways.
+  static int _maxKenKenCageFor(SudokuDifficulty difficulty) {
+    switch (difficulty) {
+      case SudokuDifficulty.easy:
+        return 2;
+      case SudokuDifficulty.medium:
+        return 3;
+      case SudokuDifficulty.hard:
+        return 4;
+      case SudokuDifficulty.expert:
+        return 5;
+    }
+  }
+
+  /// A random Latin square: every digit once per row and once per column.
+  ///
+  /// Not a Sudoku grid — KenKen has no boxes, so the bitmask engine's
+  /// blueprint would impose a structure the variant does not have. A shuffled
+  /// cyclic square is the standard construction and is uniform enough for
+  /// puzzle generation: start from `(r + c) mod n`, then permute the rows, the
+  /// columns and the symbols independently.
+  static List<List<int>> _latinSquare(int gridDim, math.Random rng) {
+    final rows = [for (var i = 0; i < gridDim; i++) i]..shuffle(rng);
+    final cols = [for (var i = 0; i < gridDim; i++) i]..shuffle(rng);
+    final symbols = [for (var i = 1; i <= gridDim; i++) i]..shuffle(rng);
+    return [
+      for (var r = 0; r < gridDim; r++)
+        [
+          for (var c = 0; c < gridDim; c++)
+            symbols[(rows[r] + cols[c]) % gridDim],
+        ],
+    ];
+  }
+
+  /// Partition the grid into connected cages and give each one an operation
+  /// that its digits actually satisfy.
+  ///
+  /// The operation is chosen from those that *fit* the cage — division only
+  /// where one digit divides the other, subtraction only on a pair — so the
+  /// clue is always true of the solution by construction. Preferring the less
+  /// common operations where they are available keeps a board from being all
+  /// addition, which is the dull failure mode.
+  static List<KenKenCage> _partitionKenKen({
+    required int gridDim,
+    required List<List<int>> solution,
+    required int maxCageSize,
+    required math.Random rng,
+  }) {
+    final used = List.generate(
+      gridDim,
+      (_) => List<bool>.filled(gridDim, false),
+    );
+    final cages = <KenKenCage>[];
+    const dirs = [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ];
+
+    final starts = <List<int>>[
+      for (var r = 0; r < gridDim; r++)
+        for (var c = 0; c < gridDim; c++) [r, c],
+    ]..shuffle(rng);
+
+    for (final start in starts) {
+      if (used[start[0]][start[1]]) continue;
+      final cells = <List<int>>[start];
+      used[start[0]][start[1]] = true;
+      // Aim for two cells minimum. A one-cell cage is a revealed digit dressed
+      // up as a clue, and drawing the size uniformly from 1..max made them
+      // most of the board — 37 of 59 cages on a 9x9, which is not a puzzle.
+      // They still occur where a cell has no free neighbour left, which is the
+      // only place they belong.
+      final target = maxCageSize < 2 ? 1 : 2 + rng.nextInt(maxCageSize - 1);
+
+      while (cells.length < target) {
+        final candidates = <List<int>>[];
+        for (final cell in cells) {
+          for (final d in dirs) {
+            final nr = cell[0] + d[0];
+            final nc = cell[1] + d[1];
+            if (nr < 0 || nr >= gridDim || nc < 0 || nc >= gridDim) continue;
+            if (used[nr][nc]) continue;
+            candidates.add([nr, nc]);
+          }
+        }
+        if (candidates.isEmpty) break;
+        final pick = candidates[rng.nextInt(candidates.length)];
+        used[pick[0]][pick[1]] = true;
+        cells.add(pick);
+      }
+
+      final values = [for (final c in cells) solution[c[0]][c[1]]];
+      // One draw, used for both fields: calling _pickOp twice would roll the
+      // operation separately from the target and label the cage with a clue
+      // its own digits do not satisfy.
+      final op = _pickOp(values, rng);
+      cages.add(
+        KenKenCage(cells: cells, op: op, target: _targetFor(op, values)),
+      );
+    }
+    return cages;
+  }
+
+  /// Choose an operation the cage's own digits satisfy.
+  static KenKenOp _pickOp(List<int> values, math.Random rng) {
+    if (values.length == 1) return KenKenOp.none;
+    final options = <KenKenOp>[KenKenOp.add, KenKenOp.multiply];
+    if (values.length == 2) {
+      options.add(KenKenOp.subtract);
+      if (KenKenCage.combine(KenKenOp.divide, values) != null) {
+        // Division is the rarest and most informative clue; weight it up.
+        options.addAll([KenKenOp.divide, KenKenOp.divide]);
+      }
+      // Subtraction is likewise more telling than another sum.
+      options.add(KenKenOp.subtract);
+    }
+    return options[rng.nextInt(options.length)];
+  }
+
+  static int _targetFor(KenKenOp op, List<int> values) =>
+      KenKenCage.combine(op, values)!;
+
+  /// Generate a uniquely-solvable KenKen puzzle.
+  ///
+  /// Latin square first, then cages over it — so every clue is true of the
+  /// answer by construction and no layout can be contradictory. The CSP then
+  /// decides whether those clues alone pin the grid down; if not, digits are
+  /// revealed until they do. Classic KenKen has no givens, and small grids
+  /// usually need none.
+  ///
+  /// Determinism: the same [seed] and limits reproduce the same puzzle.
+  static Future<KenKenPuzzle> generateKenKen({
+    required GridSize gridSize,
+    required SudokuDifficulty difficulty,
+    int? seed,
+    int maxPartitionAttempts = 12,
+    int? maxGivens,
+  }) async {
+    if (maxPartitionAttempts < 1) {
+      throw ArgumentError.value(maxPartitionAttempts, 'maxPartitionAttempts');
+    }
+    if (maxGivens != null && maxGivens < 0) {
+      throw ArgumentError.value(maxGivens, 'maxGivens');
+    }
+    final effectiveSeed = seed ?? math.Random().nextInt(1 << 31);
+    final rng = math.Random(effectiveSeed);
+    final gridDim = gridDimensionFor(gridSize);
+    final solution = _latinSquare(gridDim, rng);
+    final empty = List.generate(gridDim, (_) => List<int>.filled(gridDim, 0));
+
+    List<KenKenCage>? fallback;
+    for (var attempt = 0; attempt < maxPartitionAttempts; attempt++) {
+      final cages = _partitionKenKen(
+        gridDim: gridDim,
+        solution: solution,
+        maxCageSize: _maxKenKenCageFor(difficulty),
+        rng: rng,
+      );
+      if (await kenKenHasUniqueSolution(
+        gridDim: gridDim,
+        cages: cages,
+        givens: empty,
+      )) {
+        return KenKenPuzzle(
+          gridDim: gridDim,
+          cages: cages,
+          givens: empty,
+          solution: solution,
+        );
+      }
+      fallback ??= cages;
+    }
+
+    final cages = fallback!;
+    final givens = List.generate(gridDim, (_) => List<int>.filled(gridDim, 0));
+    final cells = <List<int>>[
+      for (var r = 0; r < gridDim; r++)
+        for (var c = 0; c < gridDim; c++) [r, c],
+    ]..shuffle(rng);
+
+    var unique = false;
+    for (final cell in cells.take(maxGivens ?? cells.length)) {
+      givens[cell[0]][cell[1]] = solution[cell[0]][cell[1]];
+      unique = await kenKenHasUniqueSolution(
+        gridDim: gridDim,
+        cages: cages,
+        givens: givens,
+      );
+      if (unique) break;
+    }
+    if (!unique) {
+      throw StateError('KenKen uniqueness not established within reveal cap');
+    }
+
+    return KenKenPuzzle(
+      gridDim: gridDim,
+      cages: cages,
+      givens: givens,
+      solution: solution,
+    );
   }
 
   // --- Thermo -------------------------------------------------------------

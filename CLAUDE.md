@@ -98,17 +98,29 @@ pipeline around it already exists:
 8. **Tests** — the rule's edge cases, generator invariants, JSON rejection of
    corrupt input, a bundle validity test, and a no-silent-fallback guard.
 
+KenKen is the worked example of a variant that *removes* a rule: it has no
+boxes. Rather than special-case "no regions" through the engine, the saved-game
+schema and the painter, its `regions` are the row indices — the region rule
+then restates the row rule and is a no-op — plus a `latin` flag on
+`SudokuGridPainter` so only the outer edge is drawn heavy. If you add a variant
+with an unusual region structure, copy that instead of adding a null.
+
 Thermo's `hasError` is the part worth reading twice: a gap between two filled
 cells still constrains them, because each step along the line must add at least
 one. `[_, 5, _, 3]` is already wrong.
 
 ## Generation cost is not uniform
 
-Proving a Killer puzzle uniquely solvable is a CSP search with no useful upper
-bound: generating the bundled 9x9 expert boards took between 2.7s and **474s**
-each. Never put that on the main thread — on the web there is no
-`Isolate.spawn`, so it *is* the main thread. Boards come from
-`assets/killer_puzzles.json`; the live generator is a bounded fallback.
+Proving a puzzle uniquely solvable is a CSP search with no useful upper bound.
+The bundled 9x9 expert Killer boards took between 2.7s and **474s** each. KenKen
+is normally two orders of magnitude cheaper — most boards land in tens of
+milliseconds — and still produced an 80s outlier at 9x9 expert, which is the
+whole argument for bundling: the *median* cost is not the number that matters.
+
+Never put that on the main thread — on the web there is no `Isolate.spawn`, so
+it *is* the main thread. Boards come from `assets/killer_puzzles.json`,
+`assets/thermo_puzzles.json` and `assets/kenken_puzzles.json`; the live
+generators are bounded fallbacks.
 
 ## What each layer of testing actually covers
 

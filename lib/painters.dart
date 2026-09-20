@@ -190,12 +190,128 @@ class ThermoPainter extends CustomPainter {
       old.thermos != thermos || old.gridDim != gridDim || old.color != color;
 }
 
+/// Draws KenKen cages: a heavy solid border around each cage and its clue
+/// ("12+", "3−", "2÷") in the cage's top-left cell.
+///
+/// Solid and on the cell boundary, where [KillerCagePainter] is dashed and
+/// inset. The two variants look different on purpose: a Killer cage sits
+/// *inside* a grid whose boxes are already drawn, so it has to be visually
+/// distinct from them, while a KenKen board has no boxes at all and its cage
+/// borders are the only heavy lines on it.
+class KenKenCagePainter extends CustomPainter {
+  final List<KenKenCage> cages;
+  final int gridDim;
+  final String? fontFamily;
+
+  KenKenCagePainter(this.cages, this.gridDim, {this.fontFamily});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cell = size.width / gridDim;
+    final stroke = math.max(1.5, cell * 0.055);
+    final clueSize = math.max(7.0, cell * 0.27);
+    final paint = Paint()
+      ..color = Colors.black87
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.square
+      ..style = PaintingStyle.stroke;
+
+    final cageOf = List.generate(gridDim, (_) => List.filled(gridDim, -1));
+    for (var i = 0; i < cages.length; i++) {
+      for (final c in cages[i].cells) {
+        cageOf[c[0]][c[1]] = i;
+      }
+    }
+    bool same(int r, int c, int idx) =>
+        r >= 0 && r < gridDim && c >= 0 && c < gridDim && cageOf[r][c] == idx;
+
+    for (var i = 0; i < cages.length; i++) {
+      for (final pos in cages[i].cells) {
+        final r = pos[0], c = pos[1];
+        final left = c * cell;
+        final top = r * cell;
+        final right = left + cell;
+        final bottom = top + cell;
+        if (!same(r - 1, c, i)) {
+          canvas.drawLine(Offset(left, top), Offset(right, top), paint);
+        }
+        if (!same(r + 1, c, i)) {
+          canvas.drawLine(Offset(left, bottom), Offset(right, bottom), paint);
+        }
+        if (!same(r, c - 1, i)) {
+          canvas.drawLine(Offset(left, top), Offset(left, bottom), paint);
+        }
+        if (!same(r, c + 1, i)) {
+          canvas.drawLine(Offset(right, top), Offset(right, bottom), paint);
+        }
+      }
+
+      final anchor = cages[i].labelCell;
+      TextPainter clueAt(double fontSize) => TextPainter(
+        text: TextSpan(
+          text: cages[i].clue,
+          style: TextStyle(
+            fontSize: fontSize,
+            height: 1,
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+            // Explicit, for the reason recorded on KillerCagePainter: a
+            // TextPainter never sees the theme.
+            fontFamily: fontFamily,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      var tp = clueAt(clueSize);
+      // A clue is as wide as its number, and a five-cell multiplication cage
+      // reaches five digits: "24192x" is six characters in a cell that is 33pt
+      // on a 9x9 phone board. Size the label from the cell it has to live in,
+      // not from a constant — otherwise the widest clues run into the next
+      // cage, and one that lands in the last column runs off the board. (Same
+      // rule as the number pad and the pencil marks: size from the box.)
+      final maxClueWidth = cell - stroke - 3;
+      if (tp.width > maxClueWidth) {
+        tp = clueAt(clueSize * maxClueWidth / tp.width);
+      }
+      final origin = Offset(
+        anchor[1] * cell + stroke + 1,
+        anchor[0] * cell + stroke,
+      );
+      // The clue sits over the cage's own corner; a pad keeps it readable.
+      canvas.drawRect(
+        Rect.fromLTWH(origin.dx, origin.dy, tp.width + 2, tp.height),
+        Paint()..color = Colors.white.withValues(alpha: 0.85),
+      );
+      tp.paint(canvas, origin);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant KenKenCagePainter old) =>
+      old.cages != cages ||
+      old.gridDim != gridDim ||
+      old.fontFamily != fontFamily;
+}
+
 class SudokuGridPainter extends CustomPainter {
   final int gridDim;
   final List<List<int>> regions;
   final bool jigsaw;
 
-  SudokuGridPainter(this.gridDim, this.regions, {this.jigsaw = false});
+  /// Draw a plain lattice with no box emphasis.
+  ///
+  /// KenKen is a Latin square: it has rows and columns and no boxes at all, so
+  /// the heavy every-third-line rule would draw a structure the puzzle does not
+  /// have, and the player would reasonably read it as a rule.
+  final bool latin;
+
+  SudokuGridPainter(
+    this.gridDim,
+    this.regions, {
+    this.jigsaw = false,
+    this.latin = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -216,8 +332,10 @@ class SudokuGridPainter extends CustomPainter {
       ..strokeWidth = 3;
 
     final box = boxDimensionsFor(gridDim);
-    final rowsPerBox = box[0];
-    final colsPerBox = box[1];
+    // In latin mode only the outer edge is heavy; the cage painter draws the
+    // structure that actually matters.
+    final rowsPerBox = latin ? gridDim : box[0];
+    final colsPerBox = latin ? gridDim : box[1];
 
     for (var i = 0; i <= gridDim; i++) {
       canvas.drawLine(
@@ -267,5 +385,6 @@ class SudokuGridPainter extends CustomPainter {
   bool shouldRepaint(SudokuGridPainter oldDelegate) =>
       oldDelegate.gridDim != gridDim ||
       oldDelegate.jigsaw != jigsaw ||
+      oldDelegate.latin != latin ||
       !identical(oldDelegate.regions, regions);
 }
