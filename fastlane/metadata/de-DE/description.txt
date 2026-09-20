@@ -1,0 +1,25 @@
+CrispSudoku ist ein sorgfältig gemachtes, werbefreies Sudoku mit echtem Tiefgang — fünf Regelvarianten, sechs Gittergrößen und ein eingebauter Tutor, der jedes Rätsel Schritt für Schritt erklärt.
+
+SPIELEN, WIE SIE MÖCHTEN
+• Fünf Varianten: Klassisch, Jigsaw (unregelmäßige Regionen), Sudoku-X (Diagonalen), Killer (Summenkäfige) und Thermo (die Ziffern steigen entlang jedes Thermometers)
+• Sechs Gittergrößen: 4×4, 6×6, 8×8, 9×9, 10×10 und 12×12
+• Vier Schwierigkeitsgrade, von Leicht bis Experte
+• Jeden Tag eine neue tägliche Herausforderung — für alle dasselbe Rätsel
+
+LERNEN BEIM SPIELEN
+• „Lösung erklären" geht jedes Rätsel Zug für Zug durch und benennt jede Technik (nackte Einer, versteckte Einer, gesperrte Kandidaten, X-Wing und mehr)
+• „Nächster logischer Schritt" verrät Ihnen, was als Nächstes dran ist — und warum
+• Jedes Rätsel bekommt eine ehrliche Schwierigkeitsbewertung, basierend auf der schwersten Technik, die es tatsächlich verlangt
+
+DURCHDACHTE DETAILS
+• Notizen als Bleistiftmarkierungen, unbegrenztes Rückgängig und laufende Konflikthervorhebung
+• Ein Fehlerlimit, das mit der Schwierigkeit wächst
+• Hinweis-Budgets je Schwierigkeitsgrad, damit Hinweise etwas wert bleiben
+• Schöne Themes, die Sie sich erspielen
+• Erfolge, Serien und ausführliche Statistiken
+
+VON GRUND AUF PRIVAT
+• 100 % offline — kein Konto, keine Werbung, kein Tracking, keine Datenerhebung
+• Jedes Rätsel hat garantiert genau eine Lösung
+
+CrispSudoku ist freie Software, quelloffen unter der GNU AGPL-3.0.

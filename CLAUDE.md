@@ -166,11 +166,28 @@ an App Store version and submitting it is separate, and easy to forget: v1.1.0
 through v1.3.0 each uploaded a build that then sat in TestFlight while the
 public listing stayed on 1.0.3.
 
-The full runbook, including the API-key setup and the three-step
-`reviewSubmissions` flow, is `/mnt/volume1/appstore.md` on the build host.
-Screenshots cannot be changed while a version is in review — cancel the
-submission (the version returns to `DEVELOPER_REJECTED`, which is editable),
-upload, then resubmit.
+That gap is closed: `tool/asc_release.py` creates the version, attaches the
+build, pushes every storefront's listing from `fastlane/metadata/<locale>/` and
+can submit. It runs from the `App Store release` workflow, automatically after
+a successful tag upload — but stops at "ready to submit" unless dispatched with
+`submit=true`, because starting Apple's review should be a decision and not a
+side effect of a git tag.
+
+The listing lives in `fastlane/metadata/`, the conventional layout, and is the
+source of truth: edit it there, not in App Store Connect, or the next release
+overwrites you. `tool/check_store_metadata.py` catches a field over its limit
+before the submission does — Apple counts characters, not bytes, which matters
+in German.
+
+Nothing on a version in review can be edited. To change anything, cancel the
+review submission first (the version returns to `DEVELOPER_REJECTED`, which is
+editable), change it, then resubmit. `asc_release.py` and `asc_screenshots.py`
+both refuse to touch a version that is not in an editable state rather than
+failing halfway through.
+
+The full background, including the API-key setup and the pieces that are
+genuinely browser-only (creating the app record, the App Privacy answers), is
+`/mnt/volume1/appstore.md` on the build host.
 
 ## Deploys
 

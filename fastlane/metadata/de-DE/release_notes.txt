@@ -1,0 +1,13 @@
+Thermo-Sudoku — eine neue Variante.
+
+Die Ziffern steigen von der Kugel jedes Thermometers bis zu seiner Spitze. In allen Größen bis 9×9, und die meisten Rätsel brauchen überhaupt keine vorgegebenen Ziffern: Die Thermometer allein legen das Gitter fest.
+
+Außerdem in diesem Update:
+
+• Ein deutlich größeres Spielfeld auf kleinen und faltbaren Telefonen. Auf einem schmalen Display nahm das Gitter zuvor nur etwa die halbe Breite ein — jetzt füllt es sie aus.
+• Das Querformat ist ein echtes Layout statt einer Quetschung: Die Bedienelemente stehen neben dem Spielfeld statt darüber und darunter.
+• Alles bleibt auch bei großen Schriftgrößen der Bedienungshilfen lesbar, auf Deutsch wie auf Englisch.
+• „Lösung erklären" passt auf den Bildschirm, auf dem es läuft — Spielfeld und Erklärung sind gleichzeitig zu sehen.
+• Bleistiftnotizen sind auf 10×10- und 12×12-Gittern wieder lesbar.
+• Killer-Rätsel zeichnen ihre Käfige jetzt in jedem Build korrekt.
+• Ein Startproblem behoben, das zu einem leeren Bildschirm führen konnte.

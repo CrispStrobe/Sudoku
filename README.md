@@ -209,6 +209,24 @@ node -e 'globalThis.self = globalThis; require("/tmp/probe.js")'
 Every line should say `OK`. A `FAIL` there means Killer is broken on the web
 even when the whole Flutter suite is green.
 
+## Releasing to the App Store
+
+A `v*` tag builds, signs and uploads the IPA. That is only half a release — the
+build lands in App Store Connect and nothing happens to it until a version is
+created and submitted. The `App Store release` workflow does that half:
+
+```bash
+# locally, with the API key on hand
+python3 tool/check_store_metadata.py           # field limits, per storefront
+python3 tool/asc_release.py                    # version + build + listing
+python3 tool/asc_release.py --submit           # ...and submit for review
+```
+
+It runs automatically after a successful tag upload and stops at "ready to
+submit"; dispatch it with `submit=true` to actually submit. The listing text
+for every storefront lives in `fastlane/metadata/<locale>/` and is the source
+of truth — edit it there rather than in App Store Connect.
+
 ## App Store screenshots
 
 Rendered from the real screens at exact store pixel dimensions, on any machine

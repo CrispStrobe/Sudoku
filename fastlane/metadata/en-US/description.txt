@@ -1,7 +1,7 @@
-CrispSudoku is a polished, ad-free Sudoku game with real depth — four rule variants, six grid sizes, and a built-in tutor that explains how to solve every board.
+CrispSudoku is a polished, ad-free Sudoku game with real depth — five rule variants, six grid sizes, and a built-in tutor that explains how to solve every board.
 
 PLAY YOUR WAY
-• Four variants: Classic, Jigsaw (irregular regions), Sudoku-X (diagonals) and Killer (summed cages)
+• Five variants: Classic, Jigsaw (irregular regions), Sudoku-X (diagonals), Killer (summed cages) and Thermo (digits climb along each thermometer)
 • Six grid sizes: 4×4, 6×6, 8×8, 9×9, 10×10 and 12×12
 • Four difficulties, from Easy to Expert
 • A new Daily Challenge every day — the same board for everyone

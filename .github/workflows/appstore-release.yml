@@ -1,0 +1,67 @@
+# The other half of a release.
+#
+# The `v*` tag builds, signs and uploads an IPA (ios-release.yml). That is
+# where it used to stop: the build landed in App Store Connect and nothing
+# happened to it. v1.1.0, v1.2.0 and v1.3.0 each uploaded a build that then sat
+# in TestFlight while the public listing stayed on 1.0.3.
+#
+# This takes the uploaded build the rest of the way — creates the App Store
+# version, attaches the build, pushes every storefront's metadata from
+# fastlane/metadata/, and optionally submits for review.
+#
+# It runs automatically after a successful tag upload, but stops at
+# "ready to submit" unless you ask for more: submitting starts Apple's review,
+# which is a deliberate decision and not something a git tag should trigger.
+# To submit, dispatch this workflow manually with submit=true.
+
+name: App Store release
+
+on:
+  workflow_run:
+    workflows: ['iOS Release (App Store)']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: 'Submit for App Review (starts Apple review)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # A failed upload has no build to release.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # workflow_run checks out the default branch by default; take the ref
+          # the upload actually ran on, so pubspec's version matches the build.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the listing fits App Store limits
+        run: python3 tool/check_store_metadata.py
+
+      - name: Create the version and push the listing
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          SUBMIT: ${{ inputs.submit && '--submit' || '' }}
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check cryptography
+          mkdir -p .asc
+          echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > .asc/AuthKey.p8
+          ASC_API_KEY_P8=.asc/AuthKey.p8 \
+            python3 tool/asc_release.py $SUBMIT
+          rm -rf .asc

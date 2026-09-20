@@ -1,5 +1,13 @@
-• Resume: leave a puzzle any time and pick up exactly where you left off from the new Resume button.
-• First launch of every board size, shape and difficulty is now near-instant thanks to bundled ready-to-play puzzles.
-• Smart hints and step-by-step solve explanations are now fully available in German.
-• A confirmation now protects your saved game when you start a new one.
-• Faster puzzle starts on large 12×12 boards.
+Thermo Sudoku — a new variant.
+
+Digits climb from each thermometer's bulb to its tip. Every size up to 9×9, and most boards need no starting digits at all: the thermometers alone are enough to pin the grid down.
+
+Also in this update:
+
+• A much bigger board on small and folding phones. On a compact screen the grid had been taking about half the width — it now fills it.
+• Landscape is a real layout instead of a squeeze: the controls sit beside the board rather than above and below it.
+• Everything holds together at large accessibility text sizes, in English and German.
+• Explain the solve fits the screen it is on, so the whole board and the explanation are visible at once.
+• Pencil marks are readable again on 10×10 and 12×12 boards.
+• Killer puzzles now draw their cages correctly in every build.
+• Fixed a startup problem that could leave the game showing a blank screen.
