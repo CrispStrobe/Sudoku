@@ -216,6 +216,12 @@ genuinely browser-only (creating the app record, the App Privacy answers), is
 
 - **Vercel** — the `Vercel` workflow, on every push to main; PRs get a preview.
   `./deploy.sh` is for a non-main branch or a `--wasm` build.
+  Commits that cannot reach the browser — docs, tests, `tool/`, `.github/`,
+  the non-web platform directories — are skipped via `paths-ignore`, because
+  the free plan allows 100 deployments a day and that cap has been hit. A
+  commit touching both ignored and non-ignored files still deploys. Since
+  `.github/**` is ignored, a change to `render_check.js` does not exercise it:
+  dispatch the workflow by hand to force a deploy.
 - **GitHub Pages** — the `Pages` workflow, on a `v*` tag, or dispatched
   manually. Because it tracks *tags*, work merged to main is not on Pages until
   the next release: KenKen needed a `workflow_dispatch` run to get there, and

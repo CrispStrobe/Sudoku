@@ -12,13 +12,58 @@
 #
 # Every push to main goes to production. A pull request gets a preview URL and
 # never touches production.
+#
+# Except when nothing that reaches the browser changed. The free plan allows
+# 100 deployments a day and that cap has been hit: every push to main plus
+# every push to every open PR was spending one, including commits that only
+# touched tests, docs or CI. `paths-ignore` skips those — and skips only the
+# commits where *every* changed file is ignorable, so a commit touching both
+# `lib/` and `README.md` still deploys.
+#
+# The list is deliberately conservative: anything under `lib/`, `web/`,
+# `assets/` or `pubspec.yaml` deploys, because those are what end up in the
+# bundle. Nothing here is a judgement about whether a change matters, only
+# about whether it can reach the deployed app.
+#
+# One consequence to know: `.github/**` is ignored, so editing this workflow or
+# `render_check.js` does not exercise it. The check runs as part of a deploy,
+# so a change to the check is only proven by a deploy — run this workflow from
+# the Actions tab to force one.
 
 name: Vercel
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'test/**'
+      - 'integration_test/**'
+      - 'tool/**'
+      - 'fastlane/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'linux/**'
+      - 'macos/**'
+      - 'windows/**'
+      - '.gitignore'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'test/**'
+      - 'integration_test/**'
+      - 'tool/**'
+      - 'fastlane/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'linux/**'
+      - 'macos/**'
+      - 'windows/**'
+      - '.gitignore'
+      - 'LICENSE'
   workflow_dispatch:
 
 # A superseded deploy is wasted work, but never cancel one already uploading to
