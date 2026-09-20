@@ -46,8 +46,8 @@ void main() {
 
   group('hasError — is it wrong yet?', () {
     // A 2x2 cage in the top-left, summing to 10.
-    final cage = KenKenCage(
-      cells: const [
+    const cage = KenKenCage(
+      cells: [
         [0, 0],
         [0, 1],
       ],
@@ -71,8 +71,8 @@ void main() {
 
     test('a partial sum already past the target is an error', () {
       // 9 + 5 = 14 > 10 with nothing left to subtract.
-      final big = KenKenCage(
-        cells: const [
+      const big = KenKenCage(
+        cells: [
           [0, 0],
           [0, 1],
           [0, 2],
@@ -119,8 +119,8 @@ void main() {
     test('a repeated digit inside a cage is legal in KenKen', () {
       // The Killer instinct is to reject this. KenKen only forbids repeats
       // along a row or a column; a cage that bends around is free to repeat.
-      final bent = KenKenCage(
-        cells: const [
+      const bent = KenKenCage(
+        cells: [
           [0, 0],
           [1, 0],
         ],
@@ -151,8 +151,8 @@ void main() {
   group('the clue label', () {
     test('carries the operator except for a single cell', () {
       expect(
-        KenKenCage(
-          cells: const [
+        const KenKenCage(
+          cells: [
             [0, 0],
             [0, 1],
           ],
@@ -162,8 +162,8 @@ void main() {
         '3÷',
       );
       expect(
-        KenKenCage(
-          cells: const [
+        const KenKenCage(
+          cells: [
             [0, 0],
           ],
           op: KenKenOp.none,
@@ -174,8 +174,8 @@ void main() {
     });
 
     test('sits on the top-left-most cell of the cage', () {
-      final cage = KenKenCage(
-        cells: const [
+      const cage = KenKenCage(
+        cells: [
           [2, 3],
           [1, 5],
           [1, 2],
@@ -192,16 +192,16 @@ void main() {
       final puzzle = KenKenPuzzle(
         gridDim: 4,
         cages: [
-          KenKenCage(
-            cells: const [
+          const KenKenCage(
+            cells: [
               [0, 0],
               [0, 1],
             ],
             op: KenKenOp.add,
             target: 5,
           ),
-          KenKenCage(
-            cells: const [
+          const KenKenCage(
+            cells: [
               [0, 2],
               [0, 3],
             ],
@@ -209,8 +209,8 @@ void main() {
             // |4 - 1| in the solution's top row.
             target: 3,
           ),
-          KenKenCage(
-            cells: const [
+          const KenKenCage(
+            cells: [
               [1, 0],
               [1, 1],
               [1, 2],
@@ -219,8 +219,8 @@ void main() {
             op: KenKenOp.add,
             target: 10,
           ),
-          KenKenCage(
-            cells: const [
+          const KenKenCage(
+            cells: [
               [2, 0],
               [2, 1],
               [2, 2],
@@ -229,8 +229,8 @@ void main() {
             op: KenKenOp.add,
             target: 10,
           ),
-          KenKenCage(
-            cells: const [
+          const KenKenCage(
+            cells: [
               [3, 0],
               [3, 1],
               [3, 2],

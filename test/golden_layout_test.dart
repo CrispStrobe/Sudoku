@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:sudoku/kenken_bundle.dart';
 import 'package:sudoku/main.dart';
 import 'package:sudoku/sudoku_game.dart';
 import 'package:sudoku/l10n/app_localizations.dart';
