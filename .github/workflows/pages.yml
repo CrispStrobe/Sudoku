@@ -66,6 +66,37 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Pages used to deploy and stop there, which is a gap Vercel does not have:
+  # this site is the one served from a subpath, so it carries a failure mode
+  # all of its own. A build made without the right --base-href serves every
+  # byte with a 200 and still loads to a blank page, because each asset URL
+  # resolves against the domain root instead of /Sudoku/.
+  #
+  # Note the doubled `assets/`: a bundled asset declared in pubspec as
+  # `assets/x.json` is served at `<base>/assets/assets/x.json`.
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Smoke-check the deployment
+        env:
+          SITE: ${{ needs.deploy.outputs.url }}
+        run: |
+          base="${SITE%/}"
+          echo "checking $base"
+          for path in / /main.dart.js /flutter_bootstrap.js                       /assets/AssetManifest.bin.json                       /assets/assets/killer_puzzles.json                       /assets/assets/thermo_puzzles.json                       /assets/assets/kenken_puzzles.json                       /assets/assets/ready_puzzles.json; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L "$base$path")
+            echo "$path -> $code"
+            [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
+          done
+          # A 200 is not enough for a puzzle bundle: an empty or truncated one
+          # still 200s, and for KenKen that means an empty grid rather than a
+          # harder puzzle, since 89 of its 96 boards carry no givens.
+          curl -sL "$base/assets/assets/kenken_puzzles.json"             | python3 -c 'import json,sys; d=json.load(sys.stdin); n=sum(len(v) for v in d.values()); print(f"kenken bundle: {n} puzzles in {len(d)} configurations"); sys.exit(0 if n >= 32 and len(d) == 16 else 1)'

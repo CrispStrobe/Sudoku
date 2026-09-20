@@ -108,7 +108,7 @@ jobs:
         env:
           SITE: https://sudoku-lac-five.vercel.app
         run: |
-          for path in / /main.dart.js /flutter_bootstrap.js                       /assets/AssetManifest.bin.json                       /assets/assets/killer_puzzles.json                       /assets/assets/ready_puzzles.json; do
+          for path in / /main.dart.js /flutter_bootstrap.js                       /assets/AssetManifest.bin.json                       /assets/assets/killer_puzzles.json                       /assets/assets/thermo_puzzles.json                       /assets/assets/kenken_puzzles.json                       /assets/assets/ready_puzzles.json; do
             code=$(curl -s -o /dev/null -w '%{http_code}' -L "$SITE$path")
             echo "$path -> $code"
             [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
@@ -116,6 +116,10 @@ jobs:
           # 200 is not enough for the puzzle bundles: they are the thing that
           # makes Killer instant, and an empty or truncated one would still 200.
           curl -sL "$SITE/assets/assets/killer_puzzles.json"             | python3 -c 'import json,sys; d=json.load(sys.stdin); n=sum(len(v) for v in d.values()); print(f"killer bundle: {n} puzzles in {len(d)} configurations"); sys.exit(0 if n >= 32 else 1)'
+          # KenKen is the variant most exposed to a bad bundle: 89 of its 96
+          # boards ship with no givens at all, so a truncated file is not a
+          # harder puzzle, it is an empty grid.
+          curl -sL "$SITE/assets/assets/kenken_puzzles.json"             | python3 -c 'import json,sys; d=json.load(sys.stdin); n=sum(len(v) for v in d.values()); print(f"kenken bundle: {n} puzzles in {len(d)} configurations"); sys.exit(0 if n >= 32 and len(d) == 16 else 1)'
 
       # Serving the right bytes is not the same as rendering. Flutter web
       # paints to a canvas, so the shell can 200 with every asset present and
