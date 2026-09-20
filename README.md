@@ -209,6 +209,20 @@ node -e 'globalThis.self = globalThis; require("/tmp/probe.js")'
 Every line should say `OK`. A `FAIL` there means Killer is broken on the web
 even when the whole Flutter suite is green.
 
+## App Store screenshots
+
+Rendered from the real screens at exact store pixel dimensions, on any machine
+— no device and no simulator:
+
+```bash
+bash tool/capture_store_screenshots.sh          # writes appstore-shots/
+```
+
+or the `App Store screenshots` workflow, which runs the same thing on a Linux
+runner and can replace the sets in App Store Connect
+(`tool/asc_screenshots.py`). Both produce English and German images for the
+6.9" iPhone and the 13" iPad, covering the required display types.
+
 ## Regenerating serialization code
 
 ```bash

@@ -57,3 +57,5 @@ app.*.map.json
 test/failures/
 # Screenshots from .github/scripts/render_check.js — a CI artifact, not source.
 render-check/
+# Rendered App Store screenshots — a build artifact, not source.
+appstore-shots/

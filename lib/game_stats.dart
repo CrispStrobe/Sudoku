@@ -122,7 +122,13 @@ class GameStats {
   static Set<String> unlockedAchievements = {};
 
   /// Admin panel + all-themes-unlocked only in debug builds.
-  static const bool debugMode = kDebugMode;
+  /// Debug-only affordances (the admin panel, every theme unlocked).
+  ///
+  /// Not `const`: the App Store screenshot renderer runs as a widget test,
+  /// where `kDebugMode` is true, and a store image with an "Admin Panel"
+  /// button in it is not a picture of the shipped app. Settable so that
+  /// harness can turn it off; nothing in the app ever writes to it.
+  static bool debugMode = kDebugMode;
 
   static bool useSavedPuzzles = true;
 

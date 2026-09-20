@@ -15,7 +15,17 @@ class KillerCagePainter extends CustomPainter {
   final List<KillerCage> cages;
   final int gridDim;
 
-  KillerCagePainter(this.cages, this.gridDim);
+  /// The family the cage sums are drawn in.
+  ///
+  /// A `TextPainter` never sees the widget tree, so with this left null the
+  /// sums render in whatever the platform's default happens to be — which
+  /// matches the rest of the UI on a device by luck rather than by
+  /// construction, and does not match it at all under a renderer that
+  /// substitutes its own default (the App Store screenshot harness drew every
+  /// sum as a filled box). The screen passes the theme's family in.
+  final String? fontFamily;
+
+  KillerCagePainter(this.cages, this.gridDim, {this.fontFamily});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -80,6 +90,7 @@ class KillerCagePainter extends CustomPainter {
             height: 1,
             color: Colors.black87,
             fontWeight: FontWeight.bold,
+            fontFamily: fontFamily,
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -118,7 +129,9 @@ class KillerCagePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant KillerCagePainter old) =>
-      old.cages != cages || old.gridDim != gridDim;
+      old.cages != cages ||
+      old.gridDim != gridDim ||
+      old.fontFamily != fontFamily;
 }
 
 /// Draws Thermo thermometers: a filled bulb at the start of each line and a

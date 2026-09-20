@@ -1883,7 +1883,13 @@ class _GameScreenState extends State<GameScreen>
                     child: IgnorePointer(
                       child: CustomPaint(
                         size: Size(gridPixels, gridPixels),
-                        painter: KillerCagePainter(_cages, gridDim),
+                        painter: KillerCagePainter(
+                          _cages,
+                          gridDim,
+                          fontFamily: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.fontFamily,
+                        ),
                       ),
                     ),
                   ),

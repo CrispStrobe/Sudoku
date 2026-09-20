@@ -133,6 +133,45 @@ Goldens are generated locally and are toolchain-specific; CI runs
 otherwise random, and a seeded RNG plus `ambient: false` is what makes a
 rendered frame the same twice.
 
+## App Store screenshots
+
+Rendered on a Linux runner, not a simulator: `test/store_screenshots_test.dart`
+draws the real screens at exact store pixel sizes as a widget test. Run it with
+`bash tool/capture_store_screenshots.sh`, or the `App Store screenshots`
+workflow (which also uploads, on request).
+
+Five things had to be true before the images looked like the app rather than a
+test render, and each one is a trap worth knowing:
+
+- **Real fonts.** Register them with `FontLoader`, including under the name the
+  framework resolves a *null* `fontFamily` to — a `TextPainter` built by a
+  painter never sees the theme. The Killer cage sums came out as filled boxes
+  until `KillerCagePainter` was given the theme's family explicitly.
+- **`debugDisableShadows = false`.** `flutter_test` disables shadows, which
+  draws every elevation as a hard black rectangle.
+- **An emoji font.** The UI uses emoji; without one they are tofu.
+- **`GameStats.debugMode = false`.** `kDebugMode` is true under `flutter test`,
+  so the admin panel would otherwise appear in the shop window.
+- **Reset framework debug variables inside the test body**, not in
+  `addTearDown`: the binding asserts they are back to default when the body
+  returns, and a teardown runs after that.
+
+`Future.delayed` in a widget test outside `runAsync` never completes — use
+`tester.pump`. That one cost nine minutes of hang.
+
+## App Store submission
+
+The `v*` tag uploads a signed build; it does **not** submit anything. Creating
+an App Store version and submitting it is separate, and easy to forget: v1.1.0
+through v1.3.0 each uploaded a build that then sat in TestFlight while the
+public listing stayed on 1.0.3.
+
+The full runbook, including the API-key setup and the three-step
+`reviewSubmissions` flow, is `/mnt/volume1/appstore.md` on the build host.
+Screenshots cannot be changed while a version is in review — cancel the
+submission (the version returns to `DEVELOPER_REJECTED`, which is editable),
+upload, then resubmit.
+
 ## Deploys
 
 - **Vercel** — the `Vercel` workflow, on every push to main; PRs get a preview.

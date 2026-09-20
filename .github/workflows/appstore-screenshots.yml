@@ -1,0 +1,75 @@
+# App Store screenshots, rendered on a Linux runner.
+#
+# No device, no simulator, no macOS minutes: test/store_screenshots_test.dart
+# renders the real screens at exact store pixel dimensions as a widget test.
+# The two things a widget test normally lacks for a *photograph* of the app are
+# real fonts and a repaint boundary, and both are cheap to add — so the whole
+# job takes about a minute on `ubuntu-latest`.
+#
+# Always uploads the images as a build artifact. Only replaces the sets in App
+# Store Connect when you ask for it, because that edits the shop window.
+#
+# A version already in review cannot be edited: the uploader refuses unless the
+# newest iOS version is in an editable state (PREPARE_FOR_SUBMISSION and the
+# rejected states). To change screenshots on a submitted version, cancel the
+# review submission first, upload, then resubmit.
+
+name: App Store screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Replace the App Store screenshot sets after rendering'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.44.4' # keep in step with ci.yml and release.yml
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # The UI uses emoji. Without a colour emoji font they render as tofu
+      # boxes, which on a store page reads as a broken app.
+      - name: Install an emoji font
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-color-emoji
+
+      - name: Render the store scenes
+        run: bash tool/capture_store_screenshots.sh appstore-shots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appstore-screenshots
+          path: appstore-shots
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Replace the App Store screenshot sets
+        if: inputs.upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check cryptography
+          mkdir -p .asc
+          echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > ".asc/AuthKey.p8"
+          ASC_API_KEY_P8=.asc/AuthKey.p8 \
+            python3 tool/asc_screenshots.py appstore-shots
+          rm -rf .asc
