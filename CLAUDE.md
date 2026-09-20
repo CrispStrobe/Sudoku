@@ -137,6 +137,17 @@ each of the others has already let something through: a green `flutter test`
 plus a green `flutter build web` shipped a Killer mode that threw on every
 generation in a browser.
 
+The deploy render check plays a KenKen board as well as the Daily Challenge,
+because a variant can break in ways a classic board cannot show: its bundle
+missing from the deployment, or its generator throwing under dart2js. That pass
+drives the app through Flutter's accessibility tree, which is off until the
+hidden `flt-semantics-placeholder` is clicked — and note the widgets then carry
+their label in `textContent`, not in `aria-label`, which stays empty. The
+variant chips have no text at all and surface as checkboxes in declaration
+order, so the pass picks the last one and then *asserts the game screen says
+KenKen*: a classic board rendering under the KenKen label still fills 44% of
+the screen, so the pixel check alone would pass it.
+
 Goldens are generated locally and are toolchain-specific; CI runs
 `flutter test --exclude-tags golden`. Regenerate with
 `flutter test --tags golden --update-goldens` and look at the images.
@@ -205,8 +216,19 @@ genuinely browser-only (creating the app record, the App Privacy answers), is
 
 - **Vercel** — the `Vercel` workflow, on every push to main; PRs get a preview.
   `./deploy.sh` is for a non-main branch or a `--wasm` build.
-- **GitHub Pages** — the `Pages` workflow, on a `v*` tag only.
+- **GitHub Pages** — the `Pages` workflow, on a `v*` tag, or dispatched
+  manually. Because it tracks *tags*, work merged to main is not on Pages until
+  the next release: KenKen needed a `workflow_dispatch` run to get there, and
+  anything else merged between releases does too.
 - Release artifacts for six platforms — the `Release` workflow, on a `v*` tag.
+
+Both web deploys smoke-check themselves afterwards, and a 200 is not the bar.
+Every puzzle bundle must be present *and* decode to the expected number of
+configurations, because a truncated asset still returns 200 — and for KenKen,
+where 89 of the 96 boards carry no givens, a short bundle is not a harder
+puzzle but an empty grid. Pages needs this more than Vercel does: it is served
+from a subpath, so a build made without the right `--base-href` serves every
+byte with a 200 and still loads blank.
 
 Keep `FLUTTER_VERSION` in step across `ci.yml`, `release.yml`, `pages.yml`,
 `ios-release.yml` and `vercel.yml`; `dart format --set-exit-if-changed` is only

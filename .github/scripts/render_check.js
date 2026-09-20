@@ -11,6 +11,18 @@
 // rather than by selector, because there is nothing in the DOM to select: the
 // home screen's cards and the board's white grid are both unmistakable against
 // the blue gradient, and neither depends on a font or a golden baseline.
+//
+// The second pass plays a KenKen board specifically. A variant can be broken
+// in ways the Daily Challenge pass cannot see — its bundle missing from the
+// deployment, or its generator throwing under dart2js — and KenKen is the
+// worst case to leave unchecked, because 89 of its 96 boards carry no givens:
+// a failure there is not a harder puzzle, it is an empty grid.
+//
+// That pass does use selectors, via Flutter's accessibility tree. It is off by
+// default and turned on by clicking the hidden `flt-semantics-placeholder`,
+// after which the widgets appear as `flt-semantics` elements carrying their
+// label in `textContent` (not in `aria-label` — that attribute stays empty
+// here, which costs an afternoon if you assume otherwise).
 const { chromium } = require('playwright');
 const fs = require('fs');
 
@@ -73,6 +85,126 @@ async function inspect(page, path) {
   );
 }
 
+/// Turn Flutter's accessibility tree on. It ships disabled behind a hidden
+/// placeholder; clicking it is what materialises the widget tree as DOM. The
+/// placeholder sits outside the viewport, so a real mouse click cannot reach
+/// it — dispatch the click from inside the page instead.
+async function enableSemantics(page) {
+  for (let i = 0; i < 8; i++) {
+    const n = await page.$$eval('flt-semantics[role]', els => els.length);
+    if (n > 2) return true;
+    await page
+      .$eval('flt-semantics-placeholder', el => el.click())
+      .catch(() => {});
+    await page.waitForTimeout(1500);
+  }
+  return (await page.$$eval('flt-semantics[role]', els => els.length)) > 2;
+}
+
+/// Read the labels currently in the accessibility tree. Flutter puts them in
+/// textContent here, not in aria-label.
+const labels = page =>
+  page.$$eval('flt-semantics', els =>
+    els.map(e => (e.textContent || '').trim()).filter(Boolean));
+
+/// Play a KenKen board on the real deployment.
+///
+/// One viewport, deliberately: this checks that a variant works end to end —
+/// bundle served, generator run, cages painted — not that it lays out well.
+/// Layout is what the three viewports above are for.
+async function kenKen(browser, failures) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e).slice(0, 200)));
+
+  // The board must come from the shipped bundle. If the asset 404s the app
+  // falls back to generating one, which on a phone is the slow path and on a
+  // broken deploy is no path at all.
+  let bundle = null;
+  page.on('response', r => {
+    if (r.url().includes('kenken_puzzles.json')) bundle = r.status();
+  });
+
+  try {
+    await page.goto(SITE, { waitUntil: 'load' });
+    await page.waitForTimeout(14000);
+
+    if (!(await enableSemantics(page))) {
+      failures.push('kenken: could not enable the accessibility tree');
+      await ctx.close();
+      return;
+    }
+
+    await page.click('flt-semantics[role=button]:has-text("CLASSIC MODE")');
+    await page.waitForTimeout(2500);
+    await page.click('flt-semantics[role=button]:has-text("9\u00d79")');
+    await page.waitForTimeout(2500);
+
+    // The variant chips carry no text of their own — they surface as
+    // checkboxes in declaration order, and KenKen is the last one because
+    // SudokuVariant is only ever appended to. That makes the index a real
+    // assumption, so the label on the game screen is checked below rather
+    // than trusted: picking the wrong chip must fail loudly, not quietly
+    // pass on a classic board.
+    const chips = await page.$$('flt-semantics[role=checkbox]');
+    if (chips.length < 5) {
+      failures.push(`kenken: expected 5 variant chips, found ${chips.length}`);
+      await ctx.close();
+      return;
+    }
+    await chips[chips.length - 1].click();
+    await page.waitForTimeout(1200);
+    await page.click('flt-semantics[role=button]:has-text("EASY")');
+
+    // Wait for the board rather than sleeping a fixed span: generation is
+    // instant from the bundle and slow without it, and the difference is the
+    // thing being measured.
+    let text = [];
+    for (let i = 0; i < 40; i++) {
+      await page.waitForTimeout(700);
+      text = await labels(page);
+      if (text.some(t => t.includes('KenKen'))) break;
+    }
+
+    const shot = await inspect(page, `${OUT}/kenken.png`);
+    console.log(
+      `kenken (390x844): ${(shot.light * 100).toFixed(1)}% of the screen is ` +
+      `board, bundle ${bundle}`,
+    );
+
+    if (!text.some(t => t.includes('KenKen'))) {
+      failures.push(
+        'kenken: the game screen never identified itself as KenKen — ' +
+        `saw ${JSON.stringify(text.slice(0, 6))}`,
+      );
+    }
+    if (bundle !== 200) {
+      failures.push(
+        `kenken: the puzzle bundle was not served (${bundle}) — the app fell ` +
+        'back to generating a board in the browser',
+      );
+    }
+    if (shot.light < 0.10) {
+      failures.push(
+        `kenken: no board rendered — only ${(shot.light * 100).toFixed(1)}% ` +
+        'of the screen is light',
+      );
+    }
+    if (errors.length) {
+      failures.push(`kenken: JS errors — ${errors.join(' | ')}`);
+    }
+  } catch (e) {
+    failures.push(`kenken: ${e.message.slice(0, 200)}`);
+  }
+  await ctx.close();
+}
+
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();
@@ -132,6 +264,8 @@ async function inspect(page, path) {
     }
     await ctx.close();
   }
+
+  await kenKen(browser, failures);
 
   await browser.close();
   if (failures.length) {
