@@ -147,11 +147,8 @@ jobs:
           PATH="/usr/bin:$PATH" flutter build ios --release --config-only --no-codesign
           PATH="/usr/bin:$PATH" env -u GEM_HOME -u GEM_PATH -u RUBYOPT \
             pod install --project-directory=ios
-          # Xcode 27 rejects iOS deployment targets below 15.0, and the Flutter
-          # / plugin pods still declare 12.0-13.0. Raise only those to 15.0 (the
-          # Runner target is already 15.0); higher pod targets are left alone.
-          sed -i '' -E 's/IPHONEOS_DEPLOYMENT_TARGET = (([0-9]|1[0-4])(\.[0-9]+)*);/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/' \
-            ios/Pods/Pods.xcodeproj/project.pbxproj
+          # Xcode 27 rejects pod deployment targets < 15.0; ios/Podfile's
+          # post_install raises them. Show what the archive will see.
           grep -o 'IPHONEOS_DEPLOYMENT_TARGET = [^;]*' ios/Pods/Pods.xcodeproj/project.pbxproj | sort | uniq -c
           # ARCHIVE UNSIGNED. A bare `xcodebuild archive` insists on an iOS
           # *Development* profile for on-device signing, which CI can't have (only
